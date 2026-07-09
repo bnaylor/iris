@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @State var state = AppState()
     @State private var inputText = ""
+    @Environment(\.openSettings) private var openSettings
     
     var body: some View {
         VStack(spacing: 0) {
@@ -74,7 +75,7 @@ struct ChatView: View {
         .frame(minWidth: 400, idealWidth: 500, minHeight: 400, idealHeight: 600)
         .onAppear {
             if !ConfigManager.shared.isConfigured {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                openSettings()
             } else {
                 state.start()
             }

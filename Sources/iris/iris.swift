@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import KeyboardShortcuts
 
 actor IrisEngine {
     let client = LLMClient()
@@ -92,6 +93,28 @@ actor IrisEngine {
 
 @main
 struct IrisApp: App {
+    init() {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        
+        KeyboardShortcuts.onKeyUp(for: .toggleIris) {
+            if let window = NSApp.windows.first(where: { $0.title == "Iris Chat" }) {
+                if window.isVisible && NSApp.isActive {
+                    window.orderOut(nil)
+                } else {
+                    NSApp.activate(ignoringOtherApps: true)
+                    window.makeKeyAndOrderFront(nil)
+                }
+            } else {
+                // If it's closed but a SwiftUI window still exists (sometimes hidden)
+                if let window = NSApp.windows.first(where: { $0.className.contains("SwiftUI") }) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    window.makeKeyAndOrderFront(nil)
+                }
+            }
+        }
+    }
+    
     var body: some Scene {
         WindowGroup("Iris Chat") {
             ChatView()
