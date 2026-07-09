@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 actor IrisEngine {
     let client = LLMClient()
@@ -8,14 +9,35 @@ actor IrisEngine {
     var history: [Content] = []
     var systemPrompt: Content!
     
-    init() {
+    // We need to keep a weak reference to the state or pass it in. 
+    // Since AppState owns IrisEngine, we can pass it when we start or process.
+    private weak var state: AppState?
+    
+    init(state: AppState) {
+        self.state = state
         let soul = manager.loadSOUL()
         let skills = manager.discoverSkills()
         systemPrompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)", functionCall: nil, functionResponse: nil)])
     }
     
+    func startWatchers(paths: [String]) async {
+        let watcher = FileWatcher()
+        let fileEvents = watcher.watch(paths: paths)
+        
+        for await eventPaths in fileEvents {
+            let eventString = "File(s) modified: \(eventPaths.joined(separator: ", "))"
+            let localState = state
+            await MainActor.run {
+                localState?.appendMessage(role: .system, content: eventString)
+                localState?.isThinking = true
+            }
+            await processInput(eventString, source: "FileWatcher")
+            await MainActor.run { localState?.isThinking = false }
+        }
+    }
+    
     func processInput(_ input: String, source: String) async {
-        let text = (source == "CLI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
+        let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
         history.append(Content(role: "user", parts: [Part(text: text, functionCall: nil, functionResponse: nil)]))
         
         var request = GeminiRequest(contents: history, systemInstruction: systemPrompt, tools: [Tool(functionDeclarations: executor.nativeTools)])
@@ -25,7 +47,7 @@ actor IrisEngine {
             do {
                 let response = try await client.generateContent(request: request)
                 guard let candidate = response.candidates?.first, let responseContent = candidate.content else {
-                    print("Error: No candidate returned.")
+                    await pushToUI(role: .agent, text: "Error: No candidate returned.")
                     break
                 }
                 
@@ -34,9 +56,9 @@ actor IrisEngine {
                 
                 if let part = responseContent.parts.first {
                     if let functionCall = part.functionCall {
-                        print("\nIris -> Running \(functionCall.name)...")
+                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)...")
+                        
                         let result = await executor.execute(name: functionCall.name, args: functionCall.args)
-                        print("Result -> \(result.prefix(200))\(result.count > 200 ? "..." : "")")
                         
                         let functionResponse = Content(
                             role: "function", 
@@ -44,10 +66,8 @@ actor IrisEngine {
                         )
                         history.append(functionResponse)
                         request.contents = history
-                    } else if let text = part.text {
-                        print("\nIris: \(text)")
-                        print("\n> ", terminator: "")
-                        fflush(stdout)
+                    } else if let responseText = part.text {
+                        await pushToUI(role: .agent, text: responseText)
                         turnFinished = true
                     } else {
                         turnFinished = true
@@ -56,48 +76,45 @@ actor IrisEngine {
                     turnFinished = true
                 }
             } catch {
-                print("\nError calling LLM: \(error)")
+                await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)")
                 turnFinished = true
             }
+        }
+    }
+    
+    private func pushToUI(role: ChatRole, text: String) async {
+        let localState = state
+        await MainActor.run {
+            localState?.appendMessage(role: role, content: text)
         }
     }
 }
 
 @main
-struct iris {
-    static func main() async {
-        print("Starting Iris chassis...")
-        let engine = IrisEngine()
+struct IrisApp: App {
+    var body: some Scene {
+        WindowGroup("Iris Chat") {
+            ChatView()
+        }
         
-        let watchPaths = [("~/.config/iris/skills" as NSString).expandingTildeInPath]
-        
-        let watcher = FileWatcher()
-        let fileEvents = watcher.watch(paths: watchPaths)
-        
-        print("Watching directories: \(watchPaths)")
-        print("Ready. Type 'exit' to quit.\n> ", terminator: "")
-        fflush(stdout)
-        
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for await paths in fileEvents {
-                    let eventString = "File(s) modified: \(paths.joined(separator: ", "))"
-                    await engine.processInput(eventString, source: "FileWatcher")
-                }
+        // This is a minimal MenuBarExtra, we can expand it later.
+        MenuBarExtra("Iris", systemImage: "sparkles") {
+            Button("Show Chat") {
+                // If the window is closed, this doesn't automatically reopen it in SwiftUI 
+                // without URL routing or openWindow. But it serves as a placeholder.
+                // In macOS 13+, we'd use openWindow(id:)
             }
-            
-            group.addTask {
-                do {
-                    for try await line in FileHandle.standardInput.bytes.lines {
-                        if line.trimmingCharacters(in: .whitespacesAndNewlines) == "exit" {
-                            exit(0)
-                        }
-                        await engine.processInput(line, source: "CLI")
-                    }
-                } catch {
-                    print("Error reading CLI input: \(error)")
-                }
+            Divider()
+            Button("Settings...") {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             }
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+        }
+        
+        Settings {
+            SettingsView()
         }
     }
 }

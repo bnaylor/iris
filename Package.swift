@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "iris",
     platforms: [
-        .macOS(.v12)
+        .macOS(.v14)
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

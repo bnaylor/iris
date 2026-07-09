@@ -1,17 +1,14 @@
 import Foundation
 
 struct LLMClient {
-    let apiKey: String
     let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
     
-    init() {
-        guard let key = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] else {
-            fatalError("GEMINI_API_KEY environment variable not set")
-        }
-        self.apiKey = key
-    }
-    
     func generateContent(request: GeminiRequest) async throws -> GeminiResponse {
+        let apiKey = ConfigManager.shared.geminiAPIKey
+        guard !apiKey.isEmpty else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        
         var urlComponents = URLComponents(string: endpoint)!
         urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         
