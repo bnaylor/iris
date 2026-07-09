@@ -3,6 +3,7 @@ import KeyboardShortcuts
 
 struct SettingsView: View {
     @Bindable private var config = ConfigManager.shared
+    @State private var availableModels: [String] = []
     
     var body: some View {
         Form {
@@ -14,6 +15,21 @@ struct SettingsView: View {
             Section(header: Text("LLM Providers").font(.headline)) {
                 SecureField("Gemini API Key", text: $config.geminiAPIKey)
                     .help("Required for Iris to function.")
+                    .onChange(of: config.geminiAPIKey) { _, _ in
+                        fetchModels()
+                    }
+                
+                Picker("Model", selection: $config.geminiModel) {
+                    ForEach(availableModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                .onAppear {
+                    if availableModels.isEmpty {
+                        availableModels = [config.geminiModel]
+                    }
+                    fetchModels()
+                }
             }
             .padding(.bottom)
             
@@ -44,6 +60,24 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 450, height: 250)
+        .frame(minWidth: 450, minHeight: 350)
+    }
+    
+    private func fetchModels() {
+        Task {
+            do {
+                let models = try await LLMClient().fetchAvailableModels()
+                if !models.isEmpty {
+                    await MainActor.run {
+                        if !models.contains(config.geminiModel) {
+                            config.geminiModel = models.first!
+                        }
+                        self.availableModels = models
+                    }
+                }
+            } catch {
+                print("Failed to fetch models: \(error)")
+            }
+        }
     }
 }

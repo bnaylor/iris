@@ -85,7 +85,7 @@ final class OAuthManager: @unchecked Sendable {
                                 let codeWithAmp = String(requestStr[range.upperBound..<endRange.lowerBound])
                                 let code = codeWithAmp.components(separatedBy: "&").first ?? codeWithAmp
                                 
-                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><head><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;}</style></head><body><div style='background:white;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;'><h2>Iris Connected! 🌈</h2><p>Authentication successful. You can close this tab and return to Iris.</p></div></body></html>"
+                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;}</style></head><body><div style='background:white;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;'><h2>Iris Connected! 🌈</h2><p>Authentication successful. You can close this tab and return to Iris.</p></div></body></html>"
                                 
                                 connection.send(content: response.data(using: .utf8), completion: .contentProcessed({ _ in
                                     connection.cancel()

@@ -9,6 +9,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(geminiAPIKey, forKey: "GEMINI_API_KEY") }
     }
     
+    var geminiModel: String {
+        didSet { UserDefaults.standard.set(geminiModel, forKey: "GEMINI_MODEL") }
+    }
+    
     var googleClientID: String {
         didSet { UserDefaults.standard.set(googleClientID, forKey: "GOOGLE_CLIENT_ID") }
     }
@@ -31,6 +35,7 @@ class ConfigManager: @unchecked Sendable {
     
     init() {
         self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        self.geminiModel = UserDefaults.standard.string(forKey: "GEMINI_MODEL") ?? "gemini-3.5-flash"
         self.googleClientID = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_ID") ?? ""
         self.googleClientSecret = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_SECRET") ?? ""
         self.googleAccessToken = UserDefaults.standard.string(forKey: "GOOGLE_ACCESS_TOKEN") ?? ""

@@ -1,7 +1,9 @@
 import Foundation
 
 struct LLMClient {
-    let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+    var endpoint: String {
+        "https://generativelanguage.googleapis.com/v1beta/models/\(ConfigManager.shared.geminiModel):generateContent"
+    }
     
     func generateContent(request: GeminiRequest) async throws -> GeminiResponse {
         let apiKey = ConfigManager.shared.geminiAPIKey
@@ -37,5 +39,25 @@ struct LLMClient {
         decoder.keyDecodingStrategy = .useDefaultKeys
         let geminiResponse = try decoder.decode(GeminiResponse.self, from: data)
         return geminiResponse
+    }
+    
+    func fetchAvailableModels() async throws -> [String] {
+        let apiKey = ConfigManager.shared.geminiAPIKey
+        guard !apiKey.isEmpty else { return [] }
+        
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return []
+        }
+        
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let models = json["models"] as? [[String: Any]] {
+            return models.compactMap { $0["name"] as? String }.map { $0.replacingOccurrences(of: "models/", with: "") }
+        }
+        return []
     }
 }
