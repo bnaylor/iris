@@ -5,10 +5,11 @@ Iris is a lightweight, compiled, native macOS agent harness designed to run auto
 ## 🚀 Architecture
 
 At its core, Iris is a Swift-based execution chassis that bridges your local environment and cloud LLMs.
-*   **Zero-Bloat Foundation:** Built entirely using native Apple frameworks (`Foundation`, `URLSession`, `FSEventStream`).
+*   **Native GUI & Zero-Bloat Foundation:** Built entirely using native Apple frameworks (`SwiftUI`, `Foundation`, `URLSession`, `Network`, `FSEventStream`).
 *   **Concurrency:** Built on modern Swift 6 Concurrency (`async/await`, `actor`), providing a high-performance, non-blocking event loop.
-*   **LLM Engine:** Natively integrates with Google's Gemini REST API, relying heavily on native JSON Function Calling.
-*   **Event-Driven:** Uses an `AsyncStream` wrapper around `FSEventStream` to instantly wake up the agent when files change (e.g., saving a note in Obsidian) and concurrent CLI input handling.
+*   **LLM Engine:** Natively integrates with Google's Gemini REST API (defaulting dynamically to available models like `gemini-3.5-flash`), relying heavily on native JSON Function Calling.
+*   **Event-Driven:** Uses an `AsyncStream` wrapper around `FSEventStream` to instantly wake up the agent when files change (e.g., saving a note in Obsidian).
+*   **Built-in OAuth:** Includes a dependency-free TCP loopback listener for Google Workspace OAuth, enabling safe integrations with Calendar, Docs, and Sheets.
 
 ## 🧠 The Portable Skill System
 
@@ -24,14 +25,18 @@ Iris provides three highly privileged native primitives to the LLM:
 
 ## 🛠️ Usage
 
-Iris requires a Gemini API key exported in your environment.
+When started, Iris launches as a native macOS App. If you haven't configured your API keys, the **Settings Window** will automatically pop up. 
+All keys are saved securely to your local `UserDefaults`.
 
 ```bash
-export GEMINI_API_KEY="your_api_key_here"
 swift run
 ```
 
-When started, Iris scans `~/.config/iris/skills/`, compiles its system prompt, begins listening for CLI input, and spawns the FSEvents watcher to monitor your target directories.
+### Global Hotkey ⌨️
+Iris runs in the background and can be summoned instantly over any other app by pressing **`Cmd + Shift + Space`** (configurable in Settings).
+
+### Google Workspace Integration 🔐
+In the settings window, you can enter your Google OAuth Client ID and Secret, and click **Connect to Google**. Iris will spin up a local listener, redirect you to Google for consent, and seamlessly exchange your authorization code for valid access and refresh tokens.
 
 ## 📦 Project Setup
 
