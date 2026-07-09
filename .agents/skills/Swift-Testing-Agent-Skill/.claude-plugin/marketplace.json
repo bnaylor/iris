@@ -1,0 +1,21 @@
+{
+  "name": "swift-testing-agent-skill",
+  "owner": { "name": "Paul Hudson" },
+  "metadata": {
+    "description": "Agent skills for Swift Testing on Apple platforms",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "swift-testing-pro",
+      "source": "./swift-testing-pro",
+      "description": "Writes, reviews, and improves Swift Testing code using modern APIs and best practices.",
+      "version": "1.0.0",
+      "author": { "name": "Paul Hudson" },
+      "homepage": "https://github.com/twostraws/Swift-Testing-Agent-Skill",
+      "repository": "https://github.com/twostraws/Swift-Testing-Agent-Skill",
+      "license": "MIT",
+      "keywords": ["swift-testing", "swift", "ios", "apple", "testing", "code-review"]
+    }
+  ]
+}
