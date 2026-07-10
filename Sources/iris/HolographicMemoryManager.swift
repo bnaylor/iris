@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Accelerate
+import NaturalLanguage
 
 /// A pure-Swift implementation of Holographic Reduced Representations (HRR).
 /// Encodes factual context into fixed-dimensional vectors for semantic retrieval without Python or NumPy.
@@ -18,12 +19,61 @@ struct HolographicVector: Codable, Equatable {
             self.values = [Float](repeating: 0, count: dimension)
             let scale = Float(1.0 / sqrt(Double(dimension)))
             for i in 0..<dimension {
-                let u1 = Float.random(in: 0...1)
+                let u1 = Float.random(in: 0.000001...1)
                 let u2 = Float.random(in: 0...1)
                 let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
                 self.values[i] = z0 * scale
             }
         }
+    }
+    
+    /// Deterministically generates a vector for a single token using its hash as a random seed.
+    init(token: String, dimension: Int = 1024) {
+        self.dimension = dimension
+        self.values = [Float](repeating: 0, count: dimension)
+        var hasher = Hasher()
+        hasher.combine(token)
+        let seed = UInt64(bitPattern: Int64(hasher.finalize()))
+        
+        // Simple LCG for deterministic generation
+        var state = seed
+        func nextRandom() -> Float {
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            let max = Float(UInt64.max)
+            return Float(state) / max
+        }
+        
+        let scale = Float(1.0 / sqrt(Double(dimension)))
+        for i in 0..<dimension {
+            let u1 = max(0.000001, nextRandom())
+            let u2 = nextRandom()
+            let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
+            self.values[i] = z0 * scale
+        }
+    }
+    
+    /// Encodes a full string into a Holographic Vector by tokenizing and superposing.
+    static func encode(string: String, dimension: Int = 1024) -> HolographicVector {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = string
+        var combined = HolographicVector(dimension: dimension, values: [Float](repeating: 0, count: dimension))
+        
+        tokenizer.enumerateTokens(in: string.startIndex..<string.endIndex) { tokenRange, _ in
+            let token = String(string[tokenRange]).lowercased()
+            let tokenVector = HolographicVector(token: token, dimension: dimension)
+            combined = combined.superposed(with: tokenVector)
+            return true
+        }
+        
+        // Normalize the final vector
+        var result = [Float](repeating: 0, count: dimension)
+        var norm: Float = 0
+        vDSP_svesq(combined.values, 1, &norm, vDSP_Length(dimension))
+        norm = sqrt(norm)
+        if norm > 0 {
+            vDSP_vsdiv(combined.values, 1, &norm, &result, 1, vDSP_Length(dimension))
+        }
+        return HolographicVector(dimension: dimension, values: result)
     }
     
     /// Binds this vector with another using circular convolution.

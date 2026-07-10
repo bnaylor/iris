@@ -78,10 +78,14 @@ actor IrisEngine {
         
         var currentSystemPrompt = systemPrompt!
         
-        let memoryBuffer = MemoryManager.shared.getMemory()
         let userProfile = MemoryManager.shared.getUserProfile()
+        
+        let queryVector = HolographicVector.encode(string: input)
+        let facts = (try? HolographicMemoryManager.shared.search(query: input, queryVector: queryVector, limit: 5)) ?? []
+        let factString = facts.isEmpty ? "No relevant facts found." : facts.map { "- \($0.content)" }.joined(separator: "\n")
+        
         if let textPart = currentSystemPrompt.parts.first?.text {
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# Working Memory Buffer\n" + memoryBuffer + "\n\n# User Profile (USER.md)\n" + userProfile
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Holographic Memory (JIT Context)\n" + factString + "\n\n# User Profile (USER.md)\n" + userProfile
         }
         
         if let wp = workspacePath {
@@ -127,17 +131,28 @@ actor IrisEngine {
         ))
         
         toolsList.append(FunctionDeclaration(
-            name: "update_memory",
-            description: "Overwrite the working memory buffer with new content. Use this to compact the buffer when it gets too long, or to store new short-term facts.",
+            name: "save_fact",
+            description: "Silently drop atomic facts, state changes, or relationships into the holographic memory graph. Continuously groom this store to maintain mid-term memory.",
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "content": Schema(type: "STRING", description: "The new complete text content for the memory buffer")
+                    "content": Schema(type: "STRING", description: "The factual content to save.")
                 ],
                 required: ["content"]
             )
         ))
         
+        toolsList.append(FunctionDeclaration(
+            name: "search_memory",
+            description: "Actively probe the holographic memory store for past context. Use this if the automatic JIT injection wasn't sufficient.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "query": Schema(type: "STRING", description: "The query string to search for.")
+                ],
+                required: ["query"]
+            )
+        ))
         toolsList.append(FunctionDeclaration(
             name: "update_user_profile",
             description: "Overwrite the USER.md profile. Keep it concise. Store high-level facts about the user that define how you should interact with them permanently.",
@@ -246,9 +261,18 @@ actor IrisEngine {
                                 intervalSeconds: intervalSeconds
                             )
                             result = "Job scheduled successfully. It will fire in the background."
-                        } else if functionCall.name == "update_memory", let content = functionCall.args["content"] as? String {
-                            MemoryManager.shared.updateMemory(content: content)
-                            result = "Memory buffer updated."
+                        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] as? String {
+                            let vector = HolographicVector.encode(string: content)
+                            try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
+                            result = "Fact saved to holographic memory."
+                        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] as? String {
+                            let vector = HolographicVector.encode(string: query)
+                            let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
+                            if facts.isEmpty {
+                                result = "No relevant facts found."
+                            } else {
+                                result = facts.map { "- \($0.content)" }.joined(separator: "\n")
+                            }
                         } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] as? String {
                             MemoryManager.shared.updateUserProfile(content: content)
                             result = "User profile updated."
