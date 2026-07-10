@@ -124,7 +124,19 @@ class AppState {
         } else if trimmed.hasPrefix("/reflect") {
             appendMessage(role: .system, content: "Triggering manual memory reflection...", to: convId)
             isThinking = true
-            let reflectionPrompt = "System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. Output a transparent summary of the gist of the updates for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'"
+            let reflectionPrompt = """
+            System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. 
+            
+            Additionally, perform a grooming pass on your Markdown memory library. Ensure ALL memory files (`~/.iris/skills/*`, `USER.md`, `SOUL.md`) use the Open Knowledge Format (OKF). This means each file MUST start with a YAML frontmatter block containing at least:
+            ---
+            type: [skill|profile|core|etc]
+            title: ...
+            description: ...
+            tags: [..., ...]
+            timestamp: ...
+            ---
+            Verify that your cross-links between files are still valid, and reorganize or fix any broken links. Output a transparent summary of the gist of the updates and grooming performed for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'
+            """
             Task {
                 await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
                 isThinking = false
