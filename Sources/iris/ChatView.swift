@@ -1,9 +1,11 @@
 import SwiftUI
 import MarkdownUI
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     @State var state = AppState()
     @State private var inputText = ""
+    @State private var selectedMessageIDs = Set<UUID>()
     @Environment(\.openSettings) private var openSettings
     
     var body: some View {
@@ -32,6 +34,9 @@ struct ChatView: View {
                             .contextMenu {
                                 Button("Link to Workspace...") {
                                     linkWorkspace(to: conv.id)
+                                }
+                                Button("Export to Markdown...") {
+                                    exportConversation(id: conv.id)
                                 }
                                 Divider()
                                 Button(role: .destructive, action: {
@@ -63,27 +68,51 @@ struct ChatView: View {
                 let conv = state.conversations[activeConvIndex]
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 12) {
-                                ForEach(conv.messages) { message in
-                                    MessageView(message: message)
-                                        .id(message.id)
-                                }
-                                
-                                if state.isThinking {
-                                    HStack {
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                        Text("Iris is thinking...")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                        List(selection: $selectedMessageIDs) {
+                            ForEach(conv.messages) { message in
+                                MessageView(message: message)
+                                    .id(message.id)
+                                    .tag(message.id)
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
+                                    .contextMenu {
+                                        Button("Copy as Markdown") {
+                                            copyMessagesToClipboard(ids: selectedMessageIDs.contains(message.id) ? selectedMessageIDs : [message.id], from: conv)
+                                        }
                                     }
-                                    .padding(.leading, 12)
-                                    .padding(.top, 4)
-                                    .id("thinkingIndicator")
+                            }
+                            
+                            if state.isThinking {
+                                HStack {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Iris is thinking...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.leading, 12)
+                                .padding(.top, 4)
+                                .id("thinkingIndicator")
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                        }
+                        .listStyle(.plain)
+                        .onCopyCommand {
+                            let selected = conv.messages.filter { selectedMessageIDs.contains($0.id) }
+                            if selected.isEmpty { return [] }
+                            
+                            var markdown = ""
+                            for msg in selected {
+                                let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
+                                markdown += "### \(roleName)\n"
+                                if msg.role == .system {
+                                    markdown += "`\(msg.content)`\n\n"
+                                } else {
+                                    markdown += "\(msg.content)\n\n"
                                 }
                             }
-                            .padding()
+                            return [NSItemProvider(object: markdown as NSString)]
                         }
                         .onChange(of: conv.messages.count) { _, _ in
                             if let last = conv.messages.last {
@@ -164,6 +193,61 @@ struct ChatView: View {
         if panel.runModal() == .OK, let url = panel.url {
             state.setWorkspace(for: id, path: url.path)
         }
+    }
+    
+    private func exportConversation(id: UUID) {
+        guard let conv = state.conversations.first(where: { $0.id == id }) else { return }
+        
+        var markdown = "# \(conv.title)\n\n"
+        for msg in conv.messages {
+            let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
+            markdown += "### \(roleName)\n"
+            if msg.role == .system {
+                markdown += "`\(msg.content)`\n\n"
+            } else {
+                markdown += "\(msg.content)\n\n"
+            }
+        }
+        
+        let panel = NSSavePanel()
+        if let mdType = UTType(filenameExtension: "md") {
+            panel.allowedContentTypes = [mdType]
+        } else {
+            panel.allowedContentTypes = [.plainText]
+        }
+        
+        // Clean title for filename
+        let cleanTitle = conv.title.replacingOccurrences(of: " ", with: "_").prefix(30)
+        panel.nameFieldStringValue = "\(cleanTitle).md"
+        panel.prompt = "Export"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try markdown.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                print("Failed to save markdown: \(error)")
+            }
+        }
+    }
+    
+    private func copyMessagesToClipboard(ids: Set<UUID>, from conv: Conversation) {
+        let selected = conv.messages.filter { ids.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        
+        var markdown = ""
+        for msg in selected {
+            let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
+            markdown += "### \(roleName)\n"
+            if msg.role == .system {
+                markdown += "`\(msg.content)`\n\n"
+            } else {
+                markdown += "\(msg.content)\n\n"
+            }
+        }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(markdown, forType: .string)
     }
     
     private func submit() {

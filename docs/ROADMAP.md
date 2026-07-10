@@ -18,7 +18,7 @@
 - [ ] `/goal` support
 - [ ] UI/UX Polish (Tool call rendering in history, polished animations)
 - [x] Right click conversation, "Export to Markdown"
-- [ ] Select a set of conversation turns in chat, "Export to Markdown"
-    - Or, just automatically put markdown into the clipboard when they are slected and copied
+- [x] Select a set of conversation turns in chat, "Export to Markdown"
+    - [x] Automatically put markdown into the clipboard when they are selected and copied
 - [ ] token-tracking, show in the ui
 
