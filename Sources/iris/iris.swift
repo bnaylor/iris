@@ -67,8 +67,9 @@ actor IrisEngine {
         var currentSystemPrompt = systemPrompt!
         
         let memoryBuffer = MemoryManager.shared.getMemory()
+        let userProfile = MemoryManager.shared.getUserProfile()
         if let textPart = currentSystemPrompt.parts.first?.text {
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# Working Memory Buffer\n" + memoryBuffer
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# Working Memory Buffer\n" + memoryBuffer + "\n\n# User Profile (USER.md)\n" + userProfile
         }
         
         if let wp = workspacePath {
@@ -125,6 +126,18 @@ actor IrisEngine {
             )
         ))
         
+        toolsList.append(FunctionDeclaration(
+            name: "update_user_profile",
+            description: "Overwrite the USER.md profile. Keep it concise. Store high-level facts about the user that define how you should interact with them permanently.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "content": Schema(type: "STRING", description: "The new complete text content for the user profile")
+                ],
+                required: ["content"]
+            )
+        ))
+        
         var request = GeminiRequest(contents: history, systemInstruction: currentSystemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
@@ -170,6 +183,9 @@ actor IrisEngine {
                         } else if functionCall.name == "update_memory", let content = functionCall.args["content"] as? String {
                             MemoryManager.shared.updateMemory(content: content)
                             result = "Memory buffer updated."
+                        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] as? String {
+                            MemoryManager.shared.updateUserProfile(content: content)
+                            result = "User profile updated."
                         } else {
                             result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                         }
