@@ -41,6 +41,7 @@ struct ToolApprovalRequest: Identifiable {
     let id = UUID()
     let toolName: String
     let details: String
+    let workspace: String?
     let continuation: CheckedContinuation<Bool, Never>
 }
 
@@ -224,7 +225,19 @@ class AppState {
         }
     }
     
+    enum ApprovalResolution {
+        case approve
+        case deny
+        case alwaysAllowGlobal
+        case alwaysAllowProject
+    }
+    
     func requestApproval(toolName: String, details: String, workspace: String? = nil) async -> Bool {
+        // Fast path: Check deterministic permissions first
+        if PermissionManager.shared.isAllowed(toolName: toolName, details: details, workspace: workspace) {
+            return true
+        }
+        
         do {
             let decision = try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace)
             if decision.decision == "APPROVE" {
@@ -239,14 +252,35 @@ class AppState {
         }
         
         return await withCheckedContinuation { continuation in
-            self.pendingApproval = ToolApprovalRequest(toolName: toolName, details: details, continuation: continuation)
+            self.pendingApproval = ToolApprovalRequest(toolName: toolName, details: details, workspace: workspace, continuation: continuation)
         }
     }
     
-    func resolveApproval(_ approved: Bool) {
-        let cont = pendingApproval?.continuation
+    func resolveApproval(_ resolution: ApprovalResolution) {
+        guard let pending = pendingApproval else { return }
+        
+        var approved = false
+        switch resolution {
+        case .approve:
+            approved = true
+        case .deny:
+            approved = false
+        case .alwaysAllowGlobal:
+            PermissionManager.shared.allowGlobally(toolName: pending.toolName, details: pending.details)
+            approved = true
+        case .alwaysAllowProject:
+            if let workspace = pending.workspace {
+                PermissionManager.shared.allowInProject(toolName: pending.toolName, details: pending.details, workspace: workspace)
+            } else {
+                // Fallback to global if no workspace is active
+                PermissionManager.shared.allowGlobally(toolName: pending.toolName, details: pending.details)
+            }
+            approved = true
+        }
+        
+        let cont = pending.continuation
         pendingApproval = nil
-        cont?.resume(returning: approved)
+        cont.resume(returning: approved)
     }
     
     private func saveConversations() {

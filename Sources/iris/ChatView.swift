@@ -154,11 +154,12 @@ struct ChatView: View {
                     .background(Color(NSColor.textBackgroundColor))
                     
                     if let request = state.pendingApproval {
-                        ApprovalBannerView(request: request, onResolve: { approved in
+                        ApprovalBannerView(request: request, onResolve: { resolution in
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                state.resolveApproval(approved)
+                                state.resolveApproval(resolution)
                             }
                         })
+                        .padding(.horizontal)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApproval != nil)
                     }
@@ -519,7 +520,7 @@ struct RoundedCorner: Shape {
 
 struct ApprovalBannerView: View {
     let request: ToolApprovalRequest
-    let onResolve: (Bool) -> Void
+    let onResolve: (AppState.ApprovalResolution) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -540,14 +541,25 @@ struct ApprovalBannerView: View {
                 .cornerRadius(4)
             
             HStack {
+                Button(action: { onResolve(.alwaysAllowGlobal) }) {
+                    Text("Always Allow (Global)")
+                }
+                
+                if request.workspace != nil {
+                    Button(action: { onResolve(.alwaysAllowProject) }) {
+                        Text("Always Allow (Project)")
+                    }
+                }
+                
                 Spacer()
-                Button(role: .cancel, action: { onResolve(false) }) {
+                
+                Button(role: .cancel, action: { onResolve(.deny) }) {
                     Text("Deny")
                 }
                 .keyboardShortcut(.cancelAction)
                 
-                Button(action: { onResolve(true) }) {
-                    Text("Approve")
+                Button(action: { onResolve(.approve) }) {
+                    Text("Approve Once")
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
