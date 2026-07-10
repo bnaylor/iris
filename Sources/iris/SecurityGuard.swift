@@ -29,7 +29,7 @@ struct SecurityGuard {
         ]
         
         for restricted in restrictedPrefixes {
-            if expandedPath.hasPrefix(restricted) {
+            if expandedPath.hasPrefix(restricted) || expandedPath.contains("/.ssh/") || expandedPath.contains("/.aws/") {
                 return true
             }
         }
