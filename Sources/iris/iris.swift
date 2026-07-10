@@ -58,10 +58,22 @@ actor IrisEngine {
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
         
         let localState = state
+        
+        // BeforeAgent Hook
+        let beforeAgentDecision = await HookManager.shared.fireBeforeAgent(input: text)
+        var finalText = text
+        if case .block(let reason) = beforeAgentDecision {
+            await pushToUI(role: .system, text: "Hook blocked turn: \(reason)", conversationId: conversationId)
+            await MainActor.run { localState?.isThinking = false }
+            return
+        } else if case .proceed(let modifiedData) = beforeAgentDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let modifiedInput = json["input"] as? String {
+            finalText = modifiedInput
+        }
+
         var history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
         let workspacePath = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.workspacePath }
         
-        history.append(Content(role: "user", parts: [Part(text: text, functionCall: nil, functionResponse: nil)]))
+        history.append(Content(role: "user", parts: [Part(text: finalText, functionCall: nil, functionResponse: nil)]))
         await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
         
         var currentSystemPrompt = systemPrompt!
@@ -204,12 +216,12 @@ actor IrisEngine {
                             if needsApproval {
                                 let approved = await localState?.requestApproval(toolName: functionCall.name, details: details) ?? false
                                 if approved {
-                                    result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                                 } else {
                                     result = "Error: The user denied permission to execute this tool call."
                                 }
                             } else {
-                                result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                             }
                         }
                         
@@ -234,6 +246,35 @@ actor IrisEngine {
                 turnFinished = true
             }
         }
+    }
+    
+    private func executeToolWithHooks(name: String, args: [String: Any], cwd: String?) async -> String {
+        var execArgs: [String: String] = [:]
+        for (k, v) in args {
+            execArgs[k] = "\(v)"
+        }
+        
+        let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs)
+        if case .block(let reason) = beforeDecision {
+            return "System Hook blocked execution: \(reason)"
+        }
+        
+        if case .proceed(let modifiedData) = beforeDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for (k, v) in json {
+                execArgs[k] = "\(v)"
+            }
+        }
+        
+        var result = await executor.execute(name: name, args: execArgs, cwd: cwd)
+        
+        let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result)
+        if case .block(let reason) = afterDecision {
+            return "System Hook blocked result: \(reason)"
+        } else if case .proceed(let modifiedData) = afterDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let newResult = json["result"] as? String {
+            result = newResult
+        }
+        
+        return result
     }
     
     private func pushToUI(role: ChatRole, text: String, conversationId: UUID) async {
