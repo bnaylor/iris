@@ -97,8 +97,7 @@ struct ChatView: View {
                             
                             if state.isThinking {
                                 HStack {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
+                                    TypingIndicator()
                                     Text("Iris is thinking...")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
@@ -370,7 +369,13 @@ struct MessageView: View {
                     Text(message.content)
                         .textSelection(.enabled)
                         .padding(10)
-                        .background(backgroundColor)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.accentColor.opacity(0.8), Color.accentColor]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .foregroundColor(textColor)
                         .cornerRadius(12)
                         .cornerRadius(0, corners: [.bottomRight])
@@ -530,47 +535,6 @@ struct SystemMessageContent: View {
     }
 }
 
-// Helper to round specific corners in SwiftUI
-extension View {
-    func cornerRadius(_ radius: CGFloat, corners: RectCorner) -> some View {
-        clipShape( RoundedCorner(radius: radius, corners: corners) )
-    }
-}
-
-struct RectCorner: OptionSet {
-    let rawValue: Int
-    static let topLeft = RectCorner(rawValue: 1 << 0)
-    static let topRight = RectCorner(rawValue: 1 << 1)
-    static let bottomLeft = RectCorner(rawValue: 1 << 2)
-    static let bottomRight = RectCorner(rawValue: 1 << 3)
-    static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
-}
-
-struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: RectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let tr = corners.contains(.topRight) ? radius : 0
-        let tl = corners.contains(.topLeft) ? radius : 0
-        let bl = corners.contains(.bottomLeft) ? radius : 0
-        let br = corners.contains(.bottomRight) ? radius : 0
-        
-        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
-        path.addArc(center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr), radius: tr, startAngle: Angle(degrees: -90), endAngle: Angle(degrees: 0), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
-        path.addArc(center: CGPoint(x: rect.maxX - br, y: rect.maxY - br), radius: br, startAngle: Angle(degrees: 0), endAngle: Angle(degrees: 90), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
-        path.addArc(center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl), radius: bl, startAngle: Angle(degrees: 90), endAngle: Angle(degrees: 180), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
-        path.addArc(center: CGPoint(x: rect.minX + tl, y: rect.minY + tl), radius: tl, startAngle: Angle(degrees: 180), endAngle: Angle(degrees: 270), clockwise: false)
-        
-        return path
-    }
-}
-
 struct ApprovalBannerView: View {
     let request: ToolApprovalRequest
     let onResolve: (AppState.ApprovalResolution) -> Void
@@ -630,6 +594,87 @@ struct ApprovalBannerView: View {
         )
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+}
+
+// Helper to round specific corners in SwiftUI
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: RectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = NSBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadius: radius)
+        return Path(path.cgPath)
+    }
+}
+
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: RectCorner) -> some View {
+        clipShape( RoundedCorner(radius: radius, corners: corners) )
+    }
+}
+
+// macOS NSBezierPath extension for rounded corners
+extension NSBezierPath {
+    convenience init(roundedRect rect: CGRect, byRoundingCorners corners: RectCorner, cornerRadius: CGFloat) {
+        let path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        self.init()
+        self.append(NSBezierPath(cgPath: path))
+    }
+    
+    var cgPath: CGPath {
+        let path = CGMutablePath()
+        var points = [CGPoint](repeating: .zero, count: 3)
+        for i in 0..<self.elementCount {
+            let type = self.element(at: i, associatedPoints: &points)
+            switch type {
+            case .moveTo: path.move(to: points[0])
+            case .lineTo: path.addLine(to: points[0])
+            case .curveTo: path.addCurve(to: points[2], control1: points[0], control2: points[1])
+            case .closePath: path.closeSubpath()
+            @unknown default: break
+            }
+        }
+        return path
+    }
+}
+
+struct RectCorner: OptionSet {
+    let rawValue: Int
+    static let topLeft = RectCorner(rawValue: 1 << 0)
+    static let topRight = RectCorner(rawValue: 1 << 1)
+    static let bottomLeft = RectCorner(rawValue: 1 << 2)
+    static let bottomRight = RectCorner(rawValue: 1 << 3)
+    static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+}
+
+struct TypingIndicator: View {
+    @State private var scale: CGFloat = 0.5
+    @State private var opacity: Double = 0.3
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .frame(width: 6, height: 6)
+                .scaleEffect(scale)
+                .opacity(opacity)
+                .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.0), value: scale)
+            Circle()
+                .frame(width: 6, height: 6)
+                .scaleEffect(scale)
+                .opacity(opacity)
+                .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.2), value: scale)
+            Circle()
+                .frame(width: 6, height: 6)
+                .scaleEffect(scale)
+                .opacity(opacity)
+                .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.4), value: scale)
+        }
+        .foregroundColor(.accentColor)
+        .onAppear {
+            scale = 1.0
+            opacity = 1.0
+        }
     }
 }
 
