@@ -15,11 +15,15 @@ struct Part: Codable {
     var text: String?
     var functionCall: FunctionCall?
     var functionResponse: FunctionResponse?
+    var thought_signature: String?
+    var thoughtSignature: String?
 }
 
 struct FunctionCall: Codable {
     var name: String
     var args: [String: String]
+    var thought_signature: String?
+    var thoughtSignature: String?
 }
 
 struct FunctionResponse: Codable {
