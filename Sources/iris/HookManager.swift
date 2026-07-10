@@ -59,6 +59,23 @@ struct HookManager {
         return await fireEvent(eventName: "AfterModel", targetMatcher: "AfterModel", payload: try? JSONEncoder().encode(response))
     }
     
+    func fireBeforeToolSelection(tools: [FunctionDeclaration]) async -> HookDecision {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .useDefaultKeys
+        return await fireEvent(eventName: "BeforeToolSelection", targetMatcher: "BeforeToolSelection", payload: try? encoder.encode(tools))
+    }
+    
+    func firePreCompress(history: [Content]) async -> HookDecision {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .useDefaultKeys
+        return await fireEvent(eventName: "PreCompress", targetMatcher: "PreCompress", payload: try? encoder.encode(history))
+    }
+    
+    func fireNotification(title: String, body: String) async {
+        let payload = ["title": title, "body": body]
+        _ = await fireEvent(eventName: "Notification", targetMatcher: "Notification", payload: try? JSONSerialization.data(withJSONObject: payload))
+    }
+    
     private func fireEvent(eventName: String, targetMatcher: String, payload: Data?) async -> HookDecision {
         guard let config = config, let eventHooks = config.hooks[eventName] else {
             return .proceed(modifiedData: nil) // No hooks registered

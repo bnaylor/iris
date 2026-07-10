@@ -8,8 +8,8 @@ This file tracks the implementation status of the extensible hook system in Iris
 - [ ] `AfterAgent`
 - [x] `BeforeModel`
 - [x] `AfterModel`
-- [ ] `BeforeToolSelection`
+- [x] `BeforeToolSelection`
 - [x] `BeforeTool`
 - [x] `AfterTool`
-- [ ] `PreCompress`
-- [ ] `Notification`
+- [x] `PreCompress`
+- [x] `Notification`

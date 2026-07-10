@@ -150,6 +150,28 @@ actor IrisEngine {
             )
         ))
         
+        let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList)
+        if case .block(let reason) = toolSelectionDecision {
+            await pushToUI(role: .system, text: "Hook blocked tool selection: \(reason)", conversationId: conversationId)
+            await MainActor.run { localState?.isThinking = false }
+            return
+        } else if case .proceed(let modifiedData) = toolSelectionDecision, let data = modifiedData {
+            if let modifiedTools = try? JSONDecoder().decode([FunctionDeclaration].self, from: data) {
+                toolsList = modifiedTools
+            }
+        }
+        
+        let preCompressDecision = await HookManager.shared.firePreCompress(history: history)
+        if case .block(let reason) = preCompressDecision {
+            await pushToUI(role: .system, text: "Hook PreCompress blocked execution: \(reason)", conversationId: conversationId)
+            await MainActor.run { localState?.isThinking = false }
+            return
+        } else if case .proceed(let modifiedData) = preCompressDecision, let data = modifiedData {
+            if let modifiedHistory = try? JSONDecoder().decode([Content].self, from: data) {
+                history = modifiedHistory
+            }
+        }
+        
         var request = GeminiRequest(contents: history, systemInstruction: currentSystemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
@@ -269,6 +291,7 @@ actor IrisEngine {
                     turnFinished = true
                 }
             } catch {
+                await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
             }
