@@ -20,20 +20,25 @@ actor IrisEngine {
         systemPrompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)", functionCall: nil, functionResponse: nil)])
     }
     
-    func handleSystemEvent(_ message: String, source: String) async {
+    func handleSystemEvent(_ message: String, source: String, conversationId: UUID? = nil) async {
         let localState = state
-        let activeId = await MainActor.run { localState?.selectedConversationId }
-        guard let conversationId = activeId else { return }
+        let targetId = await MainActor.run { conversationId ?? localState?.selectedConversationId }
+        guard let activeId = targetId else { return }
         
         await MainActor.run {
-            localState?.appendMessage(role: .system, content: message, to: conversationId)
+            localState?.appendMessage(role: .system, content: message, to: activeId)
             localState?.isThinking = true
         }
-        await processInput(message, source: source, conversationId: conversationId)
+        await processInput(message, source: source, conversationId: activeId)
         await MainActor.run { localState?.isThinking = false }
     }
     
     func start() async {
+        ScheduleManager.shared.onJobFired = { [weak self] prompt, convId in
+            await self?.handleSystemEvent("Scheduled Job Triggered: \(prompt)", source: "Scheduler", conversationId: convId)
+        }
+        ScheduleManager.shared.start()
+        
         await MCPManager.shared.startServers()
         await WatcherManager.shared.setCallback { [weak self] message, source in
             guard let self = self else { return }
@@ -84,6 +89,24 @@ actor IrisEngine {
             )
         ))
         
+        toolsList.append(FunctionDeclaration(
+            name: "schedule_job",
+            description: "Schedule a recurring cron-like job or interval timer. The job will persist across app restarts and catch up if the computer wakes from sleep. Provide a clear prompt describing what Iris should do when it fires. You MUST provide EITHER intervalSeconds OR one or more cron fields (minute, hour, day, month, weekday), but not both.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "prompt": Schema(type: "STRING", description: "What Iris should do when the job fires"),
+                    "minute": Schema(type: "INTEGER", description: "Cron minute (0-59)"),
+                    "hour": Schema(type: "INTEGER", description: "Cron hour (0-23)"),
+                    "day": Schema(type: "INTEGER", description: "Cron day of month (1-31)"),
+                    "month": Schema(type: "INTEGER", description: "Cron month (1-12)"),
+                    "weekday": Schema(type: "INTEGER", description: "Cron weekday (1=Sunday, 2=Monday, ..., 7=Saturday)"),
+                    "intervalSeconds": Schema(type: "INTEGER", description: "Simple recurring interval in seconds (e.g. 3600 for every hour)")
+                ],
+                required: ["prompt"]
+            )
+        ))
+        
         var request = GeminiRequest(contents: history, systemInstruction: currentSystemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
@@ -104,9 +127,28 @@ actor IrisEngine {
                         await pushToUI(role: .system, text: "Running tool: \(functionCall.name)...", conversationId: conversationId)
                         
                         var result = ""
-                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
+                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] as? String {
                             await MainActor.run { localState?.setWorkspace(for: conversationId, path: path) }
                             result = "Workspace successfully set to \(path). You will now load AGENTS.md from this directory."
+                        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] as? String {
+                            let minute = (functionCall.args["minute"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["minute"] ?? "")")
+                            let hour = (functionCall.args["hour"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["hour"] ?? "")")
+                            let day = (functionCall.args["day"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["day"] ?? "")")
+                            let month = (functionCall.args["month"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["month"] ?? "")")
+                            let weekday = (functionCall.args["weekday"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["weekday"] ?? "")")
+                            let intervalSeconds = (functionCall.args["intervalSeconds"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["intervalSeconds"] ?? "")")
+                            
+                            ScheduleManager.shared.schedule(
+                                conversationId: conversationId,
+                                prompt: prompt,
+                                minute: minute,
+                                hour: hour,
+                                day: day,
+                                month: month,
+                                weekday: weekday,
+                                intervalSeconds: intervalSeconds
+                            )
+                            result = "Job scheduled successfully. It will fire in the background."
                         } else {
                             result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                         }
