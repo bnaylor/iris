@@ -22,11 +22,14 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Vibecop Guardian Mode:** An ultra-paranoid AI guardian that evaluates terminal commands and file operations for safety, auto-approving routine actions and escalating dangerous ones to the user.
 *   **Rich Native UI:** Beautiful macOS `NavigationSplitView` with multi-conversation support, `.regularMaterial` frosted glass input bars, and native markdown chat rendering powered by `swift-markdown-ui`.
 
-## 🧠 The Portable Skill System
+## 🧠 The Portable Memory & Skill System
 
-Iris uses **Markdown-based skills**, matching standard AI agent patterns. Skills are not hardcoded into the Swift binary. Instead, Iris reads from `~/.iris/skills/`.
+Instead of trapping your workflows inside a proprietary database or cloud service, Iris uses the **Open Knowledge Format (OKF)** for its memory and skills layer.
 
-A skill is simply a directory containing a `SKILL.md` file. Iris dynamically loads the YAML frontmatter to learn what the skill does, and then passes the markdown instructions to the LLM when the skill is needed. The LLM executes the skill using Iris's built-in native tools.
+*   **Markdown + YAML:** All long-term memories (`USER.md`, `SOUL.md`) and portable skills (`skills/*.md`) are stored as plain Markdown files with strict YAML frontmatter (OKF).
+*   **Knowledge Graphing:** Iris automatically cross-links these files using standard Markdown syntax, creating a navigable knowledge graph on your local filesystem.
+*   **Memory Grooming:** The background `/reflect` loop actively grooms the memory library, ensuring frontmatter is up-to-date and repairing broken cross-links.
+*   **JIT Prompt Injection:** Instead of a massive, static system prompt, Iris uses `HolographicMemoryManager` to perform semantic vector searches against your OKF Markdown files, pulling only the relevant skills and context into the context window for the current task.
 
 ### Core Native Tools
 Iris provides three highly privileged native primitives to the LLM:
