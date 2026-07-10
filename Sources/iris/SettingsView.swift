@@ -4,6 +4,8 @@ import KeyboardShortcuts
 struct SettingsView: View {
     @Bindable private var config = ConfigManager.shared
     @State private var availableModels: [String] = []
+    @State private var isInstallingContainer = false
+    @State private var installError: String?
     
     var body: some View {
         Form {
@@ -57,6 +59,48 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
+            }
+            .padding(.bottom)
+            
+            Section(header: Text("Sandboxing").font(.headline)) {
+                Toggle("Enable sandboxing for subagents", isOn: $config.enableSandboxing)
+                    .onChange(of: config.enableSandboxing) { _, newValue in
+                        if newValue && !SandboxingManager.shared.isContainerInstalled {
+                            // Turn it back off until installed
+                            config.enableSandboxing = false
+                            isInstallingContainer = true
+                            installError = nil
+                            
+                            SandboxingManager.shared.installContainer { success, error in
+                                isInstallingContainer = false
+                                if success {
+                                    config.enableSandboxing = true
+                                } else {
+                                    installError = error
+                                }
+                            }
+                        }
+                    }
+                
+                if isInstallingContainer {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                        Text("Downloading and installing Apple container...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                if let error = installError {
+                    Text("Error: \(error)")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                Text("Runs dangerous commands like web searches in lightweight Linux virtual machines on your Mac.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(20)

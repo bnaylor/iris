@@ -33,6 +33,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(googleTokenExpiry, forKey: "GOOGLE_TOKEN_EXPIRY") }
     }
     
+    var enableSandboxing: Bool {
+        didSet { UserDefaults.standard.set(enableSandboxing, forKey: "ENABLE_SANDBOXING") }
+    }
+    
     init() {
         self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
         self.geminiModel = UserDefaults.standard.string(forKey: "GEMINI_MODEL") ?? "gemini-3.5-flash"
@@ -41,6 +45,7 @@ class ConfigManager: @unchecked Sendable {
         self.googleAccessToken = UserDefaults.standard.string(forKey: "GOOGLE_ACCESS_TOKEN") ?? ""
         self.googleRefreshToken = UserDefaults.standard.string(forKey: "GOOGLE_REFRESH_TOKEN") ?? ""
         self.googleTokenExpiry = UserDefaults.standard.double(forKey: "GOOGLE_TOKEN_EXPIRY")
+        self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
     }
     
     var isConfigured: Bool {
