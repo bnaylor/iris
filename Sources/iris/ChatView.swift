@@ -80,6 +80,14 @@ struct ChatView: View {
                                             copyMessagesToClipboard(ids: selectedMessageIDs.contains(message.id) ? selectedMessageIDs : [message.id], from: conv)
                                         }
                                     }
+                                    .simultaneousGesture(TapGesture().onEnded {
+                                        if selectedMessageIDs.contains(message.id) {
+                                            // Asynchronously remove it to override the native List behavior which keeps it selected
+                                            DispatchQueue.main.async {
+                                                selectedMessageIDs.remove(message.id)
+                                            }
+                                        }
+                                    })
                             }
                             
                             if state.isThinking {
