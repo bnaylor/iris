@@ -52,6 +52,10 @@ struct ToolExecutor {
             )
         )
         ]
+        
+        let tasksTools = await GoogleTasksManager.shared.getTools()
+        tools.append(contentsOf: tasksTools)
+        
         let mcpTools = await MCPManager.shared.getGeminiTools()
         tools.append(contentsOf: mcpTools)
         return tools
@@ -72,6 +76,8 @@ struct ToolExecutor {
             guard let path = args["path"], let instructions = args["instructions"] else { return "Error: Missing path or instructions" }
             await WatcherManager.shared.addRule(path: path, instructions: instructions)
             return "Successfully registered watcher for \(path). You will be notified automatically when files change."
+        case let n where n.hasPrefix("google_tasks_"):
+            return await GoogleTasksManager.shared.execute(name: name, args: args)
         default:
             if name.contains("___") {
                 return await MCPManager.shared.callTool(name: name, args: args)

@@ -18,7 +18,8 @@ final class OAuthManager: @unchecked Sendable {
         "https://www.googleapis.com/auth/calendar.events.readonly",
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/documents"
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/tasks"
     ]
     
     func startOAuthFlow() async throws {
