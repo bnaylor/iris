@@ -101,3 +101,12 @@ To configure MCP servers, create a JSON file at `~/.iris/mcp_servers.json` with 
 ```
 
 Once configured, Iris will automatically boot these servers in the background and their tools will be available for Iris to use!
+
+## 💡 Inspired By
+
+Iris's core agentic workflow is heavily inspired by the philosophy of [obra/superpowers](https://github.com/obra/superpowers). In particular, we natively enforce the following principles in the agent's system prompt:
+*   **Brainstorming First:** The agent must explore context, ask clarifying questions, and propose trade-offs before writing a single line of code.
+*   **Design Docs (Specs):** Designs must be presented and approved, then written to `specs/` directories.
+*   **Implementation Plans:** Complex designs are broken down into step-by-step plans.
+*   **Test-Driven Development (TDD):** The "Iron Law" of testing first. No production code is written without observing a failing test first (RED -> GREEN -> REFACTOR).
+*   **Execution Loop:** Implementing code iteratively and reviewing it until the feature matches the specs.
