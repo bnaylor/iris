@@ -21,20 +21,29 @@ actor IrisEngine {
         systemPrompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)", functionCall: nil, functionResponse: nil)])
     }
     
-    func startWatchers(paths: [String]) async {
-        let watcher = FileWatcher()
-        let fileEvents = watcher.watch(paths: paths)
-        
-        for await eventPaths in fileEvents {
-            let eventString = "File(s) modified: \(eventPaths.joined(separator: ", "))"
-            let localState = state
-            await MainActor.run {
-                localState?.appendMessage(role: .system, content: eventString)
-                localState?.isThinking = true
-            }
-            await processInput(eventString, source: "FileWatcher")
-            await MainActor.run { localState?.isThinking = false }
+    func handleSystemEvent(_ message: String, source: String) async {
+        let localState = state
+        await MainActor.run {
+            localState?.appendMessage(role: .system, content: message)
+            localState?.isThinking = true
         }
+        await processInput(message, source: source)
+        await MainActor.run { localState?.isThinking = false }
+    }
+    
+    func start() async {
+        await WatcherManager.shared.setCallback { [weak self] message, source in
+            guard let self = self else { return }
+            await self.handleSystemEvent(message, source: source)
+        }
+        
+        await WatcherManager.shared.startAll()
+        
+        // Ensure the core skills folder is always watched dynamically
+        await WatcherManager.shared.addRule(
+            path: "~/.config/iris/skills",
+            instructions: "The user has modified their skills directory. Reload your skills and acknowledge the change."
+        )
     }
     
     func processInput(_ input: String, source: String) async {

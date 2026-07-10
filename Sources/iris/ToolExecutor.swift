@@ -37,6 +37,18 @@ struct ToolExecutor {
                 ],
                 required: ["path", "content"]
             )
+        ),
+        FunctionDeclaration(
+            name: "register_directory_watcher",
+            description: "Watch a directory for file changes and execute instructions when files are modified. Use this when the user asks you to monitor a folder.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "path": Schema(type: "STRING", description: "Absolute or tilde-expanded path to watch"),
+                    "instructions": Schema(type: "STRING", description: "The instructions to execute when a file is modified")
+                ],
+                required: ["path", "instructions"]
+            )
         )
     ]
     
@@ -51,6 +63,10 @@ struct ToolExecutor {
         case "write_file":
             guard let path = args["path"], let content = args["content"] else { return "Error: Missing path or content" }
             return await writeFile(path, content: content)
+        case "register_directory_watcher":
+            guard let path = args["path"], let instructions = args["instructions"] else { return "Error: Missing path or instructions" }
+            await WatcherManager.shared.addRule(path: path, instructions: instructions)
+            return "Successfully registered watcher for \(path). You will be notified automatically when files change."
         default:
             return "Error: Unknown tool \(name)"
         }

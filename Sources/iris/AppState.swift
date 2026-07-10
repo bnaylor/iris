@@ -26,9 +26,8 @@ class AppState {
     }
     
     func start() {
-        let watchPaths = [("~/.config/iris/skills" as NSString).expandingTildeInPath]
         Task {
-            await engine.startWatchers(paths: watchPaths)
+            await engine.start()
         }
     }
     
