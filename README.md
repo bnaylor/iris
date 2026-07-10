@@ -29,6 +29,7 @@ Instead of trapping your workflows inside a proprietary database or cloud servic
 *   **Markdown + YAML:** All long-term memories (`USER.md`, `SOUL.md`) and portable skills (`skills/*.md`) are stored as plain Markdown files with strict YAML frontmatter (OKF).
 *   **Knowledge Graphing:** Iris automatically cross-links these files using standard Markdown syntax, creating a navigable knowledge graph on your local filesystem.
 *   **Memory Grooming:** The background `/reflect` loop actively grooms the memory library, ensuring frontmatter is up-to-date and repairing broken cross-links.
+*   **Project Artifacts:** Generated design docs and research notes are strictly organized into human-readable library trees (e.g., `~/.iris/library/<project_name>/`) instead of opaque UUID directories, and all artifacts enforce the OKF schema for seamless integration.
 *   **JIT Prompt Injection:** Instead of a massive, static system prompt, Iris uses `HolographicMemoryManager` to perform semantic vector searches against your OKF Markdown files, pulling only the relevant skills and context into the context window for the current task.
 
 ### Core Native Tools
