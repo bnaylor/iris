@@ -193,6 +193,13 @@ struct MessageView: View {
                         .foregroundColor(textColor)
                         .cornerRadius(12)
                         .cornerRadius(0, corners: [.bottomLeft])
+                } else if message.role == .user {
+                    Text(message.content)
+                        .padding(10)
+                        .background(backgroundColor)
+                        .foregroundColor(textColor)
+                        .cornerRadius(12)
+                        .cornerRadius(0, corners: [.bottomRight])
                 } else {
                     Markdown(message.content)
                         .markdownTheme(.gitHub)
@@ -200,8 +207,7 @@ struct MessageView: View {
                         .background(backgroundColor)
                         .foregroundColor(textColor)
                         .cornerRadius(12)
-                        // Apply different corners depending on role
-                        .cornerRadius(0, corners: message.role == .user ? [.bottomRight] : [.bottomLeft])
+                        .cornerRadius(0, corners: [.bottomLeft])
                 }
             }
             
