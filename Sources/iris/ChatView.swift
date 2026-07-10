@@ -197,8 +197,10 @@ struct MessageView: View {
                 
                 if message.role == .system {
                     systemMessageContent(for: message.content)
+                        .textSelection(.enabled)
                 } else if message.role == .user {
                     Text(message.content)
+                        .textSelection(.enabled)
                         .padding(10)
                         .background(backgroundColor)
                         .foregroundColor(textColor)
