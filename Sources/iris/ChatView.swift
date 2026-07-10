@@ -203,11 +203,7 @@ struct MessageView: View {
                 } else {
                     Markdown(message.content)
                         .markdownTheme(.gitHub)
-                        .padding(10)
-                        .background(backgroundColor)
-                        .foregroundColor(textColor)
-                        .cornerRadius(12)
-                        .cornerRadius(0, corners: [.bottomLeft])
+                        .padding(.vertical, 4)
                 }
             }
             
