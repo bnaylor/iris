@@ -64,11 +64,11 @@ struct ToolExecutor {
         return tools
     }
     
-    func execute(name: String, args: [String: String]) async -> String {
+    func execute(name: String, args: [String: String], cwd: String? = nil) async -> String {
         switch name {
         case "run_command":
             guard let command = args["command"] else { return "Error: Missing command" }
-            return await runCommand(command)
+            return await runCommand(command, cwd: cwd)
         case "read_file":
             guard let path = args["path"] else { return "Error: Missing path" }
             return await readFile(path)
@@ -91,7 +91,7 @@ struct ToolExecutor {
         }
     }
     
-    private func runCommand(_ command: String) async -> String {
+    private func runCommand(_ command: String, cwd: String?) async -> String {
         return await withCheckedContinuation { continuation in
             let process = Process()
             let outputPipe = Pipe()
@@ -101,6 +101,9 @@ struct ToolExecutor {
             process.arguments = ["-c", command]
             process.standardOutput = outputPipe
             process.standardError = errorPipe
+            if let cwd = cwd {
+                process.currentDirectoryURL = URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
+            }
             
             process.terminationHandler = { proc in
                 let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()

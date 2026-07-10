@@ -7,7 +7,6 @@ actor IrisEngine {
     let executor = ToolExecutor.shared
     let manager = SkillManager.shared
     
-    var history: [Content] = []
     var systemPrompt: Content!
     
     // We need to keep a weak reference to the state or pass it in. 
@@ -23,11 +22,14 @@ actor IrisEngine {
     
     func handleSystemEvent(_ message: String, source: String) async {
         let localState = state
+        let activeId = await MainActor.run { localState?.selectedConversationId }
+        guard let conversationId = activeId else { return }
+        
         await MainActor.run {
-            localState?.appendMessage(role: .system, content: message)
+            localState?.appendMessage(role: .system, content: message, to: conversationId)
             localState?.isThinking = true
         }
-        await processInput(message, source: source)
+        await processInput(message, source: source, conversationId: conversationId)
         await MainActor.run { localState?.isThinking = false }
     }
     
@@ -47,39 +49,77 @@ actor IrisEngine {
         )
     }
     
-    func processInput(_ input: String, source: String) async {
+    func processInput(_ input: String, source: String, conversationId: UUID) async {
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
-        history.append(Content(role: "user", parts: [Part(text: text, functionCall: nil, functionResponse: nil)]))
         
-        let toolsList = await executor.getTools()
-        var request = GeminiRequest(contents: history, systemInstruction: systemPrompt, tools: [Tool(functionDeclarations: toolsList)])
+        let localState = state
+        var history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
+        let workspacePath = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.workspacePath }
+        
+        history.append(Content(role: "user", parts: [Part(text: text, functionCall: nil, functionResponse: nil)]))
+        await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
+        
+        var currentSystemPrompt = systemPrompt!
+        if let wp = workspacePath {
+            let agentsMdPath = (wp as NSString).expandingTildeInPath
+            let fullPath = (agentsMdPath as NSString).appendingPathComponent("AGENTS.md")
+            if let agentsMdContent = try? String(contentsOfFile: fullPath, encoding: .utf8) {
+                if let textPart = currentSystemPrompt.parts.first?.text {
+                    currentSystemPrompt.parts[0].text = textPart + "\n\n# Project Workspace Rules (AGENTS.md)\n" + agentsMdContent
+                }
+            }
+        }
+        
+        var toolsList = await executor.getTools()
+        // Add set_workspace tool dynamically
+        toolsList.append(FunctionDeclaration(
+            name: "set_workspace",
+            description: "Bind this conversation to a local project workspace. Do this when the user says they are working in a specific project or directory.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "path": Schema(type: "STRING", description: "Absolute or tilde-expanded path to the workspace directory")
+                ],
+                required: ["path"]
+            )
+        ))
+        
+        var request = GeminiRequest(contents: history, systemInstruction: currentSystemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
         while !turnFinished {
             do {
                 let response = try await client.generateContent(request: request)
                 guard let candidate = response.candidates?.first, let responseContent = candidate.content else {
-                    await pushToUI(role: .agent, text: "Error: No candidate returned.")
+                    await pushToUI(role: .agent, text: "Error: No candidate returned.", conversationId: conversationId)
                     break
                 }
                 
                 let modelContent = Content(role: "model", parts: responseContent.parts)
                 history.append(modelContent)
+                await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
                 
                 if let part = responseContent.parts.first {
                     if let functionCall = part.functionCall {
-                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)...")
+                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)...", conversationId: conversationId)
                         
-                        let result = await executor.execute(name: functionCall.name, args: functionCall.args)
+                        var result = ""
+                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
+                            await MainActor.run { localState?.setWorkspace(for: conversationId, path: path) }
+                            result = "Workspace successfully set to \(path). You will now load AGENTS.md from this directory."
+                        } else {
+                            result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                        }
                         
                         let functionResponse = Content(
                             role: "function", 
                             parts: [Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: functionCall.name, response: ["result": result]))]
                         )
                         history.append(functionResponse)
+                        await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
                         request.contents = history
                     } else if let responseText = part.text {
-                        await pushToUI(role: .agent, text: responseText)
+                        await pushToUI(role: .agent, text: responseText, conversationId: conversationId)
                         turnFinished = true
                     } else {
                         turnFinished = true
@@ -88,16 +128,16 @@ actor IrisEngine {
                     turnFinished = true
                 }
             } catch {
-                await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)")
+                await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
             }
         }
     }
     
-    private func pushToUI(role: ChatRole, text: String) async {
+    private func pushToUI(role: ChatRole, text: String, conversationId: UUID) async {
         let localState = state
         await MainActor.run {
-            localState?.appendMessage(role: role, content: text)
+            localState?.appendMessage(role: role, content: text, to: conversationId)
         }
     }
 }

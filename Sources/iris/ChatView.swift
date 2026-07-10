@@ -6,79 +6,130 @@ struct ChatView: View {
     @Environment(\.openSettings) private var openSettings
     
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(state.messages) { message in
-                            MessageView(message: message)
-                                .id(message.id)
-                        }
-                        
-                        if state.isThinking {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Iris is thinking...")
+        NavigationSplitView {
+            List(selection: $state.selectedConversationId) {
+                ForEach(state.conversations) { conv in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(conv.title)
+                                .font(.headline)
+                            if let wp = conv.workspacePath {
+                                Text(wp)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            .padding(.leading, 12)
-                            .padding(.top, 4)
-                            .id("thinkingIndicator")
                         }
+                        Spacer()
+                    }
+                    .tag(conv.id)
+                    .contextMenu {
+                        Button("Link to Workspace...") {
+                            linkWorkspace(to: conv.id)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Conversations")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: { state.createNewConversation() }) {
+                        Image(systemName: "square.and.pencil")
+                    }
+                }
+            }
+        } detail: {
+            if let activeConvIndex = state.activeConversationIndex {
+                let conv = state.conversations[activeConvIndex]
+                VStack(spacing: 0) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 12) {
+                                ForEach(conv.messages) { message in
+                                    MessageView(message: message)
+                                        .id(message.id)
+                                }
+                                
+                                if state.isThinking {
+                                    HStack {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                        Text("Iris is thinking...")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.leading, 12)
+                                    .padding(.top, 4)
+                                    .id("thinkingIndicator")
+                                }
+                            }
+                            .padding()
+                        }
+                        .onChange(of: conv.messages.count) { _, _ in
+                            if let last = conv.messages.last {
+                                withAnimation {
+                                    proxy.scrollTo(last.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onChange(of: state.isThinking) { _, _ in
+                            if state.isThinking {
+                                withAnimation {
+                                    proxy.scrollTo("thinkingIndicator", anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    HStack {
+                        TextField("Ask Iris or override a workflow...", text: $inputText)
+                            .textFieldStyle(.plain)
+                            .padding(10)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                            )
+                            .onSubmit {
+                                submit()
+                            }
+                        
+                        Button(action: submit) {
+                            Image(systemName: "paperplane.fill")
+                                .foregroundColor(inputText.isEmpty ? .secondary : .accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(inputText.isEmpty)
                     }
                     .padding()
+                    .background(Color(NSColor.windowBackgroundColor))
                 }
-                .onChange(of: state.messages.count) { _, _ in
-                    if let last = state.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                }
-                .onChange(of: state.isThinking) { _, _ in
-                    if state.isThinking {
-                        withAnimation {
-                            proxy.scrollTo("thinkingIndicator", anchor: .bottom)
-                        }
-                    }
-                }
+            } else {
+                Text("Select or create a conversation.")
+                    .foregroundColor(.secondary)
             }
-            
-            Divider()
-            
-            HStack {
-                TextField("Ask Iris or override a workflow...", text: $inputText)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
-                    .onSubmit {
-                        submit()
-                    }
-                
-                Button(action: submit) {
-                    Image(systemName: "paperplane.fill")
-                        .foregroundColor(inputText.isEmpty ? .secondary : .accentColor)
-                }
-                .buttonStyle(.plain)
-                .disabled(inputText.isEmpty)
-            }
-            .padding()
-            .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(minWidth: 400, idealWidth: 500, minHeight: 400, idealHeight: 600)
+        .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)
         .onAppear {
             if !ConfigManager.shared.isConfigured {
                 openSettings()
             } else {
                 state.start()
             }
+        }
+    }
+    
+    private func linkWorkspace(to id: UUID) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select Workspace"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            state.setWorkspace(for: id, path: url.path)
         }
     }
     
