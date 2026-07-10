@@ -4,6 +4,7 @@
     - `./memory_gemini.md`
 - [x] Permissions check
 - [x] Tool hooks (Basic integration)
+- [ ] Always allow / Always allow in project
 - [ ] Complete tool hook lifecycle (`BeforeModel`, `AfterModel`, `SessionStart`, etc.)
 - [ ] Built-in vibecop support
 - [ ] Other providers (anthropic, etc)

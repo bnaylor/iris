@@ -9,7 +9,9 @@
 ## context
 - if you need to save memories, do it aggressively
 
-## currenct
+## currency
 - always update the README.md when major things change - new features, adjustments, etc
 - Add docs to docs/ as necessary.  Especially when adding new features, what would we want to tell someone about how to use them?
+- Add unit tests when introducing new function whenever practical
+- Run unit tests before commit and ensure that they pass.
 

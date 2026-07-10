@@ -216,7 +216,12 @@ actor IrisEngine {
                 
                 if let part = responseContent.parts.first {
                     if let functionCall = part.functionCall {
-                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)...", conversationId: conversationId)
+                        let argsString = functionCall.args.map { key, value in
+                            let strValue = "\(value)".replacingOccurrences(of: "\n", with: " ")
+                            let displayValue = strValue.count > 50 ? String(strValue.prefix(47)) + "..." : strValue
+                            return "\(key): \(displayValue)"
+                        }.joined(separator: ", ")
+                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)(\(argsString))", conversationId: conversationId)
                         
                         var result = ""
                         if functionCall.name == "set_workspace", let path = functionCall.args["path"] as? String {
