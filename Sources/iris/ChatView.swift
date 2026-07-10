@@ -69,25 +69,30 @@ struct ChatView: View {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
                         List(selection: $selectedMessageIDs) {
-                            ForEach(conv.messages) { message in
-                                MessageView(message: message)
-                                    .id(message.id)
-                                    .tag(message.id)
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.clear)
-                                    .contextMenu {
-                                        Button("Copy as Markdown") {
-                                            copyMessagesToClipboard(ids: selectedMessageIDs.contains(message.id) ? selectedMessageIDs : [message.id], from: conv)
+                            ForEach(groupedMessages(for: conv)) { item in
+                                Group {
+                                    switch item {
+                                    case .single(let message):
+                                        MessageView(message: message)
+                                    case .systemGroup(_, let messages):
+                                        SystemGroupView(messages: messages)
+                                    }
+                                }
+                                .tag(item.id)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .contextMenu {
+                                    Button("Copy as Markdown") {
+                                        copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv)
+                                    }
+                                }
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    if selectedMessageIDs.contains(item.id) {
+                                        DispatchQueue.main.async {
+                                            selectedMessageIDs.remove(item.id)
                                         }
                                     }
-                                    .simultaneousGesture(TapGesture().onEnded {
-                                        if selectedMessageIDs.contains(message.id) {
-                                            // Asynchronously remove it to override the native List behavior which keeps it selected
-                                            DispatchQueue.main.async {
-                                                selectedMessageIDs.remove(message.id)
-                                            }
-                                        }
-                                    })
+                                })
                             }
                             
                             if state.isThinking {
@@ -107,11 +112,20 @@ struct ChatView: View {
                         }
                         .listStyle(.plain)
                         .onCopyCommand {
-                            let selected = conv.messages.filter { selectedMessageIDs.contains($0.id) }
-                            if selected.isEmpty { return [] }
+                            var selectedMessages: [ChatMessage] = []
+                            for item in groupedMessages(for: conv) {
+                                if selectedMessageIDs.contains(item.id) {
+                                    switch item {
+                                    case .single(let msg): selectedMessages.append(msg)
+                                    case .systemGroup(_, let msgs): selectedMessages.append(contentsOf: msgs)
+                                    }
+                                }
+                            }
+                            
+                            if selectedMessages.isEmpty { return [] }
                             
                             var markdown = ""
-                            for msg in selected {
+                            for msg in selectedMessages {
                                 let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
                                 markdown += "### \(roleName)\n"
                                 if msg.role == .system {
@@ -203,6 +217,27 @@ struct ChatView: View {
         }
     }
     
+    private func groupedMessages(for conv: Conversation) -> [MessageItem] {
+        var result: [MessageItem] = []
+        var currentSystemGroup: [ChatMessage] = []
+        
+        for msg in conv.messages {
+            if msg.role == .system {
+                currentSystemGroup.append(msg)
+            } else {
+                if !currentSystemGroup.isEmpty {
+                    result.append(.systemGroup(id: currentSystemGroup.first!.id, messages: currentSystemGroup))
+                    currentSystemGroup = []
+                }
+                result.append(.single(msg))
+            }
+        }
+        if !currentSystemGroup.isEmpty {
+            result.append(.systemGroup(id: currentSystemGroup.first!.id, messages: currentSystemGroup))
+        }
+        return result
+    }
+    
     private func exportConversation(id: UUID) {
         guard let conv = state.conversations.first(where: { $0.id == id }) else { return }
         
@@ -239,11 +274,20 @@ struct ChatView: View {
     }
     
     private func copyMessagesToClipboard(ids: Set<UUID>, from conv: Conversation) {
-        let selected = conv.messages.filter { ids.contains($0.id) }
-        guard !selected.isEmpty else { return }
+        var selectedMessages: [ChatMessage] = []
+        for item in groupedMessages(for: conv) {
+            if ids.contains(item.id) {
+                switch item {
+                case .single(let msg): selectedMessages.append(msg)
+                case .systemGroup(_, let msgs): selectedMessages.append(contentsOf: msgs)
+                }
+            }
+        }
+        
+        guard !selectedMessages.isEmpty else { return }
         
         var markdown = ""
-        for msg in selected {
+        for msg in selectedMessages {
             let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
             markdown += "### \(roleName)\n"
             if msg.role == .system {
@@ -288,7 +332,7 @@ struct MessageView: View {
                 }
                 
                 if message.role == .system {
-                    systemMessageContent(for: message.content)
+                    SystemMessageContent(text: message.content)
                         .textSelection(.enabled)
                 } else if message.role == .user {
                     Text(message.content)
@@ -326,8 +370,56 @@ struct MessageView: View {
         }
     }
     
-    @ViewBuilder
-    private func systemMessageContent(for text: String) -> some View {
+}
+
+struct SystemGroupView: View {
+    let messages: [ChatMessage]
+    @State private var isExpanded = false
+    
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    if messages.count > 1 {
+                        Button(action: { withAnimation { isExpanded.toggle() } }) {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .foregroundColor(.secondary)
+                                .frame(width: 14)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Spacer().frame(width: 14)
+                    }
+                    
+                    Image(systemName: "gearshape.fill")
+                    Text(messages.count > 1 && isExpanded ? "System Events (\(messages.count))" : "System Event")
+                }
+                .font(.caption.bold())
+                .foregroundColor(.secondary)
+                
+                if isExpanded || messages.count == 1 {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(messages) { msg in
+                            SystemMessageContent(text: msg.content)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(.leading, 22)
+                } else if let last = messages.last {
+                    SystemMessageContent(text: last.content)
+                        .textSelection(.enabled)
+                        .padding(.leading, 22)
+                }
+            }
+            Spacer()
+        }
+    }
+}
+
+struct SystemMessageContent: View {
+    let text: String
+    
+    var body: some View {
         HStack(alignment: .top) {
             if text.hasPrefix("Running tool:") {
                 Image(systemName: "wrench.and.screwdriver.fill")
@@ -347,7 +439,7 @@ struct MessageView: View {
         }
         .font(.caption.monospaced())
         .padding(10)
-        .background(backgroundColor)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
         .cornerRadius(12)
         .cornerRadius(0, corners: [.bottomLeft])
     }
