@@ -326,15 +326,11 @@ actor IrisEngine {
                             var needsApproval = false
                             var details = ""
                             if functionCall.name == "run_command", let cmd = functionCall.args["command"] as? String {
-                                if SecurityGuard.isCommandDangerous(cmd) {
-                                    needsApproval = true
-                                    details = cmd
-                                }
+                                needsApproval = true
+                                details = cmd
                             } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] as? String {
-                                if SecurityGuard.isFileAccessDangerous(path: path, workspace: workspacePath) {
-                                    needsApproval = true
-                                    details = path
-                                }
+                                needsApproval = true
+                                details = path
                             }
                             
                             if needsApproval {

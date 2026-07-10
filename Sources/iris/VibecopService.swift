@@ -25,7 +25,7 @@ final class VibecopService: @unchecked Sendable {
     }
     """
     
-    func evaluateCommand(command: String, workspace: String?) async throws -> VibecopDecision {
+    func evaluateAction(toolName: String, details: String, workspace: String?) async throws -> VibecopDecision {
         let manager = AuxiliaryModelManager.shared
         
         // Ensure we have a Vibecop model assigned. For testing, we fallback to Ollama.
@@ -48,7 +48,7 @@ final class VibecopService: @unchecked Sendable {
             }
         }
         
-        prompt += "\n\nProposed Command:\n\(command)"
+        prompt += "\n\nProposed Action:\nTool: \(toolName)\nDetails: \(details)"
         
         let responseJson = try await engine.generate(prompt: prompt, jsonSchema: "vibecop_schema")
         

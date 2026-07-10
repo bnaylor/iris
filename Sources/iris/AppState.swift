@@ -213,19 +213,17 @@ class AppState {
     }
     
     func requestApproval(toolName: String, details: String, workspace: String? = nil) async -> Bool {
-        if toolName == "run_command" {
-            do {
-                let decision = try await VibecopService.shared.evaluateCommand(command: details, workspace: workspace)
-                if decision.decision == "APPROVE" {
-                    return true
-                } else if decision.decision == "DENY" {
-                    return false
-                }
-                // If ESCALATE, fall through to user prompt
-            } catch {
-                // If Vibecop fails, fail open to the user prompt
-                print("Vibecop evaluation failed: \(error)")
+        do {
+            let decision = try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace)
+            if decision.decision == "APPROVE" {
+                return true
+            } else if decision.decision == "DENY" {
+                return false
             }
+            // If ESCALATE, fall through to user prompt
+        } catch {
+            // If Vibecop fails, fail open to the user prompt
+            print("Vibecop evaluation failed: \(error)")
         }
         
         return await withCheckedContinuation { continuation in
