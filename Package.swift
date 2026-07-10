@@ -12,7 +12,8 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", branch: "main"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0")
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
+        .package(url: "https://github.com/ggerganov/llama.cpp.git", branch: "master")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -23,7 +24,8 @@ let package = Package(
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
-                .product(name: "GRDB", package: "GRDB.swift")
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "llama", package: "llama.cpp")
             ],
             resources: [
                 .process("assets")
