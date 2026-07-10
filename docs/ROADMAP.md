@@ -10,7 +10,9 @@
 - [ ] Explicit hooks for USER/SOUL/etc updates
 - [ ] Enhanced self-reflection
 - [ ] Sandboxed web search agent
-    - [x] `./prompt_injection_gemini.md` (Model armor - Tier 1 implemented)
+    - [x] `./prompt_injection_gemini.md` (Model armor - Tier 1 structural implemented)
+        - [ ] Tier 2 Local CoreML Classification
+        - [ ] Tier 3 Local Canary Probe
 - [ ] Use Apple silicon / foundational models?
 - [ ] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [ ] `/goal` support
