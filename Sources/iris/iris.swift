@@ -149,7 +149,7 @@ struct IrisApp: App {
         NSApplication.shared.activate(ignoringOtherApps: true)
         
         KeyboardShortcuts.onKeyUp(for: .toggleIris) {
-            if let window = NSApp.windows.first(where: { $0.title == "Iris Chat" }) {
+            if let window = NSApp.windows.first(where: { $0.title == "Iris" }) {
                 if window.isVisible && NSApp.isActive {
                     window.orderOut(nil)
                 } else {
@@ -167,7 +167,7 @@ struct IrisApp: App {
     }
     
     var body: some Scene {
-        WindowGroup("Iris Chat") {
+        WindowGroup("Iris") {
             ChatView()
         }
         

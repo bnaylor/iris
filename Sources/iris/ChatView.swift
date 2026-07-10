@@ -7,36 +7,43 @@ struct ChatView: View {
     
     var body: some View {
         NavigationSplitView {
-            List(selection: $state.selectedConversationId) {
-                ForEach(state.conversations) { conv in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(conv.title)
-                                .font(.headline)
-                            if let wp = conv.workspacePath {
-                                Text(wp)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+            VStack {
+                List(selection: $state.selectedConversationId) {
+                    ForEach(state.conversations) { conv in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(conv.title)
+                                    .font(.headline)
+                                if let wp = conv.workspacePath {
+                                    Text(wp)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .tag(conv.id)
+                        .contextMenu {
+                            Button("Link to Workspace...") {
+                                linkWorkspace(to: conv.id)
                             }
                         }
-                        Spacer()
-                    }
-                    .tag(conv.id)
-                    .contextMenu {
-                        Button("Link to Workspace...") {
-                            linkWorkspace(to: conv.id)
-                        }
                     }
                 }
+                .listStyle(.sidebar)
+                
+                Button(action: { state.createNewConversation() }) {
+                    HStack {
+                        Image(systemName: "plus.message.fill")
+                        Text("New Conversation")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding()
             }
             .navigationTitle("Conversations")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { state.createNewConversation() }) {
-                        Image(systemName: "square.and.pencil")
-                    }
-                }
-            }
         } detail: {
             if let activeConvIndex = state.activeConversationIndex {
                 let conv = state.conversations[activeConvIndex]
@@ -79,11 +86,12 @@ struct ChatView: View {
                             }
                         }
                     }
+                    .background(Color(NSColor.textBackgroundColor))
                     
                     Divider()
                     
                     HStack {
-                        TextField("Ask Iris or override a workflow...", text: $inputText)
+                        TextField("Message Iris...", text: $inputText)
                             .textFieldStyle(.plain)
                             .padding(10)
                             .background(Color(NSColor.controlBackgroundColor))
@@ -106,6 +114,7 @@ struct ChatView: View {
                     .padding()
                     .background(Color(NSColor.windowBackgroundColor))
                 }
+                .background(Color(NSColor.textBackgroundColor))
             } else {
                 Text("Select or create a conversation.")
                     .foregroundColor(.secondary)
