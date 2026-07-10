@@ -63,6 +63,18 @@ class AppState {
         }
     }
     
+    func deleteConversation(_ id: UUID) {
+        conversations.removeAll { $0.id == id }
+        if selectedConversationId == id {
+            selectedConversationId = conversations.last?.id
+        }
+        if conversations.isEmpty {
+            createNewConversation()
+        } else {
+            saveConversations()
+        }
+    }
+    
     func start() {
         Task {
             await engine.start()

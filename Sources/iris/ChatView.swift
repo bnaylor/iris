@@ -9,23 +9,36 @@ struct ChatView: View {
         NavigationSplitView {
             VStack {
                 List(selection: $state.selectedConversationId) {
-                    ForEach(state.conversations) { conv in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(conv.title)
-                                    .font(.headline)
-                                if let wp = conv.workspacePath {
-                                    Text(wp)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                    Section(header: Text("Conversations").font(.caption.weight(.bold)).foregroundColor(.secondary).padding(.bottom, 4)) {
+                        ForEach(state.conversations) { conv in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(conv.title)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    if let wp = conv.workspacePath {
+                                        Text(wp)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
                                 }
+                                Spacer()
                             }
-                            Spacer()
-                        }
-                        .tag(conv.id)
-                        .contextMenu {
-                            Button("Link to Workspace...") {
-                                linkWorkspace(to: conv.id)
+                            .padding(.vertical, 2)
+                            .tag(conv.id)
+                            .contextMenu {
+                                Button("Link to Workspace...") {
+                                    linkWorkspace(to: conv.id)
+                                }
+                                Divider()
+                                Button(role: .destructive, action: {
+                                    state.deleteConversation(conv.id)
+                                }) {
+                                    Text("Delete Conversation")
+                                    Image(systemName: "trash")
+                                }
                             }
                         }
                     }
@@ -43,7 +56,7 @@ struct ChatView: View {
                 .buttonStyle(.borderedProminent)
                 .padding()
             }
-            .navigationTitle("Conversations")
+            .navigationTitle("Iris")
         } detail: {
             if let activeConvIndex = state.activeConversationIndex {
                 let conv = state.conversations[activeConvIndex]
@@ -112,7 +125,7 @@ struct ChatView: View {
                         .disabled(inputText.isEmpty)
                     }
                     .padding()
-                    .background(Color(NSColor.windowBackgroundColor))
+                    .background(.regularMaterial)
                 }
                 .background(Color(NSColor.textBackgroundColor))
             } else {
