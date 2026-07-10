@@ -139,7 +139,7 @@ class AppState {
             conversations[idx].messageCountSinceReflection += 1
             saveConversations()
             
-            let shouldReflect = conversations[idx].messageCountSinceReflection >= 10
+            let shouldReflect = conversations[idx].messageCountSinceReflection >= 30
             if shouldReflect {
                 conversations[idx].messageCountSinceReflection = 0
                 saveConversations()
