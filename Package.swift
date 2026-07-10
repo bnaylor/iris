@@ -9,7 +9,8 @@ let package = Package(
         .macOS(.v14)
     ],
     dependencies: [
-        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0")
+        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", branch: "main")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -17,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "iris",
             dependencies: [
-                .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")
+                .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+                .product(name: "MCP", package: "swift-sdk")
             ]
         ),
         .testTarget(

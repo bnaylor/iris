@@ -3,8 +3,9 @@ import Foundation
 struct ToolExecutor {
     static let shared = ToolExecutor()
     
-    let nativeTools: [FunctionDeclaration] = [
-        FunctionDeclaration(
+    func getTools() async -> [FunctionDeclaration] {
+        var tools = [
+            FunctionDeclaration(
             name: "run_command",
             description: "Executes a shell command. Use this for standard operations.",
             parameters: Schema(
@@ -50,7 +51,11 @@ struct ToolExecutor {
                 required: ["path", "instructions"]
             )
         )
-    ]
+        ]
+        let mcpTools = await MCPManager.shared.getGeminiTools()
+        tools.append(contentsOf: mcpTools)
+        return tools
+    }
     
     func execute(name: String, args: [String: String]) async -> String {
         switch name {
@@ -68,6 +73,9 @@ struct ToolExecutor {
             await WatcherManager.shared.addRule(path: path, instructions: instructions)
             return "Successfully registered watcher for \(path). You will be notified automatically when files change."
         default:
+            if name.contains("___") {
+                return await MCPManager.shared.callTool(name: name, args: args)
+            }
             return "Error: Unknown tool \(name)"
         }
     }

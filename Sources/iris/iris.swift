@@ -32,6 +32,7 @@ actor IrisEngine {
     }
     
     func start() async {
+        await MCPManager.shared.startServers()
         await WatcherManager.shared.setCallback { [weak self] message, source in
             guard let self = self else { return }
             await self.handleSystemEvent(message, source: source)
@@ -50,7 +51,8 @@ actor IrisEngine {
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
         history.append(Content(role: "user", parts: [Part(text: text, functionCall: nil, functionResponse: nil)]))
         
-        var request = GeminiRequest(contents: history, systemInstruction: systemPrompt, tools: [Tool(functionDeclarations: executor.nativeTools)])
+        let toolsList = await executor.getTools()
+        var request = GeminiRequest(contents: history, systemInstruction: systemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
         while !turnFinished {
