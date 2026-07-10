@@ -45,3 +45,24 @@ To build:
 ```bash
 swift build
 ```
+
+### Model Context Protocol (MCP)
+
+Iris natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It dynamically loads external MCP servers to inject new tools straight into Iris's brain!
+
+To configure MCP servers, create a JSON file at `~/.config/iris/mcp_servers.json` with your server configurations:
+
+```json
+{
+  "postgres": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydatabase"]
+  },
+  "sqlite": {
+    "command": "uvx",
+    "args": ["mcp-server-sqlite", "--db-path", "~/mydatabase.db"]
+  }
+}
+```
+
+Once configured, Iris will automatically boot these servers in the background and their tools will be available for Iris to use!
