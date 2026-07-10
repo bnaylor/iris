@@ -10,7 +10,7 @@
 - [ ] Explicit hooks for USER/SOUL/etc updates
 - [ ] Enhanced self-reflection
 - [ ] Sandboxed web search agent
-    - `./prompt_injection_gemini.md` (Model armor)
+    - [x] `./prompt_injection_gemini.md` (Model armor - Tier 1 implemented)
 - [ ] Use Apple silicon / foundational models?
 - [ ] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [ ] `/goal` support
