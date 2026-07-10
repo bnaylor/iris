@@ -47,6 +47,14 @@ struct HookManager {
         return await fireEvent(eventName: "BeforeAgent", targetMatcher: "BeforeAgent", payload: try? JSONSerialization.data(withJSONObject: payload))
     }
     
+    func fireBeforeModel(request: GeminiRequest) async -> HookDecision {
+        return await fireEvent(eventName: "BeforeModel", targetMatcher: "BeforeModel", payload: try? JSONEncoder().encode(request))
+    }
+    
+    func fireAfterModel(response: GeminiResponse) async -> HookDecision {
+        return await fireEvent(eventName: "AfterModel", targetMatcher: "AfterModel", payload: try? JSONEncoder().encode(response))
+    }
+    
     private func fireEvent(eventName: String, targetMatcher: String, payload: Data?) async -> HookDecision {
         guard let config = config, let eventHooks = config.hooks[eventName] else {
             return .proceed(modifiedData: nil) // No hooks registered

@@ -155,8 +155,35 @@ actor IrisEngine {
         var turnFinished = false
         while !turnFinished {
             do {
-                let response = try await client.generateContent(request: request)
-                guard let candidate = response.candidates?.first, let responseContent = candidate.content else {
+                let beforeModelDecision = await HookManager.shared.fireBeforeModel(request: request)
+                if case .block(let reason) = beforeModelDecision {
+                    await pushToUI(role: .system, text: "Hook BeforeModel blocked execution: \(reason)", conversationId: conversationId)
+                    break
+                }
+                
+                var activeRequest = request
+                if case .proceed(let modifiedData) = beforeModelDecision, let data = modifiedData {
+                    if let modifiedReq = try? JSONDecoder().decode(GeminiRequest.self, from: data) {
+                        activeRequest = modifiedReq
+                    }
+                }
+                
+                let response = try await client.generateContent(request: activeRequest)
+                
+                let afterModelDecision = await HookManager.shared.fireAfterModel(response: response)
+                if case .block(let reason) = afterModelDecision {
+                    await pushToUI(role: .system, text: "Hook AfterModel blocked execution: \(reason)", conversationId: conversationId)
+                    break
+                }
+                
+                var activeResponse = response
+                if case .proceed(let modifiedData) = afterModelDecision, let data = modifiedData {
+                    if let modifiedRes = try? JSONDecoder().decode(GeminiResponse.self, from: data) {
+                        activeResponse = modifiedRes
+                    }
+                }
+                
+                guard let candidate = activeResponse.candidates?.first, let responseContent = candidate.content else {
                     await pushToUI(role: .agent, text: "Error: No candidate returned.", conversationId: conversationId)
                     break
                 }

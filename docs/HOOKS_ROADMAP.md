@@ -6,8 +6,8 @@ This file tracks the implementation status of the extensible hook system in Iris
 - [ ] `SessionEnd`
 - [x] `BeforeAgent`
 - [ ] `AfterAgent`
-- [ ] `BeforeModel`
-- [ ] `AfterModel`
+- [x] `BeforeModel`
+- [x] `AfterModel`
 - [ ] `BeforeToolSelection`
 - [x] `BeforeTool`
 - [x] `AfterTool`
