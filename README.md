@@ -18,6 +18,8 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Autonomous Scheduling & Wake Recovery:** Register cron-like recurring schedules or one-off interval timers that persist to disk. Features built-in macOS `NSWorkspace.didWakeNotification` observation to guarantee jobs missed during sleep will instantly catch-up when the computer wakes.
 *   **Autonomous Goal Loops:** Type `/goal` to kick off a long-running, self-prompting autonomous loop. Iris will continue executing tools and reflecting until the goal is fully accomplished.
 *   **Token Tracking:** Real-time visibility into prompt, candidate, and cumulative token usage directly within the UI toolbar.
+*   **Auxiliary Models Framework:** Native support for local smaller models (e.g., via Ollama or embedded `llama.cpp`) for background tasks like Vibecop.
+*   **Vibecop Guardian Mode:** An ultra-paranoid AI guardian that evaluates terminal commands and file operations for safety, auto-approving routine actions and escalating dangerous ones to the user.
 *   **Rich Native UI:** Beautiful macOS `NavigationSplitView` with multi-conversation support, `.regularMaterial` frosted glass input bars, and native markdown chat rendering powered by `swift-markdown-ui`.
 
 ## 🧠 The Portable Skill System
@@ -58,6 +60,14 @@ Once connected, Iris has native API access to the following Workspace tools dire
 *   **Google Sheets**: `google_sheets_get`
 *   **Google Tasks**: `google_tasks_list_tasklists`, `google_tasks_list_tasks`, `google_tasks_create_task`
 *   **Gmail**: `gmail_list_unread`, `gmail_send_email`
+
+## 🛡️ Vibecop Guardian
+
+Iris includes **Vibecop**, an independent, paranoid AI guardian (using an auxiliary local model) that evaluates every single terminal command or file operation proposed by the primary agent. 
+
+*   **Auto-Approval**: If the command is completely routine and safe, Vibecop approves it silently, saving you from prompt fatigue.
+*   **Guardian Mode**: You can run `/vibecop init` in any workspace. The primary agent will analyze your project and generate a custom `.iris/vibecop.md` file. Vibecop uses this as its system prompt, learning what commands are normal *specifically for this project* (e.g., `go build` is safe here, but `npm` should trigger an escalation).
+*   **Escalation**: If the command is destructive, touches restricted paths, or isn't listed in the Guardian config, Vibecop blocks it and escalates to a user confirmation dialog.
 
 ## 📦 Project Setup
 
