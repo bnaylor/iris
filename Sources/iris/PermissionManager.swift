@@ -5,7 +5,7 @@ struct PermissionRule: Codable, Equatable {
     let details: String
 }
 
-class PermissionManager {
+final class PermissionManager: @unchecked Sendable {
     static let shared = PermissionManager()
     
     private let globalPermissionsURL: URL

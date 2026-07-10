@@ -1,6 +1,6 @@
 import Foundation
 
-final class OllamaEngine: AuxiliaryInferenceEngine {
+final class OllamaEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     private var modelName: String = ""
     
     func loadModel(config: AuxiliaryModelConfig) async throws {
