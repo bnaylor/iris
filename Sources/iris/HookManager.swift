@@ -26,7 +26,11 @@ enum HookDecision {
 struct HookManager {
     static let shared = HookManager()
     
-    private let configPath = ("~/.iris/settings.json" as NSString).expandingTildeInPath
+    var configPathOverride: String?
+    
+    private var configPath: String {
+        configPathOverride ?? ("~/.iris/settings.json" as NSString).expandingTildeInPath
+    }
     
     private var config: HookConfig? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)) else { return nil }
