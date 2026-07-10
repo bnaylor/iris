@@ -190,6 +190,11 @@ struct IrisApp: App {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
         
+        if let imagePath = Bundle.module.path(forResource: "iris-icon", ofType: "png"),
+           let image = NSImage(contentsOfFile: imagePath) {
+            NSApplication.shared.applicationIconImage = image
+        }
+        
         KeyboardShortcuts.onKeyUp(for: .toggleIris) {
             if let window = NSApp.windows.first(where: { $0.title == "Iris" }) {
                 if window.isVisible && NSApp.isActive {

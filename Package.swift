@@ -22,6 +22,9 @@ let package = Package(
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")
+            ],
+            resources: [
+                .process("assets")
             ]
         ),
         .testTarget(
