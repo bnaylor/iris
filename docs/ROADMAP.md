@@ -12,5 +12,11 @@
 - [ ] Sandboxed web search agent
     - `./prompt_injection_gemini.md` (Model armor)
 - [ ] Use Apple silicon / foundational models?
+- [ ] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [ ] `/goal` support
 - [ ] UI/UX Polish (Tool call rendering in history, polished animations)
+- [x] Right click conversation, "Export to Markdown"
+- [ ] Select a set of conversation turns in chat, "Export to Markdown"
+    - Or, just automatically put markdown into the clipboard when they are slected and copied
+- [ ] token-tracking, show in the ui
+
