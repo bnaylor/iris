@@ -56,6 +56,9 @@ struct ToolExecutor {
         let tasksTools = await GoogleTasksManager.shared.getTools()
         tools.append(contentsOf: tasksTools)
         
+        let workspaceTools = await GoogleWorkspaceManager.shared.getTools()
+        tools.append(contentsOf: workspaceTools)
+        
         let mcpTools = await MCPManager.shared.getGeminiTools()
         tools.append(contentsOf: mcpTools)
         return tools
@@ -78,6 +81,8 @@ struct ToolExecutor {
             return "Successfully registered watcher for \(path). You will be notified automatically when files change."
         case let n where n.hasPrefix("google_tasks_"):
             return await GoogleTasksManager.shared.execute(name: name, args: args)
+        case let n where n.hasPrefix("google_calendar_") || n.hasPrefix("google_docs_") || n.hasPrefix("google_drive_") || n.hasPrefix("google_sheets_") || n.hasPrefix("gmail_"):
+            return await GoogleWorkspaceManager.shared.execute(name: name, args: args)
         default:
             if name.contains("___") {
                 return await MCPManager.shared.callTool(name: name, args: args)
