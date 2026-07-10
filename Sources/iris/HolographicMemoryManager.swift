@@ -1,0 +1,194 @@
+import Foundation
+import GRDB
+import Accelerate
+
+/// A pure-Swift implementation of Holographic Reduced Representations (HRR).
+/// Encodes factual context into fixed-dimensional vectors for semantic retrieval without Python or NumPy.
+struct HolographicVector: Codable, Equatable {
+    let dimension: Int
+    var values: [Float]
+    
+    init(dimension: Int = 1024, values: [Float]? = nil) {
+        self.dimension = dimension
+        if let values = values {
+            assert(values.count == dimension)
+            self.values = values
+        } else {
+            // Initialize with standard normal distribution (mean 0, variance 1/N)
+            self.values = [Float](repeating: 0, count: dimension)
+            let scale = Float(1.0 / sqrt(Double(dimension)))
+            for i in 0..<dimension {
+                let u1 = Float.random(in: 0...1)
+                let u2 = Float.random(in: 0...1)
+                let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
+                self.values[i] = z0 * scale
+            }
+        }
+    }
+    
+    /// Binds this vector with another using circular convolution.
+    func bound(with other: HolographicVector) -> HolographicVector {
+        assert(self.dimension == other.dimension)
+        var result = [Float](repeating: 0, count: dimension)
+        
+        // Use vDSP for circular convolution via FFT
+        // Since N=1024 is small, an O(N^2) convolution is also fine but FFT is ideal.
+        // For simplicity and dependency-free, here is the raw circular convolution:
+        for i in 0..<dimension {
+            var sum: Float = 0
+            for j in 0..<dimension {
+                let k = (i - j + dimension) % dimension
+                sum += self.values[j] * other.values[k]
+            }
+            result[i] = sum
+        }
+        
+        return HolographicVector(dimension: dimension, values: result)
+    }
+    
+    /// Superposes this vector with another (element-wise addition).
+    func superposed(with other: HolographicVector) -> HolographicVector {
+        assert(self.dimension == other.dimension)
+        var result = [Float](repeating: 0, count: dimension)
+        vDSP_vadd(self.values, 1, other.values, 1, &result, 1, vDSP_Length(dimension))
+        return HolographicVector(dimension: dimension, values: result)
+    }
+    
+    /// Computes similarity with another vector (dot product).
+    func similarity(to other: HolographicVector) -> Float {
+        assert(self.dimension == other.dimension)
+        var dot: Float = 0
+        vDSP_dotpr(self.values, 1, other.values, 1, &dot, vDSP_Length(dimension))
+        return dot
+    }
+    
+    func encodedData() -> Data {
+        return values.withUnsafeBufferPointer { Data(buffer: $0) }
+    }
+    
+    static func decoded(from data: Data, dimension: Int = 1024) -> HolographicVector {
+        let count = data.count / MemoryLayout<Float>.stride
+        assert(count == dimension)
+        var values = [Float](repeating: 0, count: count)
+        _ = values.withUnsafeMutableBytes { data.copyBytes(to: $0) }
+        return HolographicVector(dimension: dimension, values: values)
+    }
+}
+
+/// A fact stored in the JIT Memory layer.
+struct HolographicFact: Identifiable, Codable, FetchableRecord, PersistableRecord {
+    var id: String
+    var content: String
+    var hrrVectorData: Data
+    var trustScore: Double
+    var timestamp: Date
+    
+    static let databaseTableName = "facts"
+    
+    var vector: HolographicVector {
+        get { HolographicVector.decoded(from: hrrVectorData) }
+        set { hrrVectorData = newValue.encodedData() }
+    }
+}
+
+/// A relational edge connecting two facts.
+struct FactRelation: Codable, FetchableRecord, PersistableRecord {
+    var sourceId: String
+    var targetId: String
+    var relationType: String
+    var weight: Double
+    
+    static let databaseTableName = "fact_relations"
+}
+
+/// Manages the local SQLite database for holographic memory using GRDB.
+final class HolographicMemoryManager: @unchecked Sendable {
+    static let shared = try! HolographicMemoryManager()
+    
+    private let dbPool: DatabasePool
+    
+    private init() throws {
+        let configDir = ("~/.iris" as NSString).expandingTildeInPath
+        if !FileManager.default.fileExists(atPath: configDir) {
+            try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+        }
+        
+        let dbPath = "\(configDir)/holographic_memory.sqlite"
+        var configuration = Configuration()
+        configuration.prepareDatabase { db in
+            db.trace { print($0) } // Optional: log SQL queries
+        }
+        
+        dbPool = try DatabasePool(path: dbPath, configuration: configuration)
+        try migrator.migrate(dbPool)
+    }
+    
+    private var migrator: DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+        
+        migrator.registerMigration("v1") { db in
+            try db.create(table: "facts") { t in
+                t.column("id", .text).primaryKey()
+                t.column("content", .text).notNull()
+                t.column("hrrVectorData", .blob).notNull()
+                t.column("trustScore", .double).notNull().defaults(to: 1.0)
+                t.column("timestamp", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            
+            try db.create(virtualTable: "facts_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "facts")
+                t.column("content")
+            }
+            
+            try db.create(table: "fact_relations") { t in
+                t.column("sourceId", .text).references("facts", column: "id", onDelete: .cascade)
+                t.column("targetId", .text).references("facts", column: "id", onDelete: .cascade)
+                t.column("relationType", .text)
+                t.column("weight", .double).notNull().defaults(to: 1.0)
+                t.primaryKey(["sourceId", "targetId"])
+            }
+        }
+        
+        return migrator
+    }
+    
+    func addFact(content: String, vector: HolographicVector, trustScore: Double = 1.0) throws {
+        let fact = HolographicFact(
+            id: UUID().uuidString,
+            content: content,
+            hrrVectorData: vector.encodedData(),
+            trustScore: trustScore,
+            timestamp: Date()
+        )
+        try dbPool.write { db in
+            try fact.insert(db)
+        }
+    }
+    
+    func search(query: String, queryVector: HolographicVector, limit: Int = 5) throws -> [HolographicFact] {
+        return try dbPool.read { db in
+            // Step 1: Lexical filtering via FTS5
+            let ftsPattern = FTS3Pattern(matchingAnyTokenIn: query)
+            let sql = """
+                SELECT facts.*
+                FROM facts
+                JOIN facts_fts ON facts_fts.rowid = facts.rowid
+                WHERE facts_fts MATCH ?
+                """
+            let candidates = try HolographicFact.fetchAll(db, sql: sql, arguments: [ftsPattern])
+            
+            // Step 2: Semantic Ranking in Swift
+            // Rank = (Sim * W_sim) + (Trust * W_trust)
+            let scored = candidates.map { fact -> (HolographicFact, Float) in
+                let sim = fact.vector.similarity(to: queryVector)
+                let score = sim + Float(fact.trustScore * 0.1)
+                return (fact, score)
+            }
+            
+            return scored
+                .sorted { $0.1 > $1.1 }
+                .prefix(limit)
+                .map { $0.0 }
+        }
+    }
+}
