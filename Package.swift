@@ -10,7 +10,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
-        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", branch: "main")
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", branch: "main"),
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -19,7 +20,8 @@ let package = Package(
             name: "iris",
             dependencies: [
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
-                .product(name: "MCP", package: "swift-sdk")
+                .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "MarkdownUI", package: "swift-markdown-ui")
             ]
         ),
         .testTarget(

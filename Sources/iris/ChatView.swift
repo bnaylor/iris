@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 struct ChatView: View {
     @State var state = AppState()
@@ -184,13 +185,24 @@ struct MessageView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                Text(message.content)
-                    .padding(10)
-                    .background(backgroundColor)
-                    .foregroundColor(textColor)
-                    .cornerRadius(12)
-                    // Apply different corners depending on role
-                    .cornerRadius(0, corners: message.role == .user ? [.bottomRight] : [.bottomLeft])
+                if message.role == .system {
+                    Text(message.content)
+                        .font(.caption.monospaced())
+                        .padding(10)
+                        .background(backgroundColor)
+                        .foregroundColor(textColor)
+                        .cornerRadius(12)
+                        .cornerRadius(0, corners: [.bottomLeft])
+                } else {
+                    Markdown(message.content)
+                        .markdownTheme(.gitHub)
+                        .padding(10)
+                        .background(backgroundColor)
+                        .foregroundColor(textColor)
+                        .cornerRadius(12)
+                        // Apply different corners depending on role
+                        .cornerRadius(0, corners: message.role == .user ? [.bottomRight] : [.bottomLeft])
+                }
             }
             
             if message.role != .user {
