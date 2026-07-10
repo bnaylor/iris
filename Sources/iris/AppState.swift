@@ -29,6 +29,33 @@ struct Conversation: Identifiable, Codable, Hashable {
     var activeGoal: String?
     var messageCountSinceReflection: Int = 0
     
+    init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0) {
+        self.id = id
+        self.title = title
+        self.messages = messages
+        self.workspacePath = workspacePath
+        self.history = history
+        self.tokenUsage = tokenUsage
+        self.activeGoal = activeGoal
+        self.messageCountSinceReflection = messageCountSinceReflection
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        messages = try container.decodeIfPresent([ChatMessage].self, forKey: .messages) ?? []
+        workspacePath = try container.decodeIfPresent(String.self, forKey: .workspacePath)
+        history = try container.decodeIfPresent([Content].self, forKey: .history) ?? []
+        tokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .tokenUsage) ?? TokenUsage()
+        activeGoal = try container.decodeIfPresent(String.self, forKey: .activeGoal)
+        messageCountSinceReflection = try container.decodeIfPresent(Int.self, forKey: .messageCountSinceReflection) ?? 0
+    }
+    
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
         lhs.id == rhs.id
     }
