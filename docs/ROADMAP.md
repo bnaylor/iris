@@ -1,7 +1,7 @@
 # Iris Roadmap / Feature wishlist
 
-- [ ] Enhanced storage layer
-    - `./memory_gemini.md`
+- [x] Enhanced storage layer
+    - [x] `./memory_gemini.md`
 - [x] Permissions check
 - [x] Tool hooks (Basic integration)
 - [ ] Always allow / Always allow in project
