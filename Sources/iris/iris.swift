@@ -226,7 +226,7 @@ actor IrisEngine {
                         }
                         
                         let functionResponse = Content(
-                            role: "function", 
+                            role: "user", 
                             parts: [Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: functionCall.name, response: ["result": result]))]
                         )
                         history.append(functionResponse)

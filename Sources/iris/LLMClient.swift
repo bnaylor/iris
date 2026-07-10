@@ -1,5 +1,10 @@
 import Foundation
 
+struct APIError: LocalizedError {
+    let message: String
+    var errorDescription: String? { return message }
+}
+
 struct LLMClient {
     var endpoint: String {
         "https://generativelanguage.googleapis.com/v1beta/models/\(ConfigManager.shared.geminiModel):generateContent"
@@ -32,7 +37,7 @@ struct LLMClient {
         if httpResponse.statusCode != 200 {
             let errorString = String(data: data, encoding: .utf8) ?? "Unknown error"
             print("API Error (\(httpResponse.statusCode)): \(errorString)")
-            throw URLError(.badServerResponse)
+            throw APIError(message: "HTTP \(httpResponse.statusCode): \(errorString)")
         }
         
         let decoder = JSONDecoder()
