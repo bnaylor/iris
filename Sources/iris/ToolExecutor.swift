@@ -50,6 +50,17 @@ struct ToolExecutor {
                 ],
                 required: ["path", "instructions"]
             )
+        ),
+        FunctionDeclaration(
+            name: "search_web",
+            description: "Search the web using DuckDuckGo. Returns a JSON array of results with title, url, and snippet.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "query": Schema(type: "STRING", description: "The search query")
+                ],
+                required: ["query"]
+            )
         )
         ]
         
@@ -79,6 +90,9 @@ struct ToolExecutor {
             guard let path = args["path"], let instructions = args["instructions"] else { return "Error: Missing path or instructions" }
             await WatcherManager.shared.addRule(path: path, instructions: instructions)
             return "Successfully registered watcher for \(path). You will be notified automatically when files change."
+        case "search_web":
+            guard let query = args["query"] else { return "Error: Missing query" }
+            return await searchWeb(query: query)
         case let n where n.hasPrefix("google_tasks_"):
             return await GoogleTasksManager.shared.execute(name: name, args: args)
         case let n where n.hasPrefix("google_calendar_") || n.hasPrefix("google_docs_") || n.hasPrefix("google_drive_") || n.hasPrefix("google_sheets_") || n.hasPrefix("gmail_"):
@@ -159,5 +173,76 @@ struct ToolExecutor {
                 return "Error writing file: \(error.localizedDescription)"
             }
         }.value
+    }
+    
+    private func searchWeb(query: String) async -> String {
+        let script = """
+import urllib.request
+import urllib.parse
+from html.parser import HTMLParser
+import sys
+import json
+
+class DDGParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self.current_title = ""
+        self.current_url = ""
+        self.current_snippet = ""
+        self.capture_type = None
+
+    def handle_starttag(self, tag, attrs):
+        attr_dict = dict(attrs)
+        if tag == "a" and "result-link" in attr_dict.get("class", ""):
+            self.current_url = attr_dict.get("href", "")
+            self.capture_type = "title"
+        if tag == "td" and "result-snippet" in attr_dict.get("class", ""):
+            self.capture_type = "snippet"
+
+    def handle_data(self, data):
+        if self.capture_type == "title":
+            self.current_title += data
+        elif self.capture_type == "snippet":
+            self.current_snippet += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.capture_type == "title":
+            self.capture_type = None
+        elif tag == "td" and self.capture_type == "snippet":
+            self.capture_type = None
+            if self.current_title and self.current_url and self.current_snippet:
+                self.results.append({
+                    "title": self.current_title.strip(),
+                    "url": self.current_url.strip(),
+                    "snippet": self.current_snippet.strip()
+                })
+            self.current_title = ""
+            self.current_url = ""
+            self.current_snippet = ""
+
+query = sys.argv[1]
+data = urllib.parse.urlencode({"q": query}).encode("utf-8")
+req = urllib.request.Request("https://lite.duckduckgo.com/lite/", data=data, headers={"User-Agent": "Mozilla/5.0"})
+try:
+    html = urllib.request.urlopen(req).read().decode("utf-8")
+    parser = DDGParser()
+    parser.feed(html)
+    print(json.dumps(parser.results[:10], indent=2))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+"""
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let irisDir = home.appendingPathComponent(".iris")
+        try? FileManager.default.createDirectory(at: irisDir, withIntermediateDirectories: true)
+        let scriptURL = irisDir.appendingPathComponent("search_web.py")
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            let escapedQuery = query.replacingOccurrences(of: "'", with: "'\\''")
+            let cmd = "python3 ~/.iris/search_web.py '\(escapedQuery)'"
+            return await runCommand(cmd, cwd: nil)
+        } catch {
+            return "Error writing search script: \(error)"
+        }
     }
 }
