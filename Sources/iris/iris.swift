@@ -187,7 +187,30 @@ actor IrisEngine {
                             MemoryManager.shared.updateUserProfile(content: content)
                             result = "User profile updated."
                         } else {
-                            result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                            var needsApproval = false
+                            var details = ""
+                            if functionCall.name == "run_command", let cmd = functionCall.args["command"] as? String {
+                                if SecurityGuard.isCommandDangerous(cmd) {
+                                    needsApproval = true
+                                    details = cmd
+                                }
+                            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] as? String {
+                                if SecurityGuard.isFileAccessDangerous(path: path, workspace: workspacePath) {
+                                    needsApproval = true
+                                    details = path
+                                }
+                            }
+                            
+                            if needsApproval {
+                                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details) ?? false
+                                if approved {
+                                    result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                                } else {
+                                    result = "Error: The user denied permission to execute this tool call."
+                                }
+                            } else {
+                                result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                            }
                         }
                         
                         let functionResponse = Content(

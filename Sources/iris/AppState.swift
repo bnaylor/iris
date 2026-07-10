@@ -28,12 +28,20 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
 }
 
+struct ToolApprovalRequest: Identifiable {
+    let id = UUID()
+    let toolName: String
+    let details: String
+    let continuation: CheckedContinuation<Bool, Never>
+}
+
 @MainActor
 @Observable
 class AppState {
     var conversations: [Conversation] = []
     var selectedConversationId: UUID?
     var isThinking = false
+    var pendingApproval: ToolApprovalRequest?
     
     private var engine: IrisEngine!
     
@@ -113,6 +121,18 @@ class AppState {
             conversations[idx].history = history
             saveConversations()
         }
+    }
+    
+    func requestApproval(toolName: String, details: String) async -> Bool {
+        return await withCheckedContinuation { continuation in
+            self.pendingApproval = ToolApprovalRequest(toolName: toolName, details: details, continuation: continuation)
+        }
+    }
+    
+    func resolveApproval(_ approved: Bool) {
+        let cont = pendingApproval?.continuation
+        pendingApproval = nil
+        cont?.resume(returning: approved)
     }
     
     private func saveConversations() {

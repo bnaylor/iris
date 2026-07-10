@@ -102,6 +102,13 @@ struct ChatView: View {
                     }
                     .background(Color(NSColor.textBackgroundColor))
                     
+                    if let request = state.pendingApproval {
+                        ApprovalBannerView(request: request, onResolve: { approved in
+                            state.resolveApproval(approved)
+                        })
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    
                     Divider()
                     
                     HStack {
@@ -269,3 +276,48 @@ struct RoundedCorner: Shape {
         return path
     }
 }
+
+struct ApprovalBannerView: View {
+    let request: ToolApprovalRequest
+    let onResolve: (Bool) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundColor(.orange)
+                Text("Security Guard: Permission Required")
+                    .font(.headline)
+            }
+            
+            Text("Iris is attempting to execute a potentially sensitive action:")
+                .font(.subheadline)
+            
+            Text("\(request.toolName): \(request.details)")
+                .font(.caption.monospaced())
+                .padding(8)
+                .background(Color.black.opacity(0.1))
+                .cornerRadius(4)
+            
+            HStack {
+                Spacer()
+                Button(role: .cancel, action: { onResolve(false) }) {
+                    Text("Deny")
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button(action: { onResolve(true) }) {
+                    Text("Approve")
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.15))
+        .cornerRadius(12)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
+
