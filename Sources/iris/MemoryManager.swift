@@ -3,7 +3,7 @@ import Foundation
 class MemoryManager: @unchecked Sendable {
     static let shared = MemoryManager()
     
-    private let configDir = ("~/.config/iris" as NSString).expandingTildeInPath
+    private let configDir = ("~/.iris" as NSString).expandingTildeInPath
     
     private var memoryPath: String {
         return "\(configDir)/memory.md"

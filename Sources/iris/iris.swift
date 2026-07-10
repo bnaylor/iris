@@ -49,7 +49,7 @@ actor IrisEngine {
         
         // Ensure the core skills folder is always watched dynamically
         await WatcherManager.shared.addRule(
-            path: "~/.config/iris/skills",
+            path: "~/.iris/skills",
             instructions: "The user has modified their skills directory. Reload your skills and acknowledge the change."
         )
     }

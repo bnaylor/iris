@@ -3,7 +3,7 @@ import Foundation
 struct SkillManager {
     static let shared = SkillManager()
     
-    let configDir = ("~/.config/iris" as NSString).expandingTildeInPath
+    let configDir = ("~/.iris" as NSString).expandingTildeInPath
     
     func loadSOUL() -> String {
         let path = "\(configDir)/prompts/SOUL.md"
@@ -55,6 +55,6 @@ struct SkillManager {
             }
         }
         
-        return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.config/iris/skills/\(folderName)/SKILL.md\n"
+        return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.iris/skills/\(folderName)/SKILL.md\n"
     }
 }

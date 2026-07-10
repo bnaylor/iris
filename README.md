@@ -19,7 +19,7 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 
 ## 🧠 The Portable Skill System
 
-Iris uses **Markdown-based skills**, matching standard AI agent patterns. Skills are not hardcoded into the Swift binary. Instead, Iris reads from `~/.config/iris/skills/`.
+Iris uses **Markdown-based skills**, matching standard AI agent patterns. Skills are not hardcoded into the Swift binary. Instead, Iris reads from `~/.iris/skills/`.
 
 A skill is simply a directory containing a `SKILL.md` file. Iris dynamically loads the YAML frontmatter to learn what the skill does, and then passes the markdown instructions to the LLM when the skill is needed. The LLM executes the skill using Iris's built-in native tools.
 
@@ -66,7 +66,7 @@ swift build
 
 Iris natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It dynamically loads external MCP servers to inject new tools straight into Iris's brain!
 
-To configure MCP servers, create a JSON file at `~/.config/iris/mcp_servers.json` with your server configurations:
+To configure MCP servers, create a JSON file at `~/.iris/mcp_servers.json` with your server configurations:
 
 ```json
 {
