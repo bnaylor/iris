@@ -26,6 +26,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var workspacePath: String?
     var history: [Content] = []
     var tokenUsage: TokenUsage = TokenUsage()
+    var activeGoal: String?
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
         lhs.id == rhs.id
@@ -98,15 +99,34 @@ class AppState {
     
     func sendMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, activeConversationIndex != nil else { return }
+        guard !trimmed.isEmpty, let convId = selectedConversationId else { return }
         
-        appendMessage(role: .user, content: trimmed, to: selectedConversationId!)
+        var messageContent = trimmed
+        if trimmed.hasPrefix("/goal") {
+            let goalText = trimmed.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+            if goalText.isEmpty {
+                appendMessage(role: .system, content: "Please specify a goal, e.g., `/goal Build a snake game in Python`", to: convId)
+                return
+            }
+            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
+                conversations[idx].activeGoal = goalText
+                saveConversations()
+            }
+            messageContent = "GOAL MODE ACTIVATED. Your goal is: \(goalText). You must continually use tools to achieve this goal. If you need to stop and think or plan, use the `reflect` tool or just output text. When the goal is COMPLETELY FINISHED, use the `goal_complete` tool."
+        } else if trimmed.hasPrefix("/stop") {
+            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
+                conversations[idx].activeGoal = nil
+                saveConversations()
+            }
+            appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
+            return
+        }
+        
+        appendMessage(role: .user, content: messageContent, to: convId)
         isThinking = true
         
-        let convId = selectedConversationId!
-        
         Task {
-            await engine.processInput(trimmed, source: "UI", conversationId: convId)
+            await engine.processInput(messageContent, source: "UI", conversationId: convId)
             isThinking = false
         }
     }
@@ -135,6 +155,13 @@ class AppState {
             conversations[idx].tokenUsage.promptTokenCount += usage.promptTokenCount ?? 0
             conversations[idx].tokenUsage.candidatesTokenCount += usage.candidatesTokenCount ?? 0
             conversations[idx].tokenUsage.totalTokenCount += usage.totalTokenCount ?? 0
+            saveConversations()
+        }
+    }
+    
+    func clearGoal(for conversationId: UUID) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].activeGoal = nil
             saveConversations()
         }
     }

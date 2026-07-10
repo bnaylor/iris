@@ -141,7 +141,29 @@ actor IrisEngine {
                 required: ["content"]
             )
         ))
+        toolsList.append(FunctionDeclaration(
+            name: "reflect",
+            description: "Write down your internal thoughts, analysis, or evaluation of your progress. Use this to think step-by-step or evaluate if you are on the right track.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "thoughts": Schema(type: "STRING", description: "Your detailed reflection and thoughts.")
+                ],
+                required: ["thoughts"]
+            )
+        ))
         
+        toolsList.append(FunctionDeclaration(
+            name: "goal_complete",
+            description: "Mark the active goal as completely finished and exit the autonomous loop.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "summary": Schema(type: "STRING", description: "A summary of what was accomplished.")
+                ],
+                required: ["summary"]
+            )
+        ))
         toolsList.append(FunctionDeclaration(
             name: "search_memory",
             description: "Actively probe the holographic memory store for past context. Use this if the automatic JIT injection wasn't sufficient.",
@@ -282,6 +304,11 @@ actor IrisEngine {
                         } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] as? String {
                             MemoryManager.shared.updateUserProfile(content: content)
                             result = "User profile updated."
+                        } else if functionCall.name == "reflect" {
+                            result = "Reflection logged. Proceed with your next action."
+                        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] as? String {
+                            await MainActor.run { localState?.clearGoal(for: conversationId) }
+                            result = "Goal marked as complete. Summary: \(summary)"
                         } else {
                             var needsApproval = false
                             var details = ""
@@ -329,6 +356,16 @@ actor IrisEngine {
                 await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
+            }
+        }
+        
+        // Auto-reprompt if we are in goal mode
+        let activeGoal = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal }
+        if let _ = activeGoal {
+            await pushToUI(role: .system, text: "Auto-continuing goal loop...", conversationId: conversationId)
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
             }
         }
     }
