@@ -2,6 +2,8 @@
 
 Iris is a lightweight, compiled, native macOS agent harness designed to run autonomous AI workflows locally without heavy runtime dependencies (like Node/npm) that might be blocked by enterprise endpoint management.
 
+It features **native Model Context Protocol (MCP) support** for limitless tool expansion and **built-in zero-dependency Google Workspace integrations** (Calendar, Docs, Drive, Sheets, Gmail, and Tasks).
+
 ## 🚀 Architecture
 
 At its core, Iris is a Swift-based execution chassis that bridges your local environment and cloud LLMs.
@@ -9,7 +11,8 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Concurrency:** Built on modern Swift 6 Concurrency (`async/await`, `actor`), providing a high-performance, non-blocking event loop.
 *   **LLM Engine:** Natively integrates with Google's Gemini REST API (defaulting dynamically to available models like `gemini-3.5-flash`), relying heavily on native JSON Function Calling.
 *   **Event-Driven:** Uses an `AsyncStream` wrapper around `FSEventStream` to instantly wake up the agent when files change (e.g., saving a note in Obsidian).
-*   **Built-in OAuth:** Includes a dependency-free TCP loopback listener for Google Workspace OAuth, enabling safe integrations with Calendar, Docs, and Sheets.
+*   **Built-in OAuth:** Includes a dependency-free TCP loopback listener for Google Workspace OAuth, enabling safe, native integrations with **Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks**.
+*   **Model Context Protocol (MCP):** Natively acts as an MCP client, dynamically loading external tool servers (like Postgres or SQLite) straight into the agent's brain.
 
 ## 🧠 The Portable Skill System
 
