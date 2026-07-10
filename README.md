@@ -38,6 +38,14 @@ Iris runs in the background and can be summoned instantly over any other app by 
 ### Google Workspace Integration 🔐
 In the settings window, you can enter your Google OAuth Client ID and Secret, and click **Connect to Google**. Iris will spin up a local listener, redirect you to Google for consent, and seamlessly exchange your authorization code for valid access and refresh tokens.
 
+Once connected, Iris has native API access to the following Workspace tools directly from Swift:
+*   **Google Calendar**: `google_calendar_list_events`, `google_calendar_create_event`
+*   **Google Docs**: `google_docs_get`
+*   **Google Drive**: `google_drive_search`
+*   **Google Sheets**: `google_sheets_get`
+*   **Google Tasks**: `google_tasks_list_tasklists`, `google_tasks_list_tasks`, `google_tasks_create_task`
+*   **Gmail**: `gmail_list_unread`, `gmail_send_email`
+
 ## 📦 Project Setup
 
 Iris is managed via Swift Package Manager (SPM).
