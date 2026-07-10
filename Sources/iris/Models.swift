@@ -50,8 +50,15 @@ struct Schema: Codable {
 
 struct GeminiResponse: Codable {
     var candidates: [Candidate]?
+    var usageMetadata: UsageMetadata?
 }
 
 struct Candidate: Codable {
     var content: Content?
+}
+
+struct UsageMetadata: Codable, Sendable {
+    var promptTokenCount: Int?
+    var candidatesTokenCount: Int?
+    var totalTokenCount: Int?
 }

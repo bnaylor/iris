@@ -227,7 +227,13 @@ actor IrisEngine {
                 
                 let modelContent = Content(role: "model", parts: responseContent.parts)
                 history.append(modelContent)
-                await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
+                
+                await MainActor.run { 
+                    localState?.updateHistory(for: conversationId, history: history) 
+                    if let usage = activeResponse.usageMetadata {
+                        localState?.updateTokenUsage(for: conversationId, usage: usage)
+                    }
+                }
                 
                 if let part = responseContent.parts.first {
                     if let functionCall = part.functionCall {

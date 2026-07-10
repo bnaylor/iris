@@ -190,6 +190,37 @@ struct ChatView: View {
                     .background(.regularMaterial)
                 }
                 .background(Color(NSColor.textBackgroundColor))
+                .navigationTitle(conv.title)
+                .toolbar {
+                    if conv.tokenUsage.totalTokenCount > 0 {
+                        ToolbarItem(placement: .automatic) {
+                            HStack(spacing: 12) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.circle")
+                                    Text("\(conv.tokenUsage.promptTokenCount)")
+                                }
+                                .foregroundColor(.secondary)
+                                .help("Prompt Tokens")
+                                
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.down.circle")
+                                    Text("\(conv.tokenUsage.candidatesTokenCount)")
+                                }
+                                .foregroundColor(.secondary)
+                                .help("Candidate Tokens")
+                                
+                                HStack(spacing: 4) {
+                                    Image(systemName: "sum")
+                                    Text("\(conv.tokenUsage.totalTokenCount)")
+                                }
+                                .foregroundColor(.primary)
+                                .bold()
+                                .help("Total Tokens Used")
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
             } else {
                 Text("Select or create a conversation.")
                     .foregroundColor(.secondary)

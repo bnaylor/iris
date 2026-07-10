@@ -13,12 +13,19 @@ struct ChatMessage: Identifiable, Codable {
     let content: String
 }
 
+struct TokenUsage: Codable, Equatable {
+    var promptTokenCount: Int = 0
+    var candidatesTokenCount: Int = 0
+    var totalTokenCount: Int = 0
+}
+
 struct Conversation: Identifiable, Codable, Hashable {
     var id = UUID()
     var title: String
     var messages: [ChatMessage] = []
     var workspacePath: String?
     var history: [Content] = []
+    var tokenUsage: TokenUsage = TokenUsage()
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
         lhs.id == rhs.id
@@ -119,6 +126,15 @@ class AppState {
     func updateHistory(for conversationId: UUID, history: [Content]) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].history = history
+            saveConversations()
+        }
+    }
+    
+    func updateTokenUsage(for conversationId: UUID, usage: UsageMetadata) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].tokenUsage.promptTokenCount += usage.promptTokenCount ?? 0
+            conversations[idx].tokenUsage.candidatesTokenCount += usage.candidatesTokenCount ?? 0
+            conversations[idx].tokenUsage.totalTokenCount += usage.totalTokenCount ?? 0
             saveConversations()
         }
     }
