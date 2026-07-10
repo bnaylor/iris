@@ -450,8 +450,61 @@ struct SystemGroupView: View {
 
 struct SystemMessageContent: View {
     let text: String
+    @State private var isExpanded = false
     
     var body: some View {
+        if text.hasPrefix("[TOOL_CALL]\n") {
+            let jsonString = String(text.dropFirst("[TOOL_CALL]\n".count))
+            if let data = jsonString.data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let name = dict["name"] as? String {
+                
+                VStack(alignment: .leading, spacing: 0) {
+                    Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { isExpanded.toggle() } }) {
+                        HStack {
+                            Image(systemName: "wrench.and.screwdriver.fill")
+                                .foregroundColor(.blue)
+                            Text("Tool Execution: ")
+                                .foregroundColor(.secondary)
+                            + Text(name).bold()
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                        .padding(10)
+                        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    
+                    if isExpanded {
+                        Divider()
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            Text(jsonString)
+                                .font(.caption.monospaced())
+                                .foregroundColor(.secondary)
+                                .padding(10)
+                        }
+                        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    }
+                }
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                )
+            } else {
+                fallbackView
+            }
+        } else {
+            fallbackView
+        }
+    }
+    
+    private var fallbackView: some View {
         HStack(alignment: .top) {
             if text.hasPrefix("Running tool:") {
                 Image(systemName: "wrench.and.screwdriver.fill")

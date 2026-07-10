@@ -266,12 +266,16 @@ ARTIFACTS & DESIGN DOCS: When generating artifacts, research notes, or design do
                 
                 if let part = responseContent.parts.first {
                     if let functionCall = part.functionCall {
-                        let argsString = functionCall.args.map { key, value in
-                            let strValue = "\(value)".replacingOccurrences(of: "\n", with: " ")
-                            let displayValue = strValue.count > 50 ? String(strValue.prefix(47)) + "..." : strValue
-                            return "\(key): \(displayValue)"
-                        }.joined(separator: ", ")
-                        await pushToUI(role: .system, text: "Running tool: \(functionCall.name)(\(argsString))", conversationId: conversationId)
+                        let toolCallDict: [String: Any] = [
+                            "name": functionCall.name,
+                            "args": functionCall.args
+                        ]
+                        if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
+                           let jsonString = String(data: jsonData, encoding: .utf8) {
+                            await pushToUI(role: .system, text: "[TOOL_CALL]\n\(jsonString)", conversationId: conversationId)
+                        } else {
+                            await pushToUI(role: .system, text: "Running tool: \(functionCall.name)", conversationId: conversationId)
+                        }
                         
                         var result = ""
                         if functionCall.name == "set_workspace", let path = functionCall.args["path"] as? String {
