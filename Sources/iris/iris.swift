@@ -65,6 +65,12 @@ actor IrisEngine {
         await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
         
         var currentSystemPrompt = systemPrompt!
+        
+        let memoryBuffer = MemoryManager.shared.getMemory()
+        if let textPart = currentSystemPrompt.parts.first?.text {
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# Working Memory Buffer\n" + memoryBuffer
+        }
+        
         if let wp = workspacePath {
             let agentsMdPath = (wp as NSString).expandingTildeInPath
             let fullPath = (agentsMdPath as NSString).appendingPathComponent("AGENTS.md")
@@ -104,6 +110,18 @@ actor IrisEngine {
                     "intervalSeconds": Schema(type: "INTEGER", description: "Simple recurring interval in seconds (e.g. 3600 for every hour)")
                 ],
                 required: ["prompt"]
+            )
+        ))
+        
+        toolsList.append(FunctionDeclaration(
+            name: "update_memory",
+            description: "Overwrite the working memory buffer with new content. Use this to compact the buffer when it gets too long, or to store new short-term facts.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "content": Schema(type: "STRING", description: "The new complete text content for the memory buffer")
+                ],
+                required: ["content"]
             )
         ))
         
@@ -149,6 +167,9 @@ actor IrisEngine {
                                 intervalSeconds: intervalSeconds
                             )
                             result = "Job scheduled successfully. It will fire in the background."
+                        } else if functionCall.name == "update_memory", let content = functionCall.args["content"] as? String {
+                            MemoryManager.shared.updateMemory(content: content)
+                            result = "Memory buffer updated."
                         } else {
                             result = await executor.execute(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                         }
