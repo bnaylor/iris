@@ -15,7 +15,7 @@
         - [ ] Tier 2 Local CoreML Classification
         - [ ] Tier 3 Local Canary Probe
 - [ ] Use Apple silicon / foundational models?
-- [ ] Plan / brainstorming mode.  Emulate / steal from superpowers.
+- [x] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [x] `/goal` support
 - [ ] UI/UX Polish (Tool call rendering in history, polished animations)
 - [x] Right click conversation, "Export to Markdown"
