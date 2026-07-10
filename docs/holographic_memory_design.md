@@ -93,6 +93,14 @@ When the agent requires context (e.g., the user asks a question about a past con
    $$ \text{Rank} = (W_{hrr} \times \text{Similarity}) + (W_{trust} \times \text{Trust Score}) + (W_{time} \times \text{Recency Reciprocal}) $$
 4. **Context Injection**: The top $K$ facts are formatted and injected invisibly into the LLM's prompt window.
 
+## Agent Tool Flow
+
+To integrate this SQLite graph seamlessly into the LLM's continuous execution loop without bloating its context window, we've replaced raw scratchpads with precise, graph-aware tools:
+
+1. **`save_fact(content: String)`**: Instead of a monolithic `update_memory` that overwrites a single markdown file, the agent uses this tool to "drop" atomic facts, states, or assertions into the SQLite graph during natural conversational lulls. The system automatically handles the HRR vector encoding and trust scoring behind the scenes.
+2. **Automatic JIT Prompt Injection**: The harness actively aids the agent. Before passing any user message to the LLM, the harness intercepts the message, encodes it into a `HolographicVector`, executes a hybrid FTS5/Cosine-Similarity search, and silently appends a `# Mid-Term Holographic Memory (JIT Context)` section containing the top 5 relevant facts directly into the system prompt.
+3. **`search_memory(query: String)`**: While the automatic JIT injection provides ambient awareness, the agent retains the ability to actively probe the holographic memory store using this tool when deep-diving or looking for specific historical context that didn't make the top-5 cut.
+
 ## Conclusion
 
 By swapping NumPy for Apple's `Accelerate` framework, we achieve the holy grail for a local, macOS-first agentic harness: a highly sophisticated, mathematically sound Holographic Memory system that compiles natively into a single lightweight Swift binary. It is offline, entirely private, and astonishingly fast.
