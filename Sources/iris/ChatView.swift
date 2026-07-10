@@ -371,7 +371,7 @@ struct MessageView: View {
                         .padding(10)
                         .background(
                             LinearGradient(
-                                gradient: Gradient(colors: [Color.accentColor.opacity(0.8), Color.accentColor]),
+                                gradient: Gradient(colors: [Color.accentColor.opacity(0.5), Color.accentColor]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -379,6 +379,7 @@ struct MessageView: View {
                         .foregroundColor(textColor)
                         .cornerRadius(12)
                         .cornerRadius(0, corners: [.bottomRight])
+                        .shadow(color: Color.accentColor.opacity(0.2), radius: 3, x: 0, y: 2)
                 } else {
                     Markdown(message.content)
                         .textSelection(.enabled)
