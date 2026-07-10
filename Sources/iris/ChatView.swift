@@ -104,9 +104,12 @@ struct ChatView: View {
                     
                     if let request = state.pendingApproval {
                         ApprovalBannerView(request: request, onResolve: { approved in
-                            state.resolveApproval(approved)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                state.resolveApproval(approved)
+                            }
                         })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApproval != nil)
                     }
                     
                     Divider()
@@ -193,13 +196,7 @@ struct MessageView: View {
                 }
                 
                 if message.role == .system {
-                    Text(message.content)
-                        .font(.caption.monospaced())
-                        .padding(10)
-                        .background(backgroundColor)
-                        .foregroundColor(textColor)
-                        .cornerRadius(12)
-                        .cornerRadius(0, corners: [.bottomLeft])
+                    systemMessageContent(for: message.content)
                 } else if message.role == .user {
                     Text(message.content)
                         .padding(10)
@@ -233,6 +230,32 @@ struct MessageView: View {
         case .user: return .white
         case .agent, .system: return .primary
         }
+    }
+    
+    @ViewBuilder
+    private func systemMessageContent(for text: String) -> some View {
+        HStack(alignment: .top) {
+            if text.hasPrefix("Running tool:") {
+                Image(systemName: "wrench.and.screwdriver.fill")
+                    .foregroundColor(.blue)
+                Text(text)
+                    .foregroundColor(.blue)
+            } else if text.contains("Hook blocked") || text.contains("denied permission") {
+                Image(systemName: "xmark.shield.fill")
+                    .foregroundColor(.red)
+                Text(text)
+                    .foregroundColor(.red)
+            } else {
+                Image(systemName: "terminal.fill")
+                    .foregroundColor(.secondary)
+                Text(text)
+            }
+        }
+        .font(.caption.monospaced())
+        .padding(10)
+        .background(backgroundColor)
+        .cornerRadius(12)
+        .cornerRadius(0, corners: [.bottomLeft])
     }
 }
 
@@ -314,8 +337,15 @@ struct ApprovalBannerView: View {
             }
         }
         .padding()
-        .background(Color.orange.opacity(0.15))
-        .cornerRadius(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.orange.opacity(0.15))
+                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
