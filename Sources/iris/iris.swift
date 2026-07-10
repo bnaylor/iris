@@ -268,8 +268,21 @@ actor IrisEngine {
                         
                         var result = ""
                         if functionCall.name == "set_workspace", let path = functionCall.args["path"] as? String {
-                            await MainActor.run { localState?.setWorkspace(for: conversationId, path: path) }
-                            result = "Workspace successfully set to \(path). You will now load AGENTS.md from this directory."
+                            var currentWorkspace = path
+                            
+                            var extraHint = ""
+                            let fm = FileManager.default
+                            let irisDir = URL(fileURLWithPath: currentWorkspace).appendingPathComponent(".iris")
+                            let vibecopPath = irisDir.appendingPathComponent("vibecop.md").path
+                            
+                            if !fm.fileExists(atPath: vibecopPath) {
+                                if let contents = try? fm.contentsOfDirectory(atPath: currentWorkspace), !contents.isEmpty {
+                                    extraHint = "\n\n💡 Hint: No Vibecop Guardian config found for this workspace. Suggest that the user run `/vibecop init` to generate one."
+                                }
+                            }
+                            
+                            await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
+                            result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
                         } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] as? String {
                             let minute = (functionCall.args["minute"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["minute"] ?? "")")
                             let hour = (functionCall.args["hour"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["hour"] ?? "")")
@@ -325,11 +338,11 @@ actor IrisEngine {
                             }
                             
                             if needsApproval {
-                                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details) ?? false
+                                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
                                 if approved {
                                     result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                                 } else {
-                                    result = "Error: The user denied permission to execute this tool call."
+                                    result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
                                 }
                             } else {
                                 result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)

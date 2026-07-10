@@ -130,6 +130,15 @@ class AppState {
                 isThinking = false
             }
             return
+        } else if trimmed.hasPrefix("/vibecop init") {
+            appendMessage(role: .system, content: "Initializing Vibecop Guardian mode...", to: convId)
+            isThinking = true
+            let initPrompt = "System Event [Vibecop Init]: Analyze the current workspace directory to understand the project structure, language, framework, and tooling. Generate a custom Guardian prompt that defines what terminal commands and file operations are 'routine' for this specific workspace, and what should be escalated to the user. Write this prompt to a new file at `.iris/vibecop.md` inside the workspace using the `write_file` tool. Output a transparent summary of the generated rules for the user."
+            Task {
+                await engine.processInput(initPrompt, source: "System", conversationId: convId)
+                isThinking = false
+            }
+            return
         }
         
         appendMessage(role: .user, content: messageContent, to: convId)
@@ -203,7 +212,22 @@ class AppState {
         }
     }
     
-    func requestApproval(toolName: String, details: String) async -> Bool {
+    func requestApproval(toolName: String, details: String, workspace: String? = nil) async -> Bool {
+        if toolName == "run_command" {
+            do {
+                let decision = try await VibecopService.shared.evaluateCommand(command: details, workspace: workspace)
+                if decision.decision == "APPROVE" {
+                    return true
+                } else if decision.decision == "DENY" {
+                    return false
+                }
+                // If ESCALATE, fall through to user prompt
+            } catch {
+                // If Vibecop fails, fail open to the user prompt
+                print("Vibecop evaluation failed: \(error)")
+            }
+        }
+        
         return await withCheckedContinuation { continuation in
             self.pendingApproval = ToolApprovalRequest(toolName: toolName, details: details, continuation: continuation)
         }
