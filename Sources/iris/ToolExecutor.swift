@@ -96,14 +96,25 @@ struct ToolExecutor {
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
+            if ConfigManager.shared.enableSandboxing && SandboxingManager.shared.isContainerInstalled {
+                // If container exists but not at /usr/local/bin, which might find it, but we assume default for now
+                process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
+                var containerArgs = ["run", "--rm", ConfigManager.shared.sandboxImage, "bash", "-c", command]
+                if let cwd = cwd {
+                    let expandedPath = (cwd as NSString).expandingTildeInPath
+                    containerArgs.insert(contentsOf: ["-v", "\(expandedPath):\(expandedPath)", "--workdir", expandedPath], at: 2)
+                }
+                process.arguments = containerArgs
+            } else {
+                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                process.arguments = ["-c", command]
+                if let cwd = cwd {
+                    process.currentDirectoryURL = URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
+                }
+            }
             
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-c", command]
             process.standardOutput = outputPipe
             process.standardError = errorPipe
-            if let cwd = cwd {
-                process.currentDirectoryURL = URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
-            }
             
             process.terminationHandler = { proc in
                 let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
