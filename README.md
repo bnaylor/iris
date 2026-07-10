@@ -24,7 +24,7 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 
 ## 🧠 The Portable Memory & Skill System
 
-Instead of trapping your workflows inside a proprietary database or cloud service, Iris uses the **Open Knowledge Format (OKF)** for its memory and skills layer.
+Instead of trapping your workflows inside a proprietary database or cloud service, Iris uses the **[Open Knowledge Format (OKF)](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing)** for its memory and skills layer.
 
 *   **Markdown + YAML:** All long-term memories (`USER.md`, `SOUL.md`) and portable skills (`skills/*.md`) are stored as plain Markdown files with strict YAML frontmatter (OKF).
 *   **Knowledge Graphing:** Iris automatically cross-links these files using standard Markdown syntax, creating a navigable knowledge graph on your local filesystem.

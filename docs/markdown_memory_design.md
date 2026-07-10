@@ -1,6 +1,6 @@
 # Open Knowledge Format (OKF) Memory Architecture
 
-Iris eschews proprietary databases and opaque JSON blobs for its memory layer. Instead, it fully adopts the **Open Knowledge Format (OKF)**, an open, vendor-neutral specification that structures organizational knowledge so it is highly accessible to both LLMs and humans.
+Iris eschews proprietary databases and opaque JSON blobs for its memory layer. Instead, it fully adopts the **[Open Knowledge Format (OKF)](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing)**, an open, vendor-neutral specification that structures organizational knowledge so it is highly accessible to both LLMs and humans.
 
 ## Why OKF?
 
