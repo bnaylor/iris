@@ -16,6 +16,8 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Subagent Sandboxing:** Transparently routes terminal execution through `apple/container` lightweight Linux VMs, allowing Iris to safely execute potentially dangerous autonomous behavior.
 *   **Workspace Binding:** Link chat sessions to local filesystem directories. Iris will automatically load the project's `AGENTS.md` instructions and execute terminal commands from within that project context.
 *   **Autonomous Scheduling & Wake Recovery:** Register cron-like recurring schedules or one-off interval timers that persist to disk. Features built-in macOS `NSWorkspace.didWakeNotification` observation to guarantee jobs missed during sleep will instantly catch-up when the computer wakes.
+*   **Autonomous Goal Loops:** Type `/goal` to kick off a long-running, self-prompting autonomous loop. Iris will continue executing tools and reflecting until the goal is fully accomplished.
+*   **Token Tracking:** Real-time visibility into prompt, candidate, and cumulative token usage directly within the UI toolbar.
 *   **Rich Native UI:** Beautiful macOS `NavigationSplitView` with multi-conversation support, `.regularMaterial` frosted glass input bars, and native markdown chat rendering powered by `swift-markdown-ui`.
 
 ## 🧠 The Portable Skill System
@@ -31,6 +33,8 @@ Iris provides three highly privileged native primitives to the LLM:
 3.  `write_file`: Writes/modifies local files.
 4.  `schedule_job`: Native API to register cron-like schedules (`minute`, `hour`, `weekday`) or `intervalSeconds`.
 5.  `set_workspace`: Automatically binds the active conversation to a project path.
+6.  `reflect`: Internal tool allowing the agent to write down its reasoning, plans, and self-evaluations during complex loops.
+7.  `goal_complete`: Escapes an active autonomous `/goal` loop.
 
 ## 🛠️ Usage
 
