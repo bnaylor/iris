@@ -82,6 +82,11 @@ struct SettingsView: View {
                         }
                     }
                 
+                if config.enableSandboxing {
+                    TextField("Sandbox Image", text: $config.sandboxImage)
+                        .help("The Docker/OCI image to use for sandboxed commands (e.g., ubuntu:latest)")
+                }
+                
                 if isInstallingContainer {
                     HStack {
                         ProgressView()

@@ -37,6 +37,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(enableSandboxing, forKey: "ENABLE_SANDBOXING") }
     }
     
+    var sandboxImage: String {
+        didSet { UserDefaults.standard.set(sandboxImage, forKey: "SANDBOX_IMAGE") }
+    }
+    
     init() {
         self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
         self.geminiModel = UserDefaults.standard.string(forKey: "GEMINI_MODEL") ?? "gemini-3.5-flash"
@@ -46,6 +50,7 @@ class ConfigManager: @unchecked Sendable {
         self.googleRefreshToken = UserDefaults.standard.string(forKey: "GOOGLE_REFRESH_TOKEN") ?? ""
         self.googleTokenExpiry = UserDefaults.standard.double(forKey: "GOOGLE_TOKEN_EXPIRY")
         self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
+        self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
     }
     
     var isConfigured: Bool {
