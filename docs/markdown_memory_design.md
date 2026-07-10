@@ -51,3 +51,16 @@ When the `/reflect` trigger fires (either manually or via the autonomous interva
 1. **Schema Enforcement:** It verifies that all files possess valid OKF frontmatter and writes missing fields.
 2. **Link Integrity:** It checks the file paths in Markdown links to ensure cross-links between concepts are still valid.
 3. **Consolidation:** It merges redundant files and reorganizes the folder hierarchy if it detects semantic drift.
+
+---
+
+## Artifacts & Design Docs
+
+In addition to core memories (`USER.md`, `SOUL.md`) and skills, Iris often generates research notes, design docs, and other long-form artifacts.
+
+To prevent impenetrable, UUID-based directory structures (like those used by some other agents), Iris organizes all generated artifacts in a human-readable library tree grouped by project:
+`~/.iris/library/<project_name>/`
+
+**Crucially, all files generated in this library must also use OKF YAML frontmatter.** This ensures that:
+1. The JIT semantic vector search can index and retrieve artifacts alongside core skills.
+2. Artifacts can seamlessly cross-link with skills and user preferences to build a unified organizational knowledge graph.
