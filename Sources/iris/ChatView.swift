@@ -202,7 +202,7 @@ struct MessageView: View {
                         .cornerRadius(0, corners: [.bottomRight])
                 } else {
                     Markdown(message.content)
-                        .markdownTheme(.gitHub)
+                        .textSelection(.enabled)
                         .padding(.vertical, 4)
                 }
             }
