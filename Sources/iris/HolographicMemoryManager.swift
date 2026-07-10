@@ -155,22 +155,32 @@ struct FactRelation: Codable, FetchableRecord, PersistableRecord {
 final class HolographicMemoryManager: @unchecked Sendable {
     static let shared = try! HolographicMemoryManager()
     
-    private let dbPool: DatabasePool
+    private let dbPool: DatabasePool?
     
-    private init() throws {
-        let configDir = ("~/.iris" as NSString).expandingTildeInPath
-        if !FileManager.default.fileExists(atPath: configDir) {
-            try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
-        }
-        
-        let dbPath = "\(configDir)/holographic_memory.sqlite"
+    // For tests that want an in-memory database
+    let dbQueue: DatabaseQueue?
+    
+    init(inMemory: Bool = false) throws {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
-            db.trace { print($0) } // Optional: log SQL queries
+            db.trace { _ in } // Suppress logs by default
         }
         
-        dbPool = try DatabasePool(path: dbPath, configuration: configuration)
-        try migrator.migrate(dbPool)
+        if inMemory {
+            dbPool = nil
+            dbQueue = try DatabaseQueue(configuration: configuration)
+            try migrator.migrate(dbQueue!)
+        } else {
+            let configDir = ("~/.iris" as NSString).expandingTildeInPath
+            if !FileManager.default.fileExists(atPath: configDir) {
+                try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+            }
+            
+            let dbPath = "\(configDir)/holographic_memory.sqlite"
+            dbPool = try DatabasePool(path: dbPath, configuration: configuration)
+            dbQueue = nil
+            try migrator.migrate(dbPool!)
+        }
     }
     
     private var migrator: DatabaseMigrator {
@@ -210,13 +220,16 @@ final class HolographicMemoryManager: @unchecked Sendable {
             trustScore: trustScore,
             timestamp: Date()
         )
-        try dbPool.write { db in
-            try fact.insert(db)
+        if let queue = dbQueue {
+            try queue.write { db in try fact.insert(db) }
+        } else if let pool = dbPool {
+            try pool.write { db in try fact.insert(db) }
         }
     }
     
     func search(query: String, queryVector: HolographicVector, limit: Int = 5) throws -> [HolographicFact] {
-        return try dbPool.read { db in
+        let reader: DatabaseReader = dbQueue ?? dbPool!
+        return try reader.read { db in
             // Step 1: Lexical filtering via FTS5
             let ftsPattern = FTS3Pattern(matchingAnyTokenIn: query)
             let sql = """
