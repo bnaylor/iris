@@ -63,13 +63,17 @@ public struct InjectionGuard {
     }
     
     private static func executeTier2CoreML(_ input: String) async -> Bool {
-        // TODO: Implement CoreML prompt injection classification
-        // 1. Load .mlpackage (e.g., DeBERTa-v3-small converted to CoreML)
-        // 2. Tokenize text and evaluate
-        // 3. If output probability of 'injection' > 0.5, return false
-        
-        print("[InjectionGuard] Tier 2 CoreML analysis is stubbed out. Assuming safe.")
-        return true
+        do {
+            let probability = try await CoreMLEvaluator.shared.evaluate(text: input)
+            if probability > 0.5 {
+                print("[InjectionGuard] Tier 2 CoreML flagged injection with probability: \(probability)")
+                return false
+            }
+            return true
+        } catch {
+            print("[InjectionGuard] Tier 2 CoreML error: \(error). Failing open.")
+            return true
+        }
     }
     
     private static func executeTier3Canary(_ input: String) async -> Bool {
