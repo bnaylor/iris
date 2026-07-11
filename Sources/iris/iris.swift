@@ -102,7 +102,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         let factString = facts.isEmpty ? "No relevant facts found." : facts.map { "- \($0.content)" }.joined(separator: "\n")
         
         if let textPart = currentSystemPrompt.parts.first?.text {
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Holographic Memory (JIT Context)\n" + factString + "\n\n# User Profile (USER.md)\n" + userProfile
+            // Append USER.md first (mostly static)
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# User Profile (USER.md)\n" + userProfile
         }
         
         if let wp = workspacePath {
@@ -110,9 +111,15 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             let fullPath = (agentsMdPath as NSString).appendingPathComponent("AGENTS.md")
             if let agentsMdContent = try? String(contentsOfFile: fullPath, encoding: .utf8) {
                 if let textPart = currentSystemPrompt.parts.first?.text {
+                    // Append AGENTS.md next (static per workspace)
                     currentSystemPrompt.parts[0].text = textPart + "\n\n# Project Workspace Rules (AGENTS.md)\n" + agentsMdContent
                 }
             }
+        }
+        
+        if let textPart = currentSystemPrompt.parts.first?.text {
+            // Append Holographic Memory last (highly volatile, changes per query)
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Holographic Memory (JIT Context)\n" + factString
         }
         
         var toolsList = await executor.getTools()
