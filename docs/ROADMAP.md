@@ -13,7 +13,7 @@
 - [x] Sandboxed web search agent
     - [x] `./prompt_injection_gemini.md` (Model armor - Tier 1 structural implemented)
         - [ ] Tier 2 Local CoreML Classification
-        - [ ] Tier 3 Local Canary Probe
+        - [x] Tier 3 Local Canary Probe
 - [ ] Use Apple silicon / foundational models?
 - [x] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [x] `/goal` support

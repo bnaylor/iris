@@ -20,6 +20,7 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Token Tracking:** Real-time visibility into prompt, candidate, and cumulative token usage directly within the UI toolbar.
 *   **Auxiliary Models Framework:** Native support for local smaller models (e.g., via Ollama or embedded `llama.cpp`) for background tasks like Vibecop.
 *   **Vibecop Guardian Mode:** An ultra-paranoid AI guardian that evaluates terminal commands and file operations for safety, auto-approving routine actions and escalating dangerous ones to the user.
+*   **Prompt Injection Defense:** Includes a multi-tiered security pipeline (Structural Isolation + Behavioral Canary Probes) to actively neutralize indirect prompt injections hidden within untrusted external data.
 *   **Rich Native UI:** Beautiful macOS `NavigationSplitView` with multi-conversation support, `.regularMaterial` frosted glass input bars, and native markdown chat rendering powered by `swift-markdown-ui`.
 
 ## 🧠 The Portable Memory & Skill System
