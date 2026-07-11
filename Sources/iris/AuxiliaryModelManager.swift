@@ -5,6 +5,7 @@ final class AuxiliaryModelManager: @unchecked Sendable {
     
     // In-memory engines mapped by role
     private var engines: [String: AuxiliaryInferenceEngine] = [:]
+    private let lock = NSLock()
     
     private let modelsDir: String
     private let registryPath: String
@@ -20,7 +21,8 @@ final class AuxiliaryModelManager: @unchecked Sendable {
     }
     
     func getEngine(for role: String, config: AuxiliaryModelConfig) async throws -> AuxiliaryInferenceEngine {
-        if let existing = engines[role] {
+        let existing = lock.withLock { engines[role] }
+        if let existing = existing {
             return existing
         }
         
@@ -35,14 +37,20 @@ final class AuxiliaryModelManager: @unchecked Sendable {
         }
         
         try await engine.loadModel(config: config)
-        engines[role] = engine
+        
+        lock.withLock { engines[role] = engine }
         return engine
     }
     
     func unloadEngine(for role: String) async {
-        if let engine = engines[role] {
+        let engine = lock.withLock { engines.removeValue(forKey: role) }
+        
+        if let engine = engine {
             await engine.unloadModel()
-            engines.removeValue(forKey: role)
         }
+    }
+    
+    func setMockEngine(_ engine: AuxiliaryInferenceEngine, for role: String) {
+        lock.withLock { engines[role] = engine }
     }
 }
