@@ -31,10 +31,10 @@ Instead of trapping your workflows inside a proprietary database or cloud servic
 *   **Knowledge Graphing:** Iris automatically cross-links these files using standard Markdown syntax, creating a navigable knowledge graph on your local filesystem.
 *   **Memory Grooming:** The background `/reflect` loop actively grooms the memory library, ensuring frontmatter is up-to-date and repairing broken cross-links.
 *   **Project Artifacts:** Generated design docs and research notes are strictly organized into human-readable library trees (e.g., `~/.iris/library/<project_name>/`) instead of opaque UUID directories, and all artifacts enforce the OKF schema for seamless integration.
-*   **JIT Prompt Injection:** Instead of a massive, static system prompt, Iris uses `HolographicMemoryManager` to perform semantic vector searches against your OKF Markdown files, pulling only the relevant skills and context into the context window for the current task.
+*   **JIT Prompt Injection:** Iris uses `HolographicMemoryManager` to perform semantic vector searches against a fact store that sits in between the working context and the static library of markdown "memories" and skills.
 
 ### Core Native Tools
-Iris provides three highly privileged native primitives to the LLM:
+Iris provides some native primitives to the LLM:
 1.  `run_command`: Sandboxed execution of shell commands (runs in a lightweight Linux VM via `apple/container` if sandboxing is enabled).
 2.  `read_file`: Reads arbitrary local text files.
 3.  `write_file`: Writes/modifies local files.
@@ -68,7 +68,7 @@ Once connected, Iris has native API access to the following Workspace tools dire
 
 ## 🛡️ Vibecop Guardian
 
-Iris includes **Vibecop**, an independent, paranoid AI guardian (using an auxiliary local model) that evaluates every single terminal command or file operation proposed by the primary agent. 
+Iris includes a reimplementation of [**Vibecop**](https://github.com/bnaylor/vibecop), an independent, paranoid AI guardian (using an auxiliary local model) that evaluates every single terminal command or file operation proposed by the primary agent. 
 
 *   **Auto-Approval**: If the command is completely routine and safe, Vibecop approves it silently, saving you from prompt fatigue.
 *   **Guardian Mode**: You can run `/vibecop init` in any workspace. The primary agent will analyze your project and generate a custom `.iris/vibecop.md` file. Vibecop uses this as its system prompt, learning what commands are normal *specifically for this project* (e.g., `go build` is safe here, but `npm` should trigger an escalation).
@@ -84,7 +84,7 @@ swift build
 
 ### Model Context Protocol (MCP)
 
-Iris natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It dynamically loads external MCP servers to inject new tools straight into Iris's brain!
+Iris natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). 
 
 To configure MCP servers, create a JSON file at `~/.iris/mcp_servers.json` with your server configurations:
 
@@ -101,7 +101,7 @@ To configure MCP servers, create a JSON file at `~/.iris/mcp_servers.json` with 
 }
 ```
 
-Once configured, Iris will automatically boot these servers in the background and their tools will be available for Iris to use!
+Once configured, Iris will automatically boot these servers in the background and their tools will be available for Iris to use.
 
 ## 💡 Inspired By
 
