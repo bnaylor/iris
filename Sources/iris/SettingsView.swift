@@ -49,12 +49,18 @@ struct SettingsView: View {
                     if config.primaryProvider == LLMProvider.gemini.rawValue {
                         SecureField("Gemini API Key", text: $config.geminiAPIKey)
                             .help("Required for Gemini models to function.")
+                        TextField("Gemini Base URL (Optional)", text: $config.geminiBaseURL)
+                            .help("Leave blank for default endpoint")
                     } else if config.primaryProvider == LLMProvider.anthropic.rawValue {
                         SecureField("Anthropic API Key", text: $config.anthropicAPIKey)
                             .help("Required for Anthropic Claude models to function.")
+                        TextField("Anthropic Base URL (Optional)", text: $config.anthropicBaseURL)
+                            .help("Leave blank for default endpoint")
                     } else if config.primaryProvider == LLMProvider.openai.rawValue {
                         SecureField("OpenAI API Key", text: $config.openAIAPIKey)
                             .help("Required for OpenAI GPT/o1 models to function.")
+                        TextField("OpenAI Base URL (Optional)", text: $config.openAIBaseURL)
+                            .help("Overrides the default openai endpoint. Useful for deepseek or local compatible servers.")
                     }
                     
                     TextField("Easy Subagent Model", text: $config.modelEasy)

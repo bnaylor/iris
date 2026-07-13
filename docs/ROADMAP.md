@@ -28,3 +28,5 @@
 - [ ] Parallel tool calls
 - [ ] Parallel/background subagent execution
 - [ ] Add cloud models for vibecop
+- [ ] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
+

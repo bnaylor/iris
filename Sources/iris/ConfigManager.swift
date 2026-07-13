@@ -21,12 +21,24 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(geminiAPIKey, forKey: "GEMINI_API_KEY") }
     }
     
+    var geminiBaseURL: String {
+        didSet { UserDefaults.standard.set(geminiBaseURL, forKey: "GEMINI_BASE_URL") }
+    }
+    
     var anthropicAPIKey: String {
         didSet { UserDefaults.standard.set(anthropicAPIKey, forKey: "ANTHROPIC_API_KEY") }
     }
     
+    var anthropicBaseURL: String {
+        didSet { UserDefaults.standard.set(anthropicBaseURL, forKey: "ANTHROPIC_BASE_URL") }
+    }
+    
     var openAIAPIKey: String {
         didSet { UserDefaults.standard.set(openAIAPIKey, forKey: "OPENAI_API_KEY") }
+    }
+    
+    var openAIBaseURL: String {
+        didSet { UserDefaults.standard.set(openAIBaseURL, forKey: "OPENAI_BASE_URL") }
     }
     
     var modelEasy: String {
@@ -85,9 +97,12 @@ class ConfigManager: @unchecked Sendable {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
         
-        self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
-        self.anthropicAPIKey = UserDefaults.standard.string(forKey: "ANTHROPIC_API_KEY") ?? ""
-        self.openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
+        geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        geminiBaseURL = UserDefaults.standard.string(forKey: "GEMINI_BASE_URL") ?? ""
+        anthropicAPIKey = UserDefaults.standard.string(forKey: "ANTHROPIC_API_KEY") ?? ""
+        anthropicBaseURL = UserDefaults.standard.string(forKey: "ANTHROPIC_BASE_URL") ?? ""
+        openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
+        openAIBaseURL = UserDefaults.standard.string(forKey: "OPENAI_BASE_URL") ?? ""
 
         self.modelEasy = UserDefaults.standard.string(forKey: "MODEL_EASY") ?? "gemini-3.1-flash-lite"
         self.modelMedium = UserDefaults.standard.string(forKey: "MODEL_MEDIUM") ?? "gemini-3.5-flash"

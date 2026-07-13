@@ -1,7 +1,7 @@
 import Foundation
 
 struct OpenAIClient {
-    static func generateContent(request: GeminiRequest, model: String, apiKey: String) async throws -> GeminiResponse {
+    static func generateContent(request: GeminiRequest, model: String, apiKey: String, baseURL: String = "") async throws -> GeminiResponse {
         guard !apiKey.isEmpty else {
             throw URLError(.userAuthenticationRequired)
         }
@@ -25,7 +25,13 @@ struct OpenAIClient {
             var toolCalls = [[String: Any]]()
             var toolResponses = [[String: Any]]()
             
+            var reasoningContent: String? = nil
+            
             for part in content.parts {
+                if let r = part.thought_signature ?? part.thoughtSignature, !r.isEmpty {
+                    reasoningContent = r
+                }
+                
                 if let text = part.text {
                     textParts.append(text)
                 } else if let fc = part.functionCall {
@@ -60,6 +66,10 @@ struct OpenAIClient {
                 message["content"] = textParts.joined(separator: "\n")
             } else if toolCalls.isEmpty && toolResponses.isEmpty {
                 message["content"] = ""
+            }
+            
+            if let r = reasoningContent {
+                message["reasoning_content"] = r
             }
             
             if !toolCalls.isEmpty {
@@ -108,7 +118,25 @@ struct OpenAIClient {
                 var parameters: [String: Any] = ["type": "object", "properties": [:] as [String: Any]]
                 if let schema = fd.parameters {
                     let schemaData = try? JSONEncoder().encode(schema)
-                    if let dict = try? JSONSerialization.jsonObject(with: schemaData ?? Data()) as? [String: Any] {
+                    if var dict = try? JSONSerialization.jsonObject(with: schemaData ?? Data()) as? [String: Any] {
+                        func lowerCaseTypes(_ dictionary: inout [String: Any]) {
+                            if let type = dictionary["type"] as? String {
+                                dictionary["type"] = type.lowercased()
+                            }
+                            if var properties = dictionary["properties"] as? [String: [String: Any]] {
+                                for (k, var v) in properties {
+                                    lowerCaseTypes(&v)
+                                    properties[k] = v
+                                }
+                                dictionary["properties"] = properties
+                            }
+                            if var items = dictionary["items"] as? [String: Any] {
+                                lowerCaseTypes(&items)
+                                dictionary["items"] = items
+                            }
+                        }
+                        
+                        lowerCaseTypes(&dict)
                         parameters = dict
                     }
                 }
@@ -126,7 +154,17 @@ struct OpenAIClient {
             }
         }
         
-        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var endpointUrl = "https://api.openai.com/v1/chat/completions"
+        if !baseURL.isEmpty {
+            if baseURL.hasSuffix("/chat/completions") {
+                endpointUrl = baseURL
+            } else {
+                let trimmed = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                endpointUrl = "\(trimmed)/chat/completions"
+            }
+        }
+        
+        let url = URL(string: endpointUrl)!
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -136,7 +174,7 @@ struct OpenAIClient {
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+            throw APIError(message: "Invalid response from OpenAI API")
         }
         
         if httpResponse.statusCode != 200 {
@@ -152,16 +190,16 @@ struct OpenAIClient {
         if let choices = json["choices"] as? [[String: Any]], let first = choices.first, let msg = first["message"] as? [String: Any] {
             var content = Content(role: "model", parts: [])
             
+            let reasoning = msg["reasoning_content"] as? String
+            
             if let text = msg["content"] as? String, !text.isEmpty {
-                content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
+                content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
             }
             
-            if let toolCalls = msg["tool_calls"] as? [[String: Any]] {
-                for call in toolCalls {
-                    if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let argsStr = f["arguments"] as? String {
-                        let argsDict = (try? JSONSerialization.jsonObject(with: argsStr.data(using: .utf8) ?? Data())) as? [String: String] ?? [:]
-                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: argsDict, thought_signature: nil, thoughtSignature: nil), functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
-                    }
+            if let toolCalls = msg["tool_calls"] as? [[String: Any]], let call = toolCalls.first {
+                if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let argsStr = f["arguments"] as? String {
+                    let argsDict = (try? JSONSerialization.jsonObject(with: argsStr.data(using: .utf8) ?? Data())) as? [String: String] ?? [:]
+                    content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: argsDict, thought_signature: reasoning, thoughtSignature: reasoning), functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
                 }
             }
             

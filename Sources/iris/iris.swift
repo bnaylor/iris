@@ -322,8 +322,22 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                     }
                 }
                 
-                if let part = responseContent.parts.first {
+                var hasFunctionCall = false
+                
+                for part in responseContent.parts {
+                    if let responseText = part.text {
+                        await pushToUI(role: .agent, text: responseText, conversationId: conversationId)
+                        
+                        let afterAgentDecision = await HookManager.shared.fireAfterAgent(output: responseText)
+                        if case .block(let reason) = afterAgentDecision {
+                            await pushToUI(role: .system, text: "Hook AfterAgent blocked execution: \(reason)", conversationId: conversationId)
+                        }
+                    }
+                }
+                
+                for part in responseContent.parts {
                     if let functionCall = part.functionCall {
+                        hasFunctionCall = true
                         let toolCallDict: [String: Any] = [
                             "name": functionCall.name,
                             "args": functionCall.args
@@ -432,22 +446,11 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                         history.append(functionResponse)
                         await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
                         request.contents = history
-                    } else if let responseText = part.text {
-                        await pushToUI(role: .agent, text: responseText, conversationId: conversationId)
-                        
-                        let afterAgentDecision = await HookManager.shared.fireAfterAgent(output: responseText)
-                        if case .block(let reason) = afterAgentDecision {
-                            await pushToUI(role: .system, text: "Hook AfterAgent blocked execution: \(reason)", conversationId: conversationId)
-                        } else if case .proceed(let modifiedData) = afterAgentDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let newOutput = json["output"] as? String {
-                            // If modified, we might push the modified to UI, but it's already pushed.
-                            // The hook might just observe.
-                        }
-                        
-                        turnFinished = true
-                    } else {
-                        turnFinished = true
+                        break // Only execute the first tool call
                     }
-                } else {
+                }
+                
+                if !hasFunctionCall {
                     turnFinished = true
                 }
             } catch {

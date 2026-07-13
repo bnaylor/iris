@@ -1,7 +1,7 @@
 import Foundation
 
 struct AnthropicClient {
-    static func generateContent(request: GeminiRequest, model: String, apiKey: String) async throws -> GeminiResponse {
+    static func generateContent(request: GeminiRequest, model: String, apiKey: String, baseURL: String = "") async throws -> GeminiResponse {
         guard !apiKey.isEmpty else {
             throw URLError(.userAuthenticationRequired)
         }
@@ -71,7 +71,27 @@ struct AnthropicClient {
                 var inputSchema: [String: Any] = ["type": "object", "properties": [:] as [String: Any]]
                 if let schema = fd.parameters {
                     let schemaData = try? JSONEncoder().encode(schema)
-                    if let dict = try? JSONSerialization.jsonObject(with: schemaData ?? Data()) as? [String: Any] {
+                    if var dict = try? JSONSerialization.jsonObject(with: schemaData ?? Data()) as? [String: Any] {
+                        // Gemini often uses uppercase types (e.g. "OBJECT", "STRING").
+                        // JSON Schema (Anthropic) requires lowercase.
+                        func lowerCaseTypes(_ dictionary: inout [String: Any]) {
+                            if let type = dictionary["type"] as? String {
+                                dictionary["type"] = type.lowercased()
+                            }
+                            if var properties = dictionary["properties"] as? [String: [String: Any]] {
+                                for (k, var v) in properties {
+                                    lowerCaseTypes(&v)
+                                    properties[k] = v
+                                }
+                                dictionary["properties"] = properties
+                            }
+                            if var items = dictionary["items"] as? [String: Any] {
+                                lowerCaseTypes(&items)
+                                dictionary["items"] = items
+                            }
+                        }
+                        
+                        lowerCaseTypes(&dict)
                         inputSchema = dict
                     }
                 }
@@ -86,7 +106,17 @@ struct AnthropicClient {
             }
         }
         
-        let url = URL(string: "https://api.anthropic.com/v1/messages")!
+        var endpointUrl = "https://api.anthropic.com/v1/messages"
+        if !baseURL.isEmpty {
+            if baseURL.hasSuffix("/messages") {
+                endpointUrl = baseURL
+            } else {
+                let trimmed = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                endpointUrl = "\(trimmed)/messages"
+            }
+        }
+        
+        let url = URL(string: endpointUrl)!
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -112,11 +142,13 @@ struct AnthropicClient {
         if let contentArray = json["content"] as? [[String: Any]] {
             var content = Content(role: "model", parts: [])
             
+            var foundToolUse = false
             for part in contentArray {
                 if let type = part["type"] as? String {
                     if type == "text", let text = part["text"] as? String {
                         content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
-                    } else if type == "tool_use", let name = part["name"] as? String, let input = part["input"] as? [String: Any] {
+                    } else if type == "tool_use", !foundToolUse, let name = part["name"] as? String, let input = part["input"] as? [String: Any] {
+                        foundToolUse = true
                         // Convert [String: Any] back to [String: String] since Iris FunctionCall args are [String: String]
                         var stringArgs: [String: String] = [:]
                         for (k, v) in input {

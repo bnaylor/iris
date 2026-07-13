@@ -41,9 +41,9 @@ struct LLMClient {
         do {
             let response: GeminiResponse
             if provider == LLMProvider.anthropic.rawValue {
-                response = try await AnthropicClient.generateContent(request: request, model: modelName, apiKey: config.anthropicAPIKey)
+                response = try await AnthropicClient.generateContent(request: request, model: modelName, apiKey: config.anthropicAPIKey, baseURL: config.anthropicBaseURL)
             } else if provider == LLMProvider.openai.rawValue {
-                response = try await OpenAIClient.generateContent(request: request, model: modelName, apiKey: config.openAIAPIKey)
+                response = try await OpenAIClient.generateContent(request: request, model: modelName, apiKey: config.openAIAPIKey, baseURL: config.openAIBaseURL)
             } else {
                 // Fallback to Gemini
                 let apiKey = config.geminiAPIKey
@@ -51,7 +51,9 @@ struct LLMClient {
                     throw URLError(.userAuthenticationRequired)
                 }
                 
-                var urlComponents = URLComponents(string: endpoint(for: tier))!
+                let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
+                
+                var urlComponents = URLComponents(string: baseURLString)!
                 urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
                 
                 var urlRequest = URLRequest(url: urlComponents.url!)
