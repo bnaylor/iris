@@ -79,11 +79,13 @@ class AppState {
     var selectedConversationId: UUID?
     var isThinking = false
     var pendingApproval: ToolApprovalRequest?
+    var onSubagentComplete: (@Sendable (UUID, String) -> Void)?
     
     private var engine: IrisEngine!
     
     init() {
         self.engine = IrisEngine(state: self)
+        SubagentManager.shared.setGlobalState(self)
         loadConversations()
         if conversations.isEmpty {
             createNewConversation()
@@ -94,11 +96,18 @@ class AppState {
         conversations.firstIndex(where: { $0.id == selectedConversationId })
     }
     
-    func createNewConversation() {
-        let newConv = Conversation(title: "New Conversation")
+    func createNewConversation(id: UUID = UUID()) {
+        let newConv = Conversation(id: id, title: "New Conversation")
         conversations.append(newConv)
         selectedConversationId = newConv.id
         saveConversations()
+    }
+    
+    func updateConversationTitle(id: UUID, title: String) {
+        if let idx = conversations.firstIndex(where: { $0.id == id }) {
+            conversations[idx].title = title
+            saveConversations()
+        }
     }
     
     func setWorkspace(for conversationId: UUID, path: String) {
