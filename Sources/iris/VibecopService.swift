@@ -55,13 +55,25 @@ final class VibecopService: @unchecked Sendable {
         
         let responseJson = try await engine.generate(prompt: prompt, jsonSchema: "vibecop_schema")
         
+        var cleanJson = responseJson.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanJson.hasPrefix("```json") {
+            cleanJson.removeFirst(7)
+        } else if cleanJson.hasPrefix("```") {
+            cleanJson.removeFirst(3)
+        }
+        if cleanJson.hasSuffix("```") {
+            cleanJson.removeLast(3)
+        }
+        cleanJson = cleanJson.trimmingCharacters(in: .whitespacesAndNewlines)
+        
         // Parse the JSON
-        if let data = responseJson.data(using: .utf8),
+        if let data = cleanJson.data(using: .utf8),
            let decision = try? JSONDecoder().decode(VibecopDecision.self, from: data) {
             return decision
         }
         
         // Fallback to escalation if JSON parsing fails
+        print("Vibecop failed to parse JSON: \(responseJson)")
         return VibecopDecision(decision: "ESCALATE", reason: "Failed to parse Vibecop response. Defaulting to escalate.")
     }
 }
