@@ -38,10 +38,6 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
         vocab = nil
     }
     
-    deinit {
-        llama_backend_free()
-    }
-    
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
         guard let m = model, let v = vocab else {
             throw LlamaError.modelLoadFailed
