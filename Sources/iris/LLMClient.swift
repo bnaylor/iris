@@ -6,17 +6,24 @@ struct APIError: LocalizedError {
 }
 
 struct LLMClient {
-    var endpoint: String {
-        "https://generativelanguage.googleapis.com/v1beta/models/\(ConfigManager.shared.geminiModel):generateContent"
+    func endpoint(for tier: ModelTier) -> String {
+        let config = ConfigManager.shared
+        let modelName: String
+        switch tier {
+        case .easy: modelName = config.modelEasy
+        case .medium: modelName = config.modelMedium
+        case .hard: modelName = config.modelHard
+        }
+        return "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent"
     }
     
-    func generateContent(request: GeminiRequest) async throws -> GeminiResponse {
+    func generateContent(request: GeminiRequest, tier: ModelTier = .medium) async throws -> GeminiResponse {
         let apiKey = ConfigManager.shared.geminiAPIKey
         guard !apiKey.isEmpty else {
             throw URLError(.userAuthenticationRequired)
         }
         
-        var urlComponents = URLComponents(string: endpoint)!
+        var urlComponents = URLComponents(string: endpoint(for: tier))!
         urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         
         var urlRequest = URLRequest(url: urlComponents.url!)

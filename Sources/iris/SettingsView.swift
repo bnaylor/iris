@@ -21,14 +21,32 @@ struct SettingsView: View {
                         fetchModels()
                     }
                 
-                Picker("Model", selection: $config.geminiModel) {
+                Picker("Easy Subagent Model", selection: $config.modelEasy) {
+                    ForEach(availableModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                Picker("Primary / Medium Model", selection: $config.modelMedium) {
+                    ForEach(availableModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                Picker("Hard Subagent Model", selection: $config.modelHard) {
                     ForEach(availableModels, id: \.self) { model in
                         Text(model).tag(model)
                     }
                 }
                 .onAppear {
                     if availableModels.isEmpty {
-                        availableModels = [config.geminiModel]
+                        availableModels = [
+                            "gemini-3.1-flash-lite", 
+                            "gemini-3.5-flash", 
+                            "gemini-3.1-pro-preview", 
+                            "gemini-2.5-flash"
+                        ]
+                        if !availableModels.contains(config.modelEasy) { availableModels.append(config.modelEasy) }
+                        if !availableModels.contains(config.modelMedium) { availableModels.append(config.modelMedium) }
+                        if !availableModels.contains(config.modelHard) { availableModels.append(config.modelHard) }
                     }
                     fetchModels()
                 }
@@ -118,9 +136,10 @@ struct SettingsView: View {
                 let models = try await LLMClient().fetchAvailableModels()
                 if !models.isEmpty {
                     await MainActor.run {
-                        if !models.contains(config.geminiModel) {
-                            config.geminiModel = models.first!
-                        }
+                        if !models.contains(config.modelEasy) { config.modelEasy = models.first! }
+                        if !models.contains(config.modelMedium) { config.modelMedium = models.first! }
+                        if !models.contains(config.modelHard) { config.modelHard = models.first! }
+                        
                         self.availableModels = models
                     }
                 }

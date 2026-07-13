@@ -1,5 +1,11 @@
 import Foundation
 
+enum ModelTier: String, Codable {
+    case easy
+    case medium
+    case hard
+}
+
 struct GeminiRequest: Codable {
     var contents: [Content]
     var systemInstruction: Content?

@@ -12,7 +12,7 @@ final class SubagentManager: @unchecked Sendable {
         self.state = state
     }
     
-    func runSubagent(role: String, task: String, parentConversationId: UUID) async -> String {
+    func runSubagent(role: String, task: String, effort: String, parentConversationId: UUID) async -> String {
         guard let appState = state else {
             return "Error: AppState not available for subagent execution."
         }
@@ -24,8 +24,15 @@ final class SubagentManager: @unchecked Sendable {
             appState.updateConversationTitle(id: subagentId, title: "Subagent: \(role)")
         }
         
+        let tier: ModelTier
+        switch effort.lowercased() {
+        case "easy": tier = .easy
+        case "hard": tier = .hard
+        default: tier = .medium
+        }
+        
         // 2. Instantiate a fresh IrisEngine linked to this conversation
-        let engine = IrisEngine(state: appState)
+        let engine = IrisEngine(state: appState, tier: tier)
         
         // 3. Craft the role-specific prompt
         let customPromptText = generateRolePrompt(role: role)
