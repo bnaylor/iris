@@ -11,8 +11,6 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     var error: String? = nil
     
     private var downloadTask: URLSessionDownloadTask?
-    private var destinationFilename: String?
-    private var isUrlDownload = false
     
     // Some known models and their URLs for convenience
     let knownModels = [
@@ -37,13 +35,14 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         }
         
         let filename = isUrl ? url.lastPathComponent : name
-        self.destinationFilename = filename
-        self.isUrlDownload = isUrl
         
         guard !isModelDownloaded(name: filename) else {
             if isUrl { ConfigManager.shared.vibecopModel = filename }
             return 
         }
+        
+        // Update the UI immediately so it shows the filename instead of the URL
+        if isUrl { ConfigManager.shared.vibecopModel = filename }
         
         self.isDownloading = true
         self.progress = 0.0
@@ -59,28 +58,30 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         
         let request = URLRequest(url: url)
         self.downloadTask = session.downloadTask(with: request)
+        self.downloadTask?.taskDescription = filename
         self.downloadTask?.resume()
     }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        Task { @MainActor in
-            guard let filename = self.destinationFilename else { return }
-            let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
-            let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
+        guard let filename = downloadTask.taskDescription else { return }
+        let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
+        let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
+        
+        do {
+            if !FileManager.default.fileExists(atPath: dirPath) {
+                try FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
+            }
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: location, to: destination)
             
-            do {
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.moveItem(at: location, to: destination)
-                
+            Task { @MainActor in
                 self.progress = 1.0
                 self.isDownloading = false
-                
-                if self.isUrlDownload {
-                    ConfigManager.shared.vibecopModel = filename
-                }
-            } catch {
+            }
+        } catch {
+            Task { @MainActor in
                 self.error = "Download failed to save: \(error.localizedDescription)"
                 self.isDownloading = false
             }
