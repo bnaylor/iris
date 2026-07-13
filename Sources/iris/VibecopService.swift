@@ -55,16 +55,12 @@ final class VibecopService: @unchecked Sendable {
         
         let responseJson = try await engine.generate(prompt: prompt, jsonSchema: "vibecop_schema")
         
-        var cleanJson = responseJson.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleanJson.hasPrefix("```json") {
-            cleanJson.removeFirst(7)
-        } else if cleanJson.hasPrefix("```") {
-            cleanJson.removeFirst(3)
+        var cleanJson = responseJson
+        
+        if let startIndex = cleanJson.firstIndex(of: "{"),
+           let endIndex = cleanJson.lastIndex(of: "}") {
+            cleanJson = String(cleanJson[startIndex...endIndex])
         }
-        if cleanJson.hasSuffix("```") {
-            cleanJson.removeLast(3)
-        }
-        cleanJson = cleanJson.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Parse the JSON
         if let data = cleanJson.data(using: .utf8),
