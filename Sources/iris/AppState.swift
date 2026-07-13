@@ -72,12 +72,20 @@ struct ToolApprovalRequest: Identifiable {
     let continuation: CheckedContinuation<Bool, Never>
 }
 
+struct ActiveSubagent: Identifiable, Hashable {
+    let id: UUID
+    let role: String
+    let startTime: Date
+    var status: String
+}
+
 @MainActor
 @Observable
 class AppState {
     var conversations: [Conversation] = []
     var selectedConversationId: UUID?
     var isThinking = false
+    var activeSubagents: [ActiveSubagent] = []
     var pendingApproval: ToolApprovalRequest?
     var onSubagentComplete: (@Sendable (UUID, String) -> Void)?
     
@@ -107,6 +115,21 @@ class AppState {
         if let idx = conversations.firstIndex(where: { $0.id == id }) {
             conversations[idx].title = title
             saveConversations()
+        }
+    }
+    
+    func registerSubagent(id: UUID, role: String) {
+        let subagent = ActiveSubagent(id: id, role: role, startTime: Date(), status: "Initializing...")
+        activeSubagents.append(subagent)
+    }
+    
+    func removeSubagent(id: UUID) {
+        activeSubagents.removeAll(where: { $0.id == id })
+    }
+    
+    func updateSubagentStatus(id: UUID, status: String) {
+        if let idx = activeSubagents.firstIndex(where: { $0.id == id }) {
+            activeSubagents[idx].status = status
         }
     }
     

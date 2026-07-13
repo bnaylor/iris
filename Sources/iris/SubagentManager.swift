@@ -22,6 +22,7 @@ final class SubagentManager: @unchecked Sendable {
         await MainActor.run {
             appState.createNewConversation(id: subagentId)
             appState.updateConversationTitle(id: subagentId, title: "Subagent: \(role)")
+            appState.registerSubagent(id: subagentId, role: role)
         }
         
         let tier: ModelTier
@@ -60,6 +61,10 @@ final class SubagentManager: @unchecked Sendable {
         
         // Kick off the first turn
         await engine.processInput(task, source: "System", conversationId: subagentId)
+        
+        await MainActor.run {
+            appState.removeSubagent(id: subagentId)
+        }
         
         if let finalSummary = await holder.getSummary() {
             return finalSummary

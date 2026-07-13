@@ -6,6 +6,7 @@ struct ChatView: View {
     @State var state = AppState()
     @State private var inputText = ""
     @State private var selectedMessageIDs = Set<UUID>()
+    @State private var showSubagents = false
     @Environment(\.openSettings) private var openSettings
     
     var body: some View {
@@ -224,6 +225,29 @@ struct ChatView: View {
             } else {
                 Text("Select or create a conversation.")
                     .foregroundColor(.secondary)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    showSubagents.toggle()
+                }) {
+                    ZStack {
+                        Image(systemName: "cpu")
+                        if state.activeSubagents.count > 0 {
+                            Text("\(state.activeSubagents.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(3)
+                                .background(Color.red)
+                                .clipShape(Circle())
+                                .offset(x: 8, y: -8)
+                        }
+                    }
+                }
+                .popover(isPresented: $showSubagents) {
+                    SubagentPopoverView(appState: state)
+                }
             }
         }
         .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)

@@ -272,9 +272,15 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                     }
                 }
                 
-                await MainActor.run { localState?.isThinking = true }
+                await MainActor.run { 
+                    localState?.isThinking = true 
+                    localState?.updateSubagentStatus(id: conversationId, status: "Thinking...")
+                }
                 let response = try await client.generateContent(request: activeRequest, tier: modelTier)
-                await MainActor.run { localState?.isThinking = false }
+                await MainActor.run { 
+                    localState?.isThinking = false 
+                    localState?.updateSubagentStatus(id: conversationId, status: "Executing...")
+                }
                 
                 let afterModelDecision = await HookManager.shared.fireAfterModel(response: response)
                 if case .block(let reason) = afterModelDecision {
