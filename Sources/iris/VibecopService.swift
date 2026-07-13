@@ -32,8 +32,8 @@ final class VibecopService: @unchecked Sendable {
         // In reality, this config should come from UserDefaults (ConfigManager).
         let config = AuxiliaryModelConfig(
             role: "vibecop",
-            engineType: .ollama, // Hardcoding to ollama for initial testing based on user's preference
-            modelPathOrName: "gemma2:9b" // Standard Ollama model as an example fallback
+            engineType: .ollama,
+            modelPathOrName: ConfigManager.shared.vibecopModel
         )
         
         let engine = try await manager.getEngine(for: "vibecop", config: config)

@@ -61,6 +61,15 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.bottom)
+                
+                Section(header: Text("Vibecop (Local Evaluation)").font(.headline)) {
+                    TextField("Ollama Model", text: $config.vibecopModel)
+                        .help("The Ollama model to use for Vibecop background evaluation (e.g. llama3.2, gemma2:9b)")
+                    Text("Vibecop runs periodically in the background using local Ollama to evaluate the conversation state.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom)
             }
             .padding(20)
             .tabItem {

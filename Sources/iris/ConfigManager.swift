@@ -49,6 +49,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(sandboxImage, forKey: "SANDBOX_IMAGE") }
     }
     
+    var vibecopModel: String {
+        didSet { UserDefaults.standard.set(vibecopModel, forKey: "VIBECOP_MODEL") }
+    }
+    
     init() {
         self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
         self.modelEasy = UserDefaults.standard.string(forKey: "MODEL_EASY") ?? "gemini-3.1-flash-lite"
@@ -61,6 +65,9 @@ class ConfigManager: @unchecked Sendable {
         self.googleTokenExpiry = UserDefaults.standard.double(forKey: "GOOGLE_TOKEN_EXPIRY")
         self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
         self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
+        
+        let savedVibecop = UserDefaults.standard.string(forKey: "VIBECOP_MODEL") ?? ""
+        self.vibecopModel = savedVibecop.isEmpty ? "llama3.2" : savedVibecop
     }
     
     var isConfigured: Bool {
