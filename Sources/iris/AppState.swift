@@ -211,6 +211,15 @@ class AppState {
                 isThinking = false
             }
             return
+        } else if trimmed.hasPrefix("/rename") {
+            appendMessage(role: .system, content: "Triggering automatic conversation rename...", to: convId)
+            isThinking = true
+            let renamePrompt = "System Event [Rename Trigger]: Evaluate the conversation history and use the `rename_conversation` tool to assign a short, descriptive title (1-4 words) that captures the true gist of this conversation."
+            Task {
+                await engine.processInput(renamePrompt, source: "System", conversationId: convId)
+                isThinking = false
+            }
+            return
         }
         
         appendMessage(role: .user, content: messageContent, to: convId)
@@ -220,7 +229,10 @@ class AppState {
             conversations[idx].messageCountSinceReflection += 1
             saveConversations()
             
+            let userMessagesCount = conversations[idx].messages.filter { $0.role == .user }.count
+            let shouldRename = userMessagesCount == 3 && conversations[idx].messageCountSinceReflection == 3
             let shouldReflect = conversations[idx].messageCountSinceReflection >= 30
+            
             if shouldReflect {
                 conversations[idx].messageCountSinceReflection = 0
                 saveConversations()
@@ -233,6 +245,16 @@ class AppState {
                     appendMessage(role: .system, content: "Triggering automatic memory reflection...", to: convId)
                     isThinking = true
                     await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
+                    isThinking = false
+                }
+            } else if shouldRename {
+                Task {
+                    await engine.processInput(messageContent, source: "UI", conversationId: convId)
+                    
+                    let renamePrompt = "System Event [Rename Trigger]: Evaluate the conversation history and use the `rename_conversation` tool to assign a short, descriptive title (1-4 words) that captures the true gist of this conversation."
+                    appendMessage(role: .system, content: "Triggering automatic conversation rename...", to: convId)
+                    isThinking = true
+                    await engine.processInput(renamePrompt, source: "System", conversationId: convId)
                     isThinking = false
                 }
             } else {
@@ -345,6 +367,13 @@ class AppState {
     private func saveConversations() {
         if let data = try? JSONEncoder().encode(conversations) {
             UserDefaults.standard.set(data, forKey: "iris_conversations")
+        }
+    }
+    
+    func renameConversation(id: UUID, newTitle: String) {
+        if let idx = conversations.firstIndex(where: { $0.id == id }) {
+            conversations[idx].title = newTitle
+            saveConversations()
         }
     }
     

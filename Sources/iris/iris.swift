@@ -144,6 +144,18 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         ))
         
         toolsList.append(FunctionDeclaration(
+            name: "rename_conversation",
+            description: "Rename the current conversation to a short, descriptive title. Use this when instructed by a System Event or when the conversation topic has fundamentally changed.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "title": Schema(type: "STRING", description: "The new title for the conversation (1-4 words)")
+                ],
+                required: ["title"]
+            )
+        ))
+        
+        toolsList.append(FunctionDeclaration(
             name: "invoke_subagent",
             description: "Spawn an isolated subagent with a constrained persona to execute a task in parallel. Blocks until the subagent completes. Use this for complex multi-step tasks, code reviews, or security audits to preserve context quality.",
             parameters: Schema(
@@ -340,6 +352,9 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                             
                             await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
                             result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
+                        } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"] {
+                            await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
+                            result = "Conversation renamed to '\(newTitle)'."
                         } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] {
                             let minute = Int(functionCall.args["minute"] ?? "")
                             let hour = Int(functionCall.args["hour"] ?? "")
