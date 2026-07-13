@@ -1,4 +1,4 @@
-# 🌈 Iris: The Native macOS Agent Harness
+# 🌈 Iris: Native macOS Agent Harness
 
 Iris is a lightweight, compiled, native macOS agent harness designed to run autonomous AI workflows locally without heavy runtime dependencies (like Node/npm) that might be blocked by enterprise endpoint management.
 
