@@ -484,8 +484,16 @@ When building features, adding functionality, or modifying behavior, you MUST ad
     }
 }
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        // Bypass static destructors in llama.cpp ggml-metal to prevent GGML_ASSERT crash on exit
+        _exit(0)
+    }
+}
+
 @main
 struct IrisApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
