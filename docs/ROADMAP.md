@@ -22,7 +22,7 @@
 - [x] Select a set of conversation turns in chat, "Export to Markdown"
     - [x] Automatically put markdown into the clipboard when they are selected and copied
 - [x] token-tracking, show in the ui
-- [ ] Add settings for different models for easy/medium/hard effort levels
-    - [ ] iris auto-selects the model for subagents based on task complexity
+- [x] Add settings for different models for easy/medium/hard effort levels
+    - [x] iris auto-selects the model for subagents based on task complexity
 - [ ] UI element to monitor active subagents (pane, tab, popup, something that gives more info about what subagents are running, for how long, what they're doing, etc.)
 
