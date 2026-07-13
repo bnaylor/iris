@@ -34,6 +34,8 @@ final class AuxiliaryModelManager: @unchecked Sendable {
             engine = OllamaEngine()
         case .mlx:
             engine = MLXEngine.shared
+        case .cloud:
+            engine = CloudAuxiliaryEngine()
         }
         
         try await engine.loadModel(config: config)

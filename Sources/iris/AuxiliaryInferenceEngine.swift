@@ -4,6 +4,7 @@ enum AuxiliaryEngineType: String, Codable {
     case llamaCPP = "llama_cpp"
     case ollama = "ollama"
     case mlx = "mlx"
+    case cloud = "cloud"
 }
 
 struct AuxiliaryModelConfig: Codable {

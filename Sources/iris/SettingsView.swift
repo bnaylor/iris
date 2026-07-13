@@ -74,7 +74,7 @@ struct SettingsView: View {
                 }
                 .padding(.bottom)
                 
-                Section(header: Text("Vibecop (Local Evaluation)").font(.headline)) {
+                Section(header: Text("Vibecop Guardian").font(.headline)) {
                     Toggle("Enable Vibecop", isOn: $config.enableVibecop)
                     
                     if config.enableVibecop {
@@ -82,6 +82,7 @@ struct SettingsView: View {
                             Text("Llama.cpp (Embedded)").tag("llama_cpp")
                             Text("Ollama (Local Daemon)").tag("ollama")
                             Text("MLX (Apple Silicon)").tag("mlx")
+                            Text("Cloud (Primary Provider)").tag("cloud")
                         }
                         
                         if config.vibecopEngine == "llama_cpp" {
