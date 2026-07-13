@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var availableModels: [String] = []
     @State private var isInstallingContainer = false
     @State private var installError: String?
+    @State private var downloader = ModelDownloader.shared
     
     var body: some View {
         TabView {
@@ -63,11 +64,56 @@ struct SettingsView: View {
                 .padding(.bottom)
                 
                 Section(header: Text("Vibecop (Local Evaluation)").font(.headline)) {
-                    TextField("Ollama Model", text: $config.vibecopModel)
-                        .help("The Ollama model to use for Vibecop background evaluation (e.g. llama3.2, gemma2:9b)")
-                    Text("Vibecop runs periodically in the background using local Ollama to evaluate the conversation state.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Toggle("Enable Vibecop", isOn: $config.enableVibecop)
+                    
+                    if config.enableVibecop {
+                        Picker("Engine", selection: $config.vibecopEngine) {
+                            Text("Llama.cpp (Embedded)").tag("llama_cpp")
+                            Text("Ollama (Local Daemon)").tag("ollama")
+                            Text("MLX (Apple Silicon)").tag("mlx")
+                        }
+                        
+                        if config.vibecopEngine == "llama_cpp" {
+                            TextField("GGUF Model", text: $config.vibecopModel)
+                                .help("The GGUF model file name (must be in ~/.iris/models/)")
+                            
+                            let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
+                            if !isDownloaded {
+                                if downloader.isDownloading {
+                                    HStack {
+                                        ProgressView(value: downloader.progress)
+                                            .progressViewStyle(.linear)
+                                        Text("\(Int(downloader.progress * 100))%")
+                                            .font(.caption)
+                                    }
+                                } else {
+                                    Button("Download Model") {
+                                        Task {
+                                            await downloader.downloadModel(name: config.vibecopModel)
+                                        }
+                                    }
+                                    Text("This will download approx. 1-2GB of weights to your disk.")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                                
+                                if let error = downloader.error {
+                                    Text("Error: \(error)").foregroundColor(.red).font(.caption)
+                                }
+                            } else {
+                                Text("✅ Model is downloaded and ready.")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        } else {
+                            TextField("Ollama Model", text: $config.vibecopModel)
+                                .help("The Ollama model to use for Vibecop background evaluation (e.g. llama3.2, gemma2:9b)")
+                        }
+                        
+                        Text("Vibecop runs periodically in the background to evaluate the conversation state.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding(.bottom)
             }
@@ -163,7 +209,7 @@ struct SettingsView: View {
                 Label("Advanced", systemImage: "lock.shield")
             }
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 600, minHeight: 450)
     }
     
     private func fetchModels() {

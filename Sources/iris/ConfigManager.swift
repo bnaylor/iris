@@ -49,6 +49,14 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(sandboxImage, forKey: "SANDBOX_IMAGE") }
     }
     
+    var enableVibecop: Bool {
+        didSet { UserDefaults.standard.set(enableVibecop, forKey: "ENABLE_VIBECOP") }
+    }
+    
+    var vibecopEngine: String {
+        didSet { UserDefaults.standard.set(vibecopEngine, forKey: "VIBECOP_ENGINE") }
+    }
+    
     var vibecopModel: String {
         didSet { UserDefaults.standard.set(vibecopModel, forKey: "VIBECOP_MODEL") }
     }
@@ -66,8 +74,12 @@ class ConfigManager: @unchecked Sendable {
         self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
         self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
         
+        self.enableVibecop = UserDefaults.standard.bool(forKey: "ENABLE_VIBECOP")
+        let savedEngine = UserDefaults.standard.string(forKey: "VIBECOP_ENGINE") ?? ""
+        self.vibecopEngine = savedEngine.isEmpty ? "llama_cpp" : savedEngine
+        
         let savedVibecop = UserDefaults.standard.string(forKey: "VIBECOP_MODEL") ?? ""
-        self.vibecopModel = savedVibecop.isEmpty ? "llama3.2" : savedVibecop
+        self.vibecopModel = savedVibecop.isEmpty ? "Llama-3.2-1B-Instruct-Q4_K_M.gguf" : savedVibecop
     }
     
     var isConfigured: Bool {

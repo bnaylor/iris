@@ -26,13 +26,16 @@ final class VibecopService: @unchecked Sendable {
     """
     
     func evaluateAction(toolName: String, details: String, workspace: String?) async throws -> VibecopDecision {
+        guard ConfigManager.shared.enableVibecop else {
+            return VibecopDecision(decision: "APPROVE", reason: "Vibecop is disabled in settings.")
+        }
+        
         let manager = AuxiliaryModelManager.shared
         
-        // Ensure we have a Vibecop model assigned. For testing, we fallback to Ollama.
-        // In reality, this config should come from UserDefaults (ConfigManager).
+        let engineType = AuxiliaryEngineType(rawValue: ConfigManager.shared.vibecopEngine) ?? .llamaCPP
         let config = AuxiliaryModelConfig(
             role: "vibecop",
-            engineType: .ollama,
+            engineType: engineType,
             modelPathOrName: ConfigManager.shared.vibecopModel
         )
         
