@@ -57,7 +57,7 @@ struct SettingsView: View {
                 TextField("Client ID", text: $config.googleClientID)
                 SecureField("Client Secret", text: $config.googleClientSecret)
                 
-                Text("These credentials enable external tools for Google Calendar, Docs, and Sheets.")
+                Text("These credentials enable external tools for Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
