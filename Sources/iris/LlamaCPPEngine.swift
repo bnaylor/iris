@@ -73,7 +73,7 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
         var generatedText = ""
         
         for _ in 0..<128 { // Max tokens to generate
-            guard let logits = llama_get_logits_ith(ctx, batch.n_tokens - 1) else { throw LlamaError.decodingFailed }
+            guard let logits = llama_get_logits_ith(ctx, -1) else { throw LlamaError.decodingFailed }
             
             let vocabSize = llama_vocab_n_tokens(v)
             var maxLogit = logits[0]
