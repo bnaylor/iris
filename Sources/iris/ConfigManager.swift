@@ -13,6 +13,10 @@ public enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
 class ConfigManager: @unchecked Sendable {
     @ObservationIgnored static let shared = ConfigManager()
     
+    var copyChatsAsMarkdown: Bool {
+        didSet { UserDefaults.standard.set(copyChatsAsMarkdown, forKey: "COPY_CHATS_AS_MARKDOWN") }
+    }
+    
     var primaryProvider: String {
         didSet { UserDefaults.standard.set(primaryProvider, forKey: "PRIMARY_PROVIDER") }
     }
@@ -137,6 +141,12 @@ class ConfigManager: @unchecked Sendable {
     init() {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
+        
+        if UserDefaults.standard.object(forKey: "COPY_CHATS_AS_MARKDOWN") != nil {
+            self.copyChatsAsMarkdown = UserDefaults.standard.bool(forKey: "COPY_CHATS_AS_MARKDOWN")
+        } else {
+            self.copyChatsAsMarkdown = true
+        }
         
         geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
         geminiBaseURL = UserDefaults.standard.string(forKey: "GEMINI_BASE_URL") ?? ""

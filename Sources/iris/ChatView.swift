@@ -85,7 +85,10 @@ struct ChatView: View {
                                 .listRowBackground(Color.clear)
                                 .contextMenu {
                                     Button("Copy as Markdown") {
-                                        copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv)
+                                        copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv, asMarkdown: true)
+                                    }
+                                    Button("Copy as Text") {
+                                        copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv, asMarkdown: false)
                                     }
                                 }
                                 .simultaneousGesture(TapGesture().onEnded {
@@ -130,17 +133,22 @@ struct ChatView: View {
                             
                             if selectedMessages.isEmpty { return [] }
                             
-                            var markdown = ""
+                            var text = ""
+                            let asMarkdown = ConfigManager.shared.copyChatsAsMarkdown
                             for msg in selectedMessages {
                                 let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
-                                markdown += "### \(roleName)\n"
-                                if msg.role == .system {
-                                    markdown += "`\(msg.content)`\n\n"
+                                if asMarkdown {
+                                    text += "### \(roleName)\n"
+                                    if msg.role == .system {
+                                        text += "`\(msg.content)`\n\n"
+                                    } else {
+                                        text += "\(msg.content)\n\n"
+                                    }
                                 } else {
-                                    markdown += "\(msg.content)\n\n"
+                                    text += "\(roleName):\n\(msg.content)\n\n"
                                 }
                             }
-                            return [NSItemProvider(object: markdown as NSString)]
+                            return [NSItemProvider(object: text as NSString)]
                         }
                         .background(Color(NSColor.textBackgroundColor))
                         .onChange(of: conv.messages.count) { _, _ in
@@ -359,7 +367,7 @@ struct ChatView: View {
         }
     }
     
-    private func copyMessagesToClipboard(ids: Set<UUID>, from conv: Conversation) {
+    private func copyMessagesToClipboard(ids: Set<UUID>, from conv: Conversation, asMarkdown: Bool) {
         var selectedMessages: [ChatMessage] = []
         for item in groupedMessages(for: conv) {
             if ids.contains(item.id) {
@@ -372,20 +380,24 @@ struct ChatView: View {
         
         guard !selectedMessages.isEmpty else { return }
         
-        var markdown = ""
+        var text = ""
         for msg in selectedMessages {
             let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
-            markdown += "### \(roleName)\n"
-            if msg.role == .system {
-                markdown += "`\(msg.content)`\n\n"
+            if asMarkdown {
+                text += "### \(roleName)\n"
+                if msg.role == .system {
+                    text += "`\(msg.content)`\n\n"
+                } else {
+                    text += "\(msg.content)\n\n"
+                }
             } else {
-                markdown += "\(msg.content)\n\n"
+                text += "\(roleName):\n\(msg.content)\n\n"
             }
         }
         
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(markdown, forType: .string)
+        pasteboard.setString(text, forType: .string)
     }
     
     private func submit() {

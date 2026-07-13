@@ -15,6 +15,12 @@ struct SettingsView: View {
                     KeyboardShortcuts.Recorder("Toggle Iris:", name: .toggleIris)
                 }
                 .padding(.bottom)
+                
+                Section(header: Text("Preferences").font(.headline)) {
+                    Toggle("Copy chats as Markdown (default)", isOn: $config.copyChatsAsMarkdown)
+                        .help("If disabled, copies will default to plain text without markdown formatting.")
+                }
+                .padding(.bottom)
             }
             .padding(20)
             .tabItem {
