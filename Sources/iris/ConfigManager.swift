@@ -3,7 +3,7 @@ import SwiftUI
 
 @Observable
 class ConfigManager: @unchecked Sendable {
-    @ObservationIgnored nonisolated(unsafe) static let shared = ConfigManager()
+    @ObservationIgnored static let shared = ConfigManager()
     
     var geminiAPIKey: String {
         didSet { UserDefaults.standard.set(geminiAPIKey, forKey: "GEMINI_API_KEY") }

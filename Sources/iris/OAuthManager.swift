@@ -12,7 +12,7 @@ actor ContinuationState {
 }
 
 final class OAuthManager: @unchecked Sendable {
-    nonisolated(unsafe) static let shared = OAuthManager()
+    static let shared = OAuthManager()
     let scopes = [
         "https://www.googleapis.com/auth/calendar",
         "https://www.googleapis.com/auth/userinfo.email",
