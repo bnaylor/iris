@@ -24,5 +24,5 @@
 - [x] token-tracking, show in the ui
 - [x] Add settings for different models for easy/medium/hard effort levels
     - [x] iris auto-selects the model for subagents based on task complexity
-- [ ] UI element to monitor active subagents (pane, tab, popup, something that gives more info about what subagents are running, for how long, what they're doing, etc.)
+- [x] UI element to monitor active subagents (pane, tab, popup, something that gives more info about what subagents are running, for how long, what they're doing, etc.)
 
