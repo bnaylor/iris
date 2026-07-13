@@ -11,7 +11,6 @@ enum LlamaError: Error {
 
 final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     private var model: OpaquePointer?
-    private var context: OpaquePointer?
     private var vocab: OpaquePointer?
     
     init() async throws {
@@ -28,22 +27,10 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
         self.model = loadedModel
         self.vocab = llama_model_get_vocab(loadedModel)
         
-        var contextParams = llama_context_default_params()
-        contextParams.n_ctx = 1024
-        contextParams.n_batch = 512
-        
-        guard let ctx = llama_init_from_model(loadedModel, contextParams) else {
-            throw LlamaError.contextCreationFailed
-        }
-        self.context = ctx
         print("LlamaCPPEngine loaded model at \(path)")
     }
     
     func unloadModel() async {
-        if let ctx = context {
-            llama_free(ctx)
-            context = nil
-        }
         if let m = model {
             llama_model_free(m)
             model = nil
@@ -56,9 +43,18 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     }
     
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
-        guard let ctx = context, let _ = model, let v = vocab else {
+        guard let m = model, let v = vocab else {
             throw LlamaError.modelLoadFailed
         }
+        
+        var contextParams = llama_context_default_params()
+        contextParams.n_ctx = 1024
+        contextParams.n_batch = 512
+        
+        guard let ctx = llama_init_from_model(m, contextParams) else {
+            throw LlamaError.contextCreationFailed
+        }
+        defer { llama_free(ctx) }
         
         let utf8Count = prompt.utf8.count
         let maxTokenCount = utf8Count + 2
