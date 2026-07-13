@@ -8,126 +8,153 @@ struct SettingsView: View {
     @State private var installError: String?
     
     var body: some View {
-        Form {
-            Section(header: Text("Global Shortcuts").font(.headline)) {
-                KeyboardShortcuts.Recorder("Toggle Iris:", name: .toggleIris)
+        TabView {
+            // MARK: - General Tab
+            Form {
+                Section(header: Text("Global Shortcuts").font(.headline)) {
+                    KeyboardShortcuts.Recorder("Toggle Iris:", name: .toggleIris)
+                }
+                .padding(.bottom)
             }
-            .padding(.bottom)
-            
-            Section(header: Text("LLM Providers").font(.headline)) {
-                SecureField("Gemini API Key", text: $config.geminiAPIKey)
-                    .help("Required for Iris to function.")
-                    .onChange(of: config.geminiAPIKey) { _, _ in
-                        fetchModels()
-                    }
-                
-                Picker("Easy Subagent Model", selection: $config.modelEasy) {
-                    ForEach(availableModels, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
-                }
-                Picker("Primary / Medium Model", selection: $config.modelMedium) {
-                    ForEach(availableModels, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
-                }
-                Picker("Hard Subagent Model", selection: $config.modelHard) {
-                    ForEach(availableModels, id: \.self) { model in
-                        Text(model).tag(model)
-                    }
-                }
-                .onAppear {
-                    if availableModels.isEmpty {
-                        availableModels = [
-                            "gemini-3.1-flash-lite", 
-                            "gemini-3.5-flash", 
-                            "gemini-3.1-pro-preview", 
-                            "gemini-2.5-flash"
-                        ]
-                        if !availableModels.contains(config.modelEasy) { availableModels.append(config.modelEasy) }
-                        if !availableModels.contains(config.modelMedium) { availableModels.append(config.modelMedium) }
-                        if !availableModels.contains(config.modelHard) { availableModels.append(config.modelHard) }
-                    }
-                    fetchModels()
-                }
+            .padding(20)
+            .tabItem {
+                Label("General", systemImage: "gearshape")
             }
-            .padding(.bottom)
             
-            Section(header: Text("Google Workspace (OAuth)").font(.headline)) {
-                TextField("Client ID", text: $config.googleClientID)
-                SecureField("Client Secret", text: $config.googleClientSecret)
-                
-                Text("These credentials enable external tools for Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                if !config.googleAccessToken.isEmpty {
-                    Text("✅ Connected to Google Workspace")
-                        .foregroundColor(.green)
-                        .font(.caption)
-                }
-                
-                Button("Connect to Google") {
-                    Task {
-                        do {
-                            try await OAuthManager.shared.startOAuthFlow()
-                        } catch {
-                            print("OAuth Error: \(error)")
+            // MARK: - Models Tab
+            Form {
+                Section(header: Text("LLM Providers").font(.headline)) {
+                    SecureField("Gemini API Key", text: $config.geminiAPIKey)
+                        .help("Required for Iris to function.")
+                        .onChange(of: config.geminiAPIKey) { _, _ in
+                            fetchModels()
+                        }
+                    
+                    Picker("Easy Subagent Model", selection: $config.modelEasy) {
+                        ForEach(availableModels, id: \.self) { model in
+                            Text(model).tag(model)
                         }
                     }
+                    Picker("Primary / Medium Model", selection: $config.modelMedium) {
+                        ForEach(availableModels, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                    }
+                    Picker("Hard Subagent Model", selection: $config.modelHard) {
+                        ForEach(availableModels, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                    }
+                    .onAppear {
+                        if availableModels.isEmpty {
+                            availableModels = [
+                                "gemini-3.1-flash-lite", 
+                                "gemini-3.5-flash", 
+                                "gemini-3.1-pro-preview", 
+                                "gemini-2.5-flash"
+                            ]
+                            if !availableModels.contains(config.modelEasy) { availableModels.append(config.modelEasy) }
+                            if !availableModels.contains(config.modelMedium) { availableModels.append(config.modelMedium) }
+                            if !availableModels.contains(config.modelHard) { availableModels.append(config.modelHard) }
+                        }
+                        fetchModels()
+                    }
                 }
-                .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
+                .padding(.bottom)
             }
-            .padding(.bottom)
+            .padding(20)
+            .tabItem {
+                Label("Models", systemImage: "cpu")
+            }
             
-            Section(header: Text("Sandboxing").font(.headline)) {
-                Toggle("Enable sandboxing for subagents", isOn: $config.enableSandboxing)
-                    .onChange(of: config.enableSandboxing) { _, newValue in
-                        if newValue && !SandboxingManager.shared.isContainerInstalled {
-                            // Turn it back off until installed
-                            config.enableSandboxing = false
-                            isInstallingContainer = true
-                            installError = nil
-                            
-                            SandboxingManager.shared.installContainer { success, error in
-                                isInstallingContainer = false
-                                if success {
-                                    config.enableSandboxing = true
-                                } else {
-                                    installError = error
-                                }
+            // MARK: - Integrations Tab
+            Form {
+                Section(header: Text("Google Workspace (OAuth)").font(.headline)) {
+                    TextField("Client ID", text: $config.googleClientID)
+                    SecureField("Client Secret", text: $config.googleClientSecret)
+                    
+                    Text("These credentials enable external tools for Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if !config.googleAccessToken.isEmpty {
+                        Text("✅ Connected to Google Workspace")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    }
+                    
+                    Button("Connect to Google") {
+                        Task {
+                            do {
+                                try await OAuthManager.shared.startOAuthFlow()
+                            } catch {
+                                print("OAuth Error: \(error)")
                             }
                         }
                     }
-                
-                if config.enableSandboxing {
-                    TextField("Sandbox Image", text: $config.sandboxImage)
-                        .help("The Docker/OCI image to use for sandboxed commands (e.g., ubuntu:latest)")
+                    .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
                 }
-                
-                if isInstallingContainer {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                        Text("Downloading and installing Apple container...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                .padding(.bottom)
+            }
+            .padding(20)
+            .tabItem {
+                Label("Integrations", systemImage: "link")
+            }
+            
+            // MARK: - Advanced Tab
+            Form {
+                Section(header: Text("Sandboxing").font(.headline)) {
+                    Toggle("Enable sandboxing for subagents", isOn: $config.enableSandboxing)
+                        .onChange(of: config.enableSandboxing) { _, newValue in
+                            if newValue && !SandboxingManager.shared.isContainerInstalled {
+                                // Turn it back off until installed
+                                config.enableSandboxing = false
+                                isInstallingContainer = true
+                                installError = nil
+                                
+                                SandboxingManager.shared.installContainer { success, error in
+                                    isInstallingContainer = false
+                                    if success {
+                                        config.enableSandboxing = true
+                                    } else {
+                                        installError = error
+                                    }
+                                }
+                            }
+                        }
+                    
+                    if config.enableSandboxing {
+                        TextField("Sandbox Image", text: $config.sandboxImage)
+                            .help("The Docker/OCI image to use for sandboxed commands (e.g., ubuntu:latest)")
                     }
-                }
-                
-                if let error = installError {
-                    Text("Error: \(error)")
-                        .foregroundColor(.red)
+                    
+                    if isInstallingContainer {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                            Text("Downloading and installing Apple container...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if let error = installError {
+                        Text("Error: \(error)")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                    
+                    Text("Runs dangerous commands like web searches in lightweight Linux virtual machines on your Mac.")
                         .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                
-                Text("Runs dangerous commands like web searches in lightweight Linux virtual machines on your Mac.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            }
+            .padding(20)
+            .tabItem {
+                Label("Advanced", systemImage: "lock.shield")
             }
         }
-        .padding(20)
-        .frame(minWidth: 450, minHeight: 350)
+        .frame(minWidth: 500, minHeight: 400)
     }
     
     private func fetchModels() {
