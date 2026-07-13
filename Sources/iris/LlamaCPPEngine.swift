@@ -63,31 +63,12 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
         let tokenCount = llama_tokenize(v, prompt, Int32(utf8Count), &tokens, Int32(maxTokenCount), true, true)
         guard tokenCount > 0 else { throw LlamaError.tokenizationFailed }
         
-        let promptTokens = Array(tokens.prefix(Int(tokenCount)))
-        
-        var batch = llama_batch_init(512, 0, 1)
-        defer { llama_batch_free(batch) }
-        
-        batch.n_tokens = Int32(promptTokens.count)
-        for i in 0..<promptTokens.count {
-            let idx = Int(i)
-            batch.token[idx] = promptTokens[idx]
-            batch.pos[idx] = Int32(i)
-            batch.n_seq_id[idx] = 1
-            if let seq_ids = batch.seq_id, let seq_id = seq_ids[idx] {
-                seq_id[0] = 0
-            }
-            batch.logits[idx] = 0
-        }
-        
-        if batch.n_tokens > 0 {
-            batch.logits[Int(batch.n_tokens) - 1] = 1
-        }
+        var promptTokens = Array(tokens.prefix(Int(tokenCount)))
+        let batch = llama_batch_get_one(&promptTokens, Int32(promptTokens.count))
         
         guard llama_decode(ctx, batch) == 0 else { throw LlamaError.decodingFailed }
         
         var generatedText = ""
-        var n_cur = batch.n_tokens
         
         for _ in 0..<128 { // Max tokens to generate
             guard let logits = llama_get_logits_ith(ctx, batch.n_tokens - 1) else { throw LlamaError.decodingFailed }
@@ -112,17 +93,10 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
                 generatedText += String(decoding: nullTruncated, as: UTF8.self)
             }
             
-            batch.n_tokens = 1
-            batch.token[0] = nextToken
-            batch.pos[0] = n_cur
-            batch.n_seq_id[0] = 1
-            if let seq_ids = batch.seq_id, let seq_id = seq_ids[0] {
-                seq_id[0] = 0
-            }
-            batch.logits[0] = 1
-            n_cur += 1
+            var tokenArr = [nextToken]
+            let singleBatch = llama_batch_get_one(&tokenArr, 1)
             
-            guard llama_decode(ctx, batch) == 0 else { throw LlamaError.decodingFailed }
+            guard llama_decode(ctx, singleBatch) == 0 else { throw LlamaError.decodingFailed }
         }
         
         return generatedText
