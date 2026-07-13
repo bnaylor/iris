@@ -143,6 +143,13 @@ struct ChatView: View {
                                 }
                             }
                         }
+                        .onChange(of: conv.messages.last?.content) { _, _ in
+                            if let last = conv.messages.last {
+                                withAnimation {
+                                    proxy.scrollTo(last.id, anchor: .bottom)
+                                }
+                            }
+                        }
                         .onChange(of: state.isThinking) { _, _ in
                             if state.isThinking {
                                 withAnimation {
@@ -269,6 +276,20 @@ struct ChatView: View {
         
         if panel.runModal() == .OK, let url = panel.url {
             state.setWorkspace(for: id, path: url.path)
+            
+            let fm = FileManager.default
+            let irisDir = url.appendingPathComponent(".iris")
+            let vibecopPath = irisDir.appendingPathComponent("vibecop.md").path
+            
+            if !fm.fileExists(atPath: vibecopPath) {
+                if let contents = try? fm.contentsOfDirectory(atPath: url.path), !contents.isEmpty {
+                    state.appendMessage(role: .system, content: "Workspace linked to \(url.path).\n\n💡 Hint: No Vibecop Guardian config found for this workspace. Run `/vibecop init` to generate one.", to: id)
+                } else {
+                    state.appendMessage(role: .system, content: "Workspace linked to \(url.path).", to: id)
+                }
+            } else {
+                state.appendMessage(role: .system, content: "Workspace linked to \(url.path).", to: id)
+            }
         }
     }
     
