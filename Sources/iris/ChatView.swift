@@ -69,75 +69,98 @@ struct ChatView: View {
             if let activeConvIndex = state.activeConversationIndex {
                 let conv = state.conversations[activeConvIndex]
                 VStack(spacing: 0) {
-                    List(selection: $selectedMessageIDs) {
-                        ForEach(groupedMessages(for: conv)) { item in
-                            Group {
-                                switch item {
-                                case .single(let message):
-                                    MessageView(message: message)
-                                case .systemGroup(_, let messages):
-                                    SystemGroupView(messages: messages)
-                                }
-                            }
-                            .tag(item.id)
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .contextMenu {
-                                Button("Copy as Markdown") {
-                                    copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv)
-                                }
-                            }
-                            .simultaneousGesture(TapGesture().onEnded {
-                                if selectedMessageIDs.contains(item.id) {
-                                    DispatchQueue.main.async {
-                                        selectedMessageIDs.remove(item.id)
+                    ScrollViewReader { proxy in
+                        List(selection: $selectedMessageIDs) {
+                            ForEach(groupedMessages(for: conv)) { item in
+                                Group {
+                                    switch item {
+                                    case .single(let message):
+                                        MessageView(message: message)
+                                    case .systemGroup(_, let messages):
+                                        SystemGroupView(messages: messages)
                                     }
                                 }
-                            })
-                        }
-                        
-                        if state.isThinking {
-                            HStack {
-                                TypingIndicator()
-                                Text("Iris is thinking...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                .tag(item.id)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .contextMenu {
+                                    Button("Copy as Markdown") {
+                                        copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv)
+                                    }
+                                }
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    if selectedMessageIDs.contains(item.id) {
+                                        DispatchQueue.main.async {
+                                            selectedMessageIDs.remove(item.id)
+                                        }
+                                    }
+                                })
                             }
-                            .padding(.leading, 12)
-                            .padding(.top, 4)
-                            .id("thinkingIndicator")
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            
+                            if state.isThinking {
+                                HStack {
+                                    TypingIndicator()
+                                    Text("Iris is thinking...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.leading, 12)
+                                .padding(.top, 4)
+                                .id("thinkingIndicator")
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                            
+                            Color.clear.frame(height: 1).id("bottomAnchor")
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
-                    }
-                    .listStyle(.plain)
-                    .defaultScrollAnchor(.bottom)
-                    .onCopyCommand {
-                        var selectedMessages: [ChatMessage] = []
-                        for item in groupedMessages(for: conv) {
-                            if selectedMessageIDs.contains(item.id) {
-                                switch item {
-                                case .single(let msg): selectedMessages.append(msg)
-                                case .systemGroup(_, let msgs): selectedMessages.append(contentsOf: msgs)
+                        .listStyle(.plain)
+                        .defaultScrollAnchor(.bottom)
+                        .onCopyCommand {
+                            var selectedMessages: [ChatMessage] = []
+                            for item in groupedMessages(for: conv) {
+                                if selectedMessageIDs.contains(item.id) {
+                                    switch item {
+                                    case .single(let msg): selectedMessages.append(msg)
+                                    case .systemGroup(_, let msgs): selectedMessages.append(contentsOf: msgs)
+                                    }
+                                }
+                            }
+                            
+                            if selectedMessages.isEmpty { return [] }
+                            
+                            var markdown = ""
+                            for msg in selectedMessages {
+                                let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
+                                markdown += "### \(roleName)\n"
+                                if msg.role == .system {
+                                    markdown += "`\(msg.content)`\n\n"
+                                } else {
+                                    markdown += "\(msg.content)\n\n"
+                                }
+                            }
+                            return [NSItemProvider(object: markdown as NSString)]
+                        }
+                        .background(Color(NSColor.textBackgroundColor))
+                        .onChange(of: conv.messages.count) { _, _ in
+                            // Add a slight delay to ensure UI has rendered the new message before scrolling
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                withAnimation {
+                                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
                                 }
                             }
                         }
-                        
-                        if selectedMessages.isEmpty { return [] }
-                        
-                        var markdown = ""
-                        for msg in selectedMessages {
-                            let roleName = msg.role == .user ? "You" : (msg.role == .system ? "System" : "Iris")
-                            markdown += "### \(roleName)\n"
-                            if msg.role == .system {
-                                markdown += "`\(msg.content)`\n\n"
-                            } else {
-                                markdown += "\(msg.content)\n\n"
+                        .onChange(of: state.isThinking) { _, isThinking in
+                            if isThinking {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    withAnimation {
+                                        proxy.scrollTo("thinkingIndicator", anchor: .bottom)
+                                    }
+                                }
                             }
                         }
-                        return [NSItemProvider(object: markdown as NSString)]
                     }
-                    .background(Color(NSColor.textBackgroundColor))
                     
                     if let request = state.pendingApproval {
                         ApprovalBannerView(request: request, onResolve: { resolution in
