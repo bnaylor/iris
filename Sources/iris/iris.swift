@@ -324,8 +324,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                         }
                         
                         var result = ""
-                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] as? String {
-                            var currentWorkspace = path
+                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
+                            let currentWorkspace = path
                             
                             var extraHint = ""
                             let fm = FileManager.default
@@ -340,13 +340,13 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                             
                             await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
                             result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
-                        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] as? String {
-                            let minute = (functionCall.args["minute"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["minute"] ?? "")")
-                            let hour = (functionCall.args["hour"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["hour"] ?? "")")
-                            let day = (functionCall.args["day"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["day"] ?? "")")
-                            let month = (functionCall.args["month"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["month"] ?? "")")
-                            let weekday = (functionCall.args["weekday"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["weekday"] ?? "")")
-                            let intervalSeconds = (functionCall.args["intervalSeconds"] as? NSNumber)?.intValue ?? Int("\(functionCall.args["intervalSeconds"] ?? "")")
+                        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] {
+                            let minute = Int(functionCall.args["minute"] ?? "")
+                            let hour = Int(functionCall.args["hour"] ?? "")
+                            let day = Int(functionCall.args["day"] ?? "")
+                            let month = Int(functionCall.args["month"] ?? "")
+                            let weekday = Int(functionCall.args["weekday"] ?? "")
+                            let intervalSeconds = Int(functionCall.args["intervalSeconds"] ?? "")
                             
                             ScheduleManager.shared.schedule(
                                 conversationId: conversationId,
@@ -359,11 +359,11 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                                 intervalSeconds: intervalSeconds
                             )
                             result = "Job scheduled successfully. It will fire in the background."
-                        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] as? String {
+                        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] {
                             let vector = HolographicVector.encode(string: content)
                             try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
                             result = "Fact saved to holographic memory."
-                        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] as? String {
+                        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] {
                             let vector = HolographicVector.encode(string: query)
                             let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
                             if facts.isEmpty {
@@ -371,17 +371,17 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                             } else {
                                 result = facts.map { "- \($0.content)" }.joined(separator: "\n")
                             }
-                        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] as? String {
+                        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] {
                             MemoryManager.shared.updateUserProfile(content: content)
                             result = "User profile updated."
                         } else if functionCall.name == "reflect" {
                             result = "Reflection logged. Proceed with your next action."
                         } else if functionCall.name == "invoke_subagent", 
-                                  let role = functionCall.args["role"] as? String, 
-                                  let task = functionCall.args["task"] as? String,
-                                  let effort = functionCall.args["effort"] as? String {
+                                  let role = functionCall.args["role"], 
+                                  let task = functionCall.args["task"],
+                                  let effort = functionCall.args["effort"] {
                             result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
-                        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] as? String {
+                        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] {
                             await MainActor.run { 
                                 localState?.clearGoal(for: conversationId) 
                                 localState?.onSubagentComplete?(conversationId, summary)
@@ -390,10 +390,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                         } else {
                             var needsApproval = false
                             var details = ""
-                            if functionCall.name == "run_command", let cmd = functionCall.args["command"] as? String {
+                            if functionCall.name == "run_command", let cmd = functionCall.args["command"] {
                                 needsApproval = true
                                 details = cmd
-                            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] as? String {
+                            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] {
                                 needsApproval = true
                                 details = path
                             }
