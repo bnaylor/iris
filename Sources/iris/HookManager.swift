@@ -76,6 +76,16 @@ struct HookManager {
         _ = await fireEvent(eventName: "Notification", targetMatcher: "Notification", payload: try? JSONSerialization.data(withJSONObject: payload))
     }
     
+    func fireSessionStart(conversationId: UUID) async -> HookDecision {
+        let payload = ["conversationId": conversationId.uuidString]
+        return await fireEvent(eventName: "SessionStart", targetMatcher: "SessionStart", payload: try? JSONSerialization.data(withJSONObject: payload))
+    }
+    
+    func fireAfterAgent(output: String) async -> HookDecision {
+        let payload = ["output": output]
+        return await fireEvent(eventName: "AfterAgent", targetMatcher: "AfterAgent", payload: try? JSONSerialization.data(withJSONObject: payload))
+    }
+    
     private func fireEvent(eventName: String, targetMatcher: String, payload: Data?) async -> HookDecision {
         guard let config = config, let eventHooks = config.hooks[eventName] else {
             return .proceed(modifiedData: nil) // No hooks registered

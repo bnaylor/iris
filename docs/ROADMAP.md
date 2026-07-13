@@ -5,16 +5,16 @@
 - [x] Permissions check
 - [x] Tool hooks (Basic integration)
 - [x] Always allow / Always allow in project
-- [ ] Complete tool hook lifecycle (`BeforeModel`, `AfterModel`, `SessionStart`, etc.)
+- [x] Complete tool hook lifecycle (`BeforeModel`, `AfterModel`, `SessionStart`, `AfterAgent`, etc.)
 - [x] Built-in vibecop support
-- [ ] Other providers (anthropic, etc)
+- [x] Other providers (anthropic, openai, etc)
 - [x] Explicit hooks for USER/SOUL/etc updates (Implemented via OKF schema and /reflect grooming)
 - [x] Enhanced self-reflection (Periodic autonomous /reflect loop)
 - [x] Sandboxed web search agent
     - [x] `./prompt_injection_gemini.md` (Model armor - Tier 1 structural implemented)
         - [x] Tier 2 Local CoreML Classification
         - [x] Tier 3 Local Canary Probe
-- [ ] Use Apple silicon / foundational models?
+- [x] Use Apple silicon / foundational models?
 - [x] Plan / brainstorming mode.  Emulate / steal from superpowers.
 - [x] `/goal` support
 - [x] UI/UX Polish (Tool call rendering in history, polished animations)

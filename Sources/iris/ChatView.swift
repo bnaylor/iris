@@ -8,6 +8,7 @@ struct ChatView: View {
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     
     var body: some View {
         NavigationSplitView {
@@ -213,6 +214,14 @@ struct ChatView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    openWindow(id: "diagnostics")
+                }) {
+                    Image(systemName: "chart.xyaxis.line")
+                }
+                .help("Diagnostics")
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
                     showSubagents.toggle()

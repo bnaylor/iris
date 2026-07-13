@@ -1,12 +1,32 @@
 import Foundation
 import SwiftUI
 
+public enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
+    case gemini = "Gemini"
+    case anthropic = "Anthropic"
+    case openai = "OpenAI"
+    
+    public var id: String { rawValue }
+}
+
 @Observable
 class ConfigManager: @unchecked Sendable {
     @ObservationIgnored static let shared = ConfigManager()
     
+    var primaryProvider: String {
+        didSet { UserDefaults.standard.set(primaryProvider, forKey: "PRIMARY_PROVIDER") }
+    }
+    
     var geminiAPIKey: String {
         didSet { UserDefaults.standard.set(geminiAPIKey, forKey: "GEMINI_API_KEY") }
+    }
+    
+    var anthropicAPIKey: String {
+        didSet { UserDefaults.standard.set(anthropicAPIKey, forKey: "ANTHROPIC_API_KEY") }
+    }
+    
+    var openAIAPIKey: String {
+        didSet { UserDefaults.standard.set(openAIAPIKey, forKey: "OPENAI_API_KEY") }
     }
     
     var modelEasy: String {
@@ -62,7 +82,13 @@ class ConfigManager: @unchecked Sendable {
     }
     
     init() {
+        let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
+        self.primaryProvider = savedProvider
+        
         self.geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        self.anthropicAPIKey = UserDefaults.standard.string(forKey: "ANTHROPIC_API_KEY") ?? ""
+        self.openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
+
         self.modelEasy = UserDefaults.standard.string(forKey: "MODEL_EASY") ?? "gemini-3.1-flash-lite"
         self.modelMedium = UserDefaults.standard.string(forKey: "MODEL_MEDIUM") ?? "gemini-3.5-flash"
         self.modelHard = UserDefaults.standard.string(forKey: "MODEL_HARD") ?? "gemini-3.1-pro-preview"
@@ -83,6 +109,13 @@ class ConfigManager: @unchecked Sendable {
     }
     
     var isConfigured: Bool {
-        return !geminiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        switch primaryProvider {
+        case LLMProvider.anthropic.rawValue:
+            return !anthropicAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        case LLMProvider.openai.rawValue:
+            return !openAIAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        default:
+            return !geminiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        }
     }
 }

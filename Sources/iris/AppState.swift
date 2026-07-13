@@ -109,6 +109,10 @@ class AppState {
         conversations.append(newConv)
         selectedConversationId = newConv.id
         saveConversations()
+        
+        Task {
+            _ = await HookManager.shared.fireSessionStart(conversationId: newConv.id)
+        }
     }
     
     func updateConversationTitle(id: UUID, title: String) {

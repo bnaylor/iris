@@ -434,6 +434,15 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                         request.contents = history
                     } else if let responseText = part.text {
                         await pushToUI(role: .agent, text: responseText, conversationId: conversationId)
+                        
+                        let afterAgentDecision = await HookManager.shared.fireAfterAgent(output: responseText)
+                        if case .block(let reason) = afterAgentDecision {
+                            await pushToUI(role: .system, text: "Hook AfterAgent blocked execution: \(reason)", conversationId: conversationId)
+                        } else if case .proceed(let modifiedData) = afterAgentDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let newOutput = json["output"] as? String {
+                            // If modified, we might push the modified to UI, but it's already pushed.
+                            // The hook might just observe.
+                        }
+                        
                         turnFinished = true
                     } else {
                         turnFinished = true
@@ -539,6 +548,10 @@ struct IrisApp: App {
     var body: some Scene {
         WindowGroup("Iris") {
             ChatView()
+        }
+        
+        Window("Diagnostics", id: "diagnostics") {
+            DiagnosticsView()
         }
         
         // This is a minimal MenuBarExtra, we can expand it later.

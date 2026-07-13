@@ -33,7 +33,7 @@ final class AuxiliaryModelManager: @unchecked Sendable {
         case .ollama:
             engine = OllamaEngine()
         case .mlx:
-            throw NSError(domain: "AuxiliaryModelManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "MLX engine not implemented yet"])
+            engine = MLXEngine.shared
         }
         
         try await engine.loadModel(config: config)

@@ -3,7 +3,6 @@ import KeyboardShortcuts
 
 struct SettingsView: View {
     @Bindable private var config = ConfigManager.shared
-    @State private var availableModels: [String] = []
     @State private var isInstallingContainer = false
     @State private var installError: String?
     @State private var downloader = ModelDownloader.shared
@@ -25,41 +24,47 @@ struct SettingsView: View {
             // MARK: - Models Tab
             Form {
                 Section(header: Text("LLM Providers").font(.headline)) {
-                    SecureField("Gemini API Key", text: $config.geminiAPIKey)
-                        .help("Required for Iris to function.")
-                        .onChange(of: config.geminiAPIKey) { _, _ in
-                            fetchModels()
+                    Picker("Primary Provider", selection: $config.primaryProvider) {
+                        ForEach(LLMProvider.allCases) { provider in
+                            Text(provider.rawValue).tag(provider.rawValue)
                         }
+                    }
+                    .onChange(of: config.primaryProvider) { _, newProvider in
+                        // Set likely defaults based on provider
+                        if newProvider == LLMProvider.anthropic.rawValue {
+                            config.modelEasy = "claude-haiku-4-5-20251001"
+                            config.modelMedium = "claude-sonnet-5"
+                            config.modelHard = "claude-fable-5"
+                        } else if newProvider == LLMProvider.openai.rawValue {
+                            config.modelEasy = "gpt-5.6-luna"
+                            config.modelMedium = "gpt-5.6-terra"
+                            config.modelHard = "gpt-5.6-sol"
+                        } else {
+                            config.modelEasy = "gemini-3.1-flash-lite"
+                            config.modelMedium = "gemini-3.5-flash"
+                            config.modelHard = "gemini-3.1-pro-preview"
+                        }
+                    }
                     
-                    Picker("Easy Subagent Model", selection: $config.modelEasy) {
-                        ForEach(availableModels, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
+                    if config.primaryProvider == LLMProvider.gemini.rawValue {
+                        SecureField("Gemini API Key", text: $config.geminiAPIKey)
+                            .help("Required for Gemini models to function.")
+                    } else if config.primaryProvider == LLMProvider.anthropic.rawValue {
+                        SecureField("Anthropic API Key", text: $config.anthropicAPIKey)
+                            .help("Required for Anthropic Claude models to function.")
+                    } else if config.primaryProvider == LLMProvider.openai.rawValue {
+                        SecureField("OpenAI API Key", text: $config.openAIAPIKey)
+                            .help("Required for OpenAI GPT/o1 models to function.")
                     }
-                    Picker("Primary / Medium Model", selection: $config.modelMedium) {
-                        ForEach(availableModels, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
-                    }
-                    Picker("Hard Subagent Model", selection: $config.modelHard) {
-                        ForEach(availableModels, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
-                    }
-                    .onAppear {
-                        if availableModels.isEmpty {
-                            availableModels = [
-                                "gemini-3.1-flash-lite", 
-                                "gemini-3.5-flash", 
-                                "gemini-3.1-pro-preview", 
-                                "gemini-2.5-flash"
-                            ]
-                            if !availableModels.contains(config.modelEasy) { availableModels.append(config.modelEasy) }
-                            if !availableModels.contains(config.modelMedium) { availableModels.append(config.modelMedium) }
-                            if !availableModels.contains(config.modelHard) { availableModels.append(config.modelHard) }
-                        }
-                        fetchModels()
-                    }
+                    
+                    TextField("Easy Subagent Model", text: $config.modelEasy)
+                        .help("Used for simple and repetitive tasks.")
+                    
+                    TextField("Primary / Medium Model", text: $config.modelMedium)
+                        .help("Used for standard generation and reasoning.")
+                    
+                    TextField("Hard Subagent Model", text: $config.modelHard)
+                        .help("Used for complex reasoning and evaluation.")
                 }
                 .padding(.bottom)
                 
@@ -212,22 +217,4 @@ struct SettingsView: View {
         .frame(minWidth: 600, minHeight: 600)
     }
     
-    private func fetchModels() {
-        Task {
-            do {
-                let models = try await LLMClient().fetchAvailableModels()
-                if !models.isEmpty {
-                    await MainActor.run {
-                        if !models.contains(config.modelEasy) { config.modelEasy = models.first! }
-                        if !models.contains(config.modelMedium) { config.modelMedium = models.first! }
-                        if !models.contains(config.modelHard) { config.modelHard = models.first! }
-                        
-                        self.availableModels = models
-                    }
-                }
-            } catch {
-                print("Failed to fetch models: \(error)")
-            }
-        }
-    }
 }

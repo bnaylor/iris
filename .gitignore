@@ -10,3 +10,5 @@ DerivedData/
 # Scratch files
 test_*.py
 test_*.swift
+*.py
+.iris/

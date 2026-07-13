@@ -14,7 +14,8 @@ let package = Package(
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
         .package(url: "https://github.com/mattt/llama.swift.git", branch: "main"),
-        .package(url: "https://github.com/huggingface/swift-transformers.git", branch: "main")
+        .package(url: "https://github.com/huggingface/swift-transformers.git", branch: "main"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -27,7 +28,10 @@ let package = Package(
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "LlamaSwift", package: "llama.swift"),
-                .product(name: "Transformers", package: "swift-transformers")
+                .product(name: "Transformers", package: "swift-transformers"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm")
             ],
             resources: [
                 .process("assets")

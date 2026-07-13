@@ -18,58 +18,76 @@ struct LLMClient {
     }
     
     func generateContent(request: GeminiRequest, tier: ModelTier = .medium) async throws -> GeminiResponse {
-        let apiKey = ConfigManager.shared.geminiAPIKey
-        guard !apiKey.isEmpty else {
-            throw URLError(.userAuthenticationRequired)
+        let config = ConfigManager.shared
+        let provider = config.primaryProvider
+        
+        let metricOp: MetricOperationType
+        switch tier {
+        case .easy: metricOp = .easy
+        case .medium: metricOp = .medium
+        case .hard: metricOp = .hard
         }
         
-        var urlComponents = URLComponents(string: endpoint(for: tier))!
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        let modelName = {
+            switch tier {
+            case .easy: return config.modelEasy
+            case .medium: return config.modelMedium
+            case .hard: return config.modelHard
+            }
+        }()
         
-        var urlRequest = URLRequest(url: urlComponents.url!)
-        urlRequest.httpMethod = "POST"
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let startTime = CFAbsoluteTimeGetCurrent()
         
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .useDefaultKeys
-        let requestData = try encoder.encode(request)
-        urlRequest.httpBody = requestData
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        do {
+            let response: GeminiResponse
+            if provider == LLMProvider.anthropic.rawValue {
+                response = try await AnthropicClient.generateContent(request: request, model: modelName, apiKey: config.anthropicAPIKey)
+            } else if provider == LLMProvider.openai.rawValue {
+                response = try await OpenAIClient.generateContent(request: request, model: modelName, apiKey: config.openAIAPIKey)
+            } else {
+                // Fallback to Gemini
+                let apiKey = config.geminiAPIKey
+                guard !apiKey.isEmpty else {
+                    throw URLError(.userAuthenticationRequired)
+                }
+                
+                var urlComponents = URLComponents(string: endpoint(for: tier))!
+                urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+                
+                var urlRequest = URLRequest(url: urlComponents.url!)
+                urlRequest.httpMethod = "POST"
+                urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                
+                let encoder = JSONEncoder()
+                encoder.keyEncodingStrategy = .useDefaultKeys
+                let requestData = try encoder.encode(request)
+                urlRequest.httpBody = requestData
+                
+                let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+                
+                guard let httpResponse = urlResponse as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+                
+                if httpResponse.statusCode != 200 {
+                    let errorString = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    print("API Error (\(httpResponse.statusCode)): \(errorString)")
+                    throw APIError(message: "HTTP \(httpResponse.statusCode): \(errorString)")
+                }
+                
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .useDefaultKeys
+                response = try decoder.decode(GeminiResponse.self, from: data)
+            }
+            
+            let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+            await MetricsManager.shared.trackLatency(operation: metricOp, modelName: modelName, durationMs: durationMs, success: true)
+            return response
+            
+        } catch {
+            let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+            await MetricsManager.shared.trackLatency(operation: metricOp, modelName: modelName, durationMs: durationMs, success: false)
+            throw error
         }
-        
-        if httpResponse.statusCode != 200 {
-            let errorString = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("API Error (\(httpResponse.statusCode)): \(errorString)")
-            throw APIError(message: "HTTP \(httpResponse.statusCode): \(errorString)")
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .useDefaultKeys
-        let geminiResponse = try decoder.decode(GeminiResponse.self, from: data)
-        return geminiResponse
-    }
-    
-    func fetchAvailableModels() async throws -> [String] {
-        let apiKey = ConfigManager.shared.geminiAPIKey
-        guard !apiKey.isEmpty else { return [] }
-        
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(apiKey)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return []
-        }
-        
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let models = json["models"] as? [[String: Any]] {
-            return models.compactMap { $0["name"] as? String }.map { $0.replacingOccurrences(of: "models/", with: "") }
-        }
-        return []
     }
 }
