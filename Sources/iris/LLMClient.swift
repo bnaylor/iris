@@ -40,6 +40,43 @@ struct LLMClient {
                     throw URLError(.userAuthenticationRequired)
                 }
                 
+                var cleanRequest = request
+                var cleanContents: [Content] = []
+                for content in cleanRequest.contents {
+                    var cleanParts: [Part] = []
+                    for part in content.parts {
+                        var cleanPart = part
+                        cleanPart.thought_signature = nil
+                        cleanPart.thoughtSignature = nil
+                        if var fnCall = cleanPart.functionCall {
+                            fnCall.thought_signature = nil
+                            fnCall.thoughtSignature = nil
+                            cleanPart.functionCall = fnCall
+                        }
+                        cleanParts.append(cleanPart)
+                    }
+                    var cleanContent = content
+                    cleanContent.parts = cleanParts
+                    cleanContents.append(cleanContent)
+                }
+                cleanRequest.contents = cleanContents
+                
+                if let sysInst = cleanRequest.systemInstruction {
+                    var cleanSysParts: [Part] = []
+                    for part in sysInst.parts {
+                        var cleanPart = part
+                        cleanPart.thought_signature = nil
+                        cleanPart.thoughtSignature = nil
+                        if var fnCall = cleanPart.functionCall {
+                            fnCall.thought_signature = nil
+                            fnCall.thoughtSignature = nil
+                            cleanPart.functionCall = fnCall
+                        }
+                        cleanSysParts.append(cleanPart)
+                    }
+                    cleanRequest.systemInstruction?.parts = cleanSysParts
+                }
+                
                 let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
                 
                 var urlComponents = URLComponents(string: baseURLString)!
@@ -51,7 +88,7 @@ struct LLMClient {
                 
                 let encoder = JSONEncoder()
                 encoder.keyEncodingStrategy = .useDefaultKeys
-                let requestData = try encoder.encode(request)
+                let requestData = try encoder.encode(cleanRequest)
                 urlRequest.httpBody = requestData
                 
                 let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
