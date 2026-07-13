@@ -103,9 +103,9 @@ To configure MCP servers, create a JSON file at `~/.iris/mcp_servers.json` with 
 
 Once configured, Iris will automatically boot these servers in the background and their tools will be available for Iris to use.
 
-## 💡 Inspired By
+## 💡 Inspiration
 
-Iris's core agentic workflow is heavily inspired by the philosophy of [obra/superpowers](https://github.com/obra/superpowers). In particular, we natively enforce the following principles in the agent's system prompt:
+A key bit of Iris's agentic workflow is heavily inspired by the philosophy of [obra/superpowers](https://github.com/obra/superpowers). In particular, we natively enforce the following principles in the agent's system prompt:
 *   **Brainstorming First:** The agent must explore context, ask clarifying questions, and propose trade-offs before writing a single line of code.
 *   **Design Docs (Specs):** Designs must be presented and approved, then written to `specs/` directories.
 *   **Implementation Plans:** Complex designs are broken down into step-by-step plans.
