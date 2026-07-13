@@ -37,7 +37,19 @@ final class AnthropicClientTests: XCTestCase {
             }
             
             XCTAssertEqual(bodyJson["model"] as? String, "claude-3-5-sonnet")
-            XCTAssertEqual(bodyJson["system"] as? String, "System instructions here")
+            
+            if let systemArray = bodyJson["system"] as? [[String: Any]],
+               let firstBlock = systemArray.first,
+               let text = firstBlock["text"] as? String {
+                XCTAssertEqual(text, "System instructions here")
+                if let cacheControl = firstBlock["cache_control"] as? [String: Any] {
+                    XCTAssertEqual(cacheControl["type"] as? String, "ephemeral")
+                } else {
+                    XCTFail("Missing cache_control in system block")
+                }
+            } else {
+                XCTFail("System prompt is not in the expected array of blocks format")
+            }
             
             guard let messages = bodyJson["messages"] as? [[String: Any]] else {
                 XCTFail("Missing messages array")

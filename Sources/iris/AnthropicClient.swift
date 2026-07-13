@@ -54,7 +54,26 @@ struct AnthropicClient {
                 ])
             }
         }
-        
+
+        // Cache breakpoints for conversation history.
+        // Marking the penultimate message's last block caches all prior history as a stable prefix.
+        // Marking the current (last) message's last block seeds the cache for the next turn.
+        let ephemeral: [String: Any] = ["cache_control": ["type": "ephemeral"]]
+        func markLastContentBlock(_ messages: inout [[String: Any]], at index: Int) {
+            var msg = messages[index]
+            if var content = msg["content"] as? [[String: Any]], !content.isEmpty {
+                content[content.count - 1].merge(ephemeral) { _, new in new }
+                msg["content"] = content
+                messages[index] = msg
+            }
+        }
+        if anthropicMessages.count >= 2 {
+            markLastContentBlock(&anthropicMessages, at: anthropicMessages.count - 2)
+        }
+        if !anthropicMessages.isEmpty {
+            markLastContentBlock(&anthropicMessages, at: anthropicMessages.count - 1)
+        }
+
         var body: [String: Any] = [
             "model": model,
             "max_tokens": 4096,
@@ -62,7 +81,7 @@ struct AnthropicClient {
         ]
         
         if !systemPrompt.isEmpty {
-            body["system"] = systemPrompt
+            body["system"] = [["type": "text", "text": systemPrompt, "cache_control": ["type": "ephemeral"]]]
         }
         
         if let tools = request.tools, let fds = tools.first?.functionDeclarations {
@@ -102,6 +121,7 @@ struct AnthropicClient {
                 ])
             }
             if !anthropicTools.isEmpty {
+                anthropicTools[anthropicTools.count - 1]["cache_control"] = ["type": "ephemeral"]
                 body["tools"] = anthropicTools
             }
         }
