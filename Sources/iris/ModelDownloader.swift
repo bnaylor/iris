@@ -16,18 +16,27 @@ class ModelDownloader {
     ]
     
     func isModelDownloaded(name: String) -> Bool {
-        let path = ("~/.iris/models/" as NSString).expandingTildeInPath + "/" + name
+        let filename = name.starts(with: "http") ? (URL(string: name)?.lastPathComponent ?? name) : name
+        let path = ("~/.iris/models/" as NSString).expandingTildeInPath + "/" + filename
         return FileManager.default.fileExists(atPath: path)
     }
     
     func downloadModel(name: String) async {
         guard !isDownloading else { return }
-        guard !isModelDownloaded(name: name) else { return }
         
-        let urlString = knownModels[name] ?? name // Allow passing full URL as name
-        guard let url = URL(string: urlString) else {
-            self.error = "Invalid model URL or unknown model name."
+        let isUrl = name.starts(with: "http")
+        let urlString = knownModels[name] ?? (isUrl ? name : nil)
+        
+        guard let finalUrlString = urlString, let url = URL(string: finalUrlString), url.scheme != nil else {
+            self.error = "Unknown model name. Please provide a full https:// URL to a .gguf file."
             return
+        }
+        
+        let filename = isUrl ? url.lastPathComponent : name
+        
+        guard !isModelDownloaded(name: filename) else {
+            if isUrl { ConfigManager.shared.vibecopModel = filename }
+            return 
         }
         
         self.isDownloading = true
@@ -39,7 +48,7 @@ class ModelDownloader {
             try? FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
         
-        let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(name)
+        let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
         
         do {
             let request = URLRequest(url: url)
@@ -72,6 +81,12 @@ class ModelDownloader {
             }
             self.progress = 1.0
             self.isDownloading = false
+            
+            if isUrl {
+                Task { @MainActor in
+                    ConfigManager.shared.vibecopModel = filename
+                }
+            }
             
         } catch {
             self.error = "Download failed: \(error.localizedDescription)"

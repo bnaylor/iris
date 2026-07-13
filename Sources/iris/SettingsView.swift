@@ -209,7 +209,7 @@ struct SettingsView: View {
                 Label("Advanced", systemImage: "lock.shield")
             }
         }
-        .frame(minWidth: 600, minHeight: 450)
+        .frame(minWidth: 600, minHeight: 600)
     }
     
     private func fetchModels() {
