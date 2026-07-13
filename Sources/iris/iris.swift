@@ -335,119 +335,54 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                     }
                 }
                 
+                var toolCalls: [FunctionCall] = []
                 for part in responseContent.parts {
-                    if let functionCall = part.functionCall {
-                        hasFunctionCall = true
-                        let toolCallDict: [String: Any] = [
-                            "name": functionCall.name,
-                            "args": functionCall.args
-                        ]
-                        if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
-                           let jsonString = String(data: jsonData, encoding: .utf8) {
-                            await pushToUI(role: .system, text: "[TOOL_CALL]\n\(jsonString)", conversationId: conversationId)
-                        } else {
-                            await pushToUI(role: .system, text: "Running tool: \(functionCall.name)", conversationId: conversationId)
-                        }
-                        
-                        var result = ""
-                        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
-                            let currentWorkspace = path
-                            
-                            var extraHint = ""
-                            let fm = FileManager.default
-                            let irisDir = URL(fileURLWithPath: currentWorkspace).appendingPathComponent(".iris")
-                            let vibecopPath = irisDir.appendingPathComponent("vibecop.md").path
-                            
-                            if !fm.fileExists(atPath: vibecopPath) {
-                                if let contents = try? fm.contentsOfDirectory(atPath: currentWorkspace), !contents.isEmpty {
-                                    extraHint = "\n\n💡 Hint: No Vibecop Guardian config found for this workspace. Suggest that the user run `/vibecop init` to generate one."
-                                }
-                            }
-                            
-                            await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
-                            result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
-                        } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"] {
-                            await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
-                            result = "Conversation renamed to '\(newTitle)'."
-                        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] {
-                            let minute = Int(functionCall.args["minute"] ?? "")
-                            let hour = Int(functionCall.args["hour"] ?? "")
-                            let day = Int(functionCall.args["day"] ?? "")
-                            let month = Int(functionCall.args["month"] ?? "")
-                            let weekday = Int(functionCall.args["weekday"] ?? "")
-                            let intervalSeconds = Int(functionCall.args["intervalSeconds"] ?? "")
-                            
-                            ScheduleManager.shared.schedule(
-                                conversationId: conversationId,
-                                prompt: prompt,
-                                minute: minute,
-                                hour: hour,
-                                day: day,
-                                month: month,
-                                weekday: weekday,
-                                intervalSeconds: intervalSeconds
-                            )
-                            result = "Job scheduled successfully. It will fire in the background."
-                        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] {
-                            let vector = HolographicVector.encode(string: content)
-                            try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
-                            result = "Fact saved to holographic memory."
-                        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] {
-                            let vector = HolographicVector.encode(string: query)
-                            let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
-                            if facts.isEmpty {
-                                result = "No relevant facts found."
-                            } else {
-                                result = facts.map { "- \($0.content)" }.joined(separator: "\n")
-                            }
-                        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] {
-                            MemoryManager.shared.updateUserProfile(content: content)
-                            result = "User profile updated."
-                        } else if functionCall.name == "reflect" {
-                            result = "Reflection logged. Proceed with your next action."
-                        } else if functionCall.name == "invoke_subagent", 
-                                  let role = functionCall.args["role"], 
-                                  let task = functionCall.args["task"],
-                                  let effort = functionCall.args["effort"] {
-                            result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
-                        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] {
-                            await MainActor.run { 
-                                localState?.clearGoal(for: conversationId) 
-                                localState?.onSubagentComplete?(conversationId, summary)
-                            }
-                            result = "Goal marked as complete. Summary: \(summary)"
-                        } else {
-                            var needsApproval = false
-                            var details = ""
-                            if functionCall.name == "run_command", let cmd = functionCall.args["command"] {
-                                needsApproval = true
-                                details = cmd
-                            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] {
-                                needsApproval = true
-                                details = path
-                            }
-                            
-                            if needsApproval {
-                                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
-                                if approved {
-                                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
-                                } else {
-                                    result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
-                                }
-                            } else {
-                                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
-                            }
-                        }
-                        
-                        let functionResponse = Content(
-                            role: "user", 
-                            parts: [Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: functionCall.name, response: ["result": result]))]
-                        )
-                        history.append(functionResponse)
-                        await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
-                        request.contents = history
-                        break // Only execute the first tool call
+                    if let fc = part.functionCall {
+                        toolCalls.append(fc)
                     }
+                }
+                
+                if !toolCalls.isEmpty {
+                    hasFunctionCall = true
+                    
+                    let results = await withTaskGroup(of: (FunctionCall, String).self) { group in
+                        for call in toolCalls {
+                            group.addTask {
+                                let toolCallDict: [String: Any] = [
+                                    "name": call.name,
+                                    "args": call.args
+                                ]
+                                if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
+                                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                                    await self.pushToUI(role: .system, text: "[TOOL_CALL]\n\(jsonString)", conversationId: conversationId)
+                                } else {
+                                    await self.pushToUI(role: .system, text: "Running tool: \(call.name)", conversationId: conversationId)
+                                }
+                                
+                                let result = await self.executeFunctionCall(call, conversationId: conversationId, workspacePath: workspacePath)
+                                return (call, result)
+                            }
+                        }
+                        
+                        var collection: [(FunctionCall, String)] = []
+                        for await res in group {
+                            collection.append(res)
+                        }
+                        return collection
+                    }
+                    
+                    var responseParts: [Part] = []
+                    // Preserve original order of tool calls by iterating over toolCalls
+                    for call in toolCalls {
+                        if let match = results.first(where: { $0.0.name == call.name && $0.0.args == call.args && $0.0.id == call.id }) {
+                            responseParts.append(Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: match.0.name, response: ["result": match.1], id: match.0.id)))
+                        }
+                    }
+                    
+                    let functionResponse = Content(role: "user", parts: responseParts)
+                    history.append(functionResponse)
+                    await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
+                    request.contents = history
                 }
                 
                 if !hasFunctionCall {
@@ -469,6 +404,102 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                 await processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
             }
         }
+    }
+    
+    private func executeFunctionCall(_ functionCall: FunctionCall, conversationId: UUID, workspacePath: String?) async -> String {
+        let localState = state
+        var result = ""
+        
+        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
+            let currentWorkspace = path
+            
+            var extraHint = ""
+            let fm = FileManager.default
+            let irisDir = URL(fileURLWithPath: currentWorkspace).appendingPathComponent(".iris")
+            let vibecopPath = irisDir.appendingPathComponent("vibecop.md").path
+            
+            if !fm.fileExists(atPath: vibecopPath) {
+                if let contents = try? fm.contentsOfDirectory(atPath: currentWorkspace), !contents.isEmpty {
+                    extraHint = "\n\n💡 Hint: No Vibecop Guardian config found for this workspace. Suggest that the user run `/vibecop init` to generate one."
+                }
+            }
+            
+            await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
+            result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
+        } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"] {
+            await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
+            result = "Conversation renamed to '\(newTitle)'."
+        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] {
+            let minute = Int(functionCall.args["minute"] ?? "")
+            let hour = Int(functionCall.args["hour"] ?? "")
+            let day = Int(functionCall.args["day"] ?? "")
+            let month = Int(functionCall.args["month"] ?? "")
+            let weekday = Int(functionCall.args["weekday"] ?? "")
+            let intervalSeconds = Int(functionCall.args["intervalSeconds"] ?? "")
+            
+            ScheduleManager.shared.schedule(
+                conversationId: conversationId,
+                prompt: prompt,
+                minute: minute,
+                hour: hour,
+                day: day,
+                month: month,
+                weekday: weekday,
+                intervalSeconds: intervalSeconds
+            )
+            result = "Job scheduled successfully. It will fire in the background."
+        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] {
+            let vector = HolographicVector.encode(string: content)
+            try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
+            result = "Fact saved to holographic memory."
+        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] {
+            let vector = HolographicVector.encode(string: query)
+            let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
+            if facts.isEmpty {
+                result = "No relevant facts found."
+            } else {
+                result = facts.map { "- \($0.content)" }.joined(separator: "\n")
+            }
+        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] {
+            MemoryManager.shared.updateUserProfile(content: content)
+            result = "User profile updated."
+        } else if functionCall.name == "reflect" {
+            result = "Reflection logged. Proceed with your next action."
+        } else if functionCall.name == "invoke_subagent", 
+                  let role = functionCall.args["role"], 
+                  let task = functionCall.args["task"],
+                  let effort = functionCall.args["effort"] {
+            result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
+        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] {
+            await MainActor.run { 
+                localState?.clearGoal(for: conversationId) 
+                localState?.onSubagentComplete?(conversationId, summary)
+            }
+            result = "Goal marked as complete. Summary: \(summary)"
+        } else {
+            var needsApproval = false
+            var details = ""
+            if functionCall.name == "run_command", let cmd = functionCall.args["command"] {
+                needsApproval = true
+                details = cmd
+            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] {
+                needsApproval = true
+                details = path
+            }
+            
+            if needsApproval {
+                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
+                if approved {
+                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                } else {
+                    result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
+                }
+            } else {
+                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+            }
+        }
+        
+        return result
     }
     
     private func executeToolWithHooks(name: String, args: [String: Any], cwd: String?) async -> String {

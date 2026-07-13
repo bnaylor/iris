@@ -14,7 +14,6 @@ struct AnthropicClient {
         }
         
         var callIdCounter = 0
-        var nameToLastId: [String: String] = [:]
         
         for content in request.contents {
             let role = content.role == "model" ? "assistant" : "user"
@@ -24,9 +23,8 @@ struct AnthropicClient {
                 if let text = part.text {
                     partsArray.append(["type": "text", "text": text])
                 } else if let fc = part.functionCall {
-                    let id = "call_\(fc.name)_\(callIdCounter)"
+                    let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
-                    nameToLastId[fc.name] = id
                     
                     partsArray.append([
                         "type": "tool_use",
@@ -35,7 +33,7 @@ struct AnthropicClient {
                         "input": fc.args
                     ])
                 } else if let fr = part.functionResponse {
-                    let id = nameToLastId[fr.name] ?? "call_\(fr.name)_0"
+                    let id = fr.id ?? "call_\(fr.name)_0"
                     let respData = try? JSONSerialization.data(withJSONObject: fr.response)
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
@@ -162,19 +160,17 @@ struct AnthropicClient {
         if let contentArray = json["content"] as? [[String: Any]] {
             var content = Content(role: "model", parts: [])
             
-            var foundToolUse = false
             for part in contentArray {
                 if let type = part["type"] as? String {
                     if type == "text", let text = part["text"] as? String {
                         content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
-                    } else if type == "tool_use", !foundToolUse, let name = part["name"] as? String, let input = part["input"] as? [String: Any] {
-                        foundToolUse = true
+                    } else if type == "tool_use", let id = part["id"] as? String, let name = part["name"] as? String, let input = part["input"] as? [String: Any] {
                         // Convert [String: Any] back to [String: String] since Iris FunctionCall args are [String: String]
                         var stringArgs: [String: String] = [:]
                         for (k, v) in input {
                             stringArgs[k] = "\(v)"
                         }
-                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: stringArgs, thought_signature: nil, thoughtSignature: nil), functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
+                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: stringArgs, id: id, thought_signature: nil, thoughtSignature: nil), functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
                     }
                 }
             }

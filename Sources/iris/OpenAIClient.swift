@@ -16,7 +16,6 @@ struct OpenAIClient {
         }
         
         var callIdCounter = 0
-        var currentToolCalls: [[String: Any]] = []
         
         for content in request.contents {
             let role = content.role == "model" ? "assistant" : "user"
@@ -35,7 +34,7 @@ struct OpenAIClient {
                 if let text = part.text {
                     textParts.append(text)
                 } else if let fc = part.functionCall {
-                    let id = "call_\(fc.name)_\(callIdCounter)"
+                    let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
                     let argsData = try? JSONSerialization.data(withJSONObject: fc.args)
                     let argsString = String(data: argsData ?? Data(), encoding: .utf8) ?? "{}"
@@ -49,7 +48,7 @@ struct OpenAIClient {
                         ]
                     ])
                 } else if let fr = part.functionResponse {
-                    let id = "call_\(fr.name)_0" // Best effort match
+                    let id = fr.id ?? "call_\(fr.name)_0" // Fallback if no ID is provided
                     let respData = try? JSONSerialization.data(withJSONObject: fr.response)
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
@@ -88,24 +87,7 @@ struct OpenAIClient {
             }
         }
         
-        // Let's refine the ID matching. Iris sends back the function response in the next turn as 'user'.
-        // So the IDs need to match the previous turn's tool calls. We can map by name.
-        // Let's do a pass to fix tool_call_id mappings.
-        var nameToLastId: [String: String] = [:]
-        for i in 0..<openAIMessages.count {
-            if let calls = openAIMessages[i]["tool_calls"] as? [[String: Any]] {
-                for call in calls {
-                    if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let id = call["id"] as? String {
-                        nameToLastId[name] = id
-                    }
-                }
-            }
-            if let role = openAIMessages[i]["role"] as? String, role == "tool", let name = openAIMessages[i]["name"] as? String {
-                if let id = nameToLastId[name] {
-                    openAIMessages[i]["tool_call_id"] = id
-                }
-            }
-        }
+        // Removed old name-to-last-id fallback logic as we now preserve the real ID from the backend.
         
         var body: [String: Any] = [
             "model": model,
@@ -196,10 +178,12 @@ struct OpenAIClient {
                 content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
             }
             
-            if let toolCalls = msg["tool_calls"] as? [[String: Any]], let call = toolCalls.first {
-                if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let argsStr = f["arguments"] as? String {
-                    let argsDict = (try? JSONSerialization.jsonObject(with: argsStr.data(using: .utf8) ?? Data())) as? [String: String] ?? [:]
-                    content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: argsDict, thought_signature: reasoning, thoughtSignature: reasoning), functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
+            if let toolCalls = msg["tool_calls"] as? [[String: Any]] {
+                for call in toolCalls {
+                    if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let id = call["id"] as? String, let argsStr = f["arguments"] as? String {
+                        let argsDict = (try? JSONSerialization.jsonObject(with: argsStr.data(using: .utf8) ?? Data())) as? [String: String] ?? [:]
+                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: argsDict, id: id, thought_signature: reasoning, thoughtSignature: reasoning), functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
+                    }
                 }
             }
             

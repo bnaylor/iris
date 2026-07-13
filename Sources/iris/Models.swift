@@ -25,16 +25,18 @@ struct Part: Codable {
     var thoughtSignature: String?
 }
 
-struct FunctionCall: Codable {
+struct FunctionCall: Codable, Sendable {
     var name: String
     var args: [String: String]
+    var id: String?
     var thought_signature: String?
     var thoughtSignature: String?
 }
 
-struct FunctionResponse: Codable {
+struct FunctionResponse: Codable, Sendable {
     var name: String
     var response: [String: String]
+    var id: String?
 }
 
 struct Tool: Codable {
