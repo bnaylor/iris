@@ -47,21 +47,23 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
             throw LlamaError.modelLoadFailed
         }
         
-        var contextParams = llama_context_default_params()
-        contextParams.n_ctx = 1024
-        contextParams.n_batch = 512
-        
-        guard let ctx = llama_init_from_model(m, contextParams) else {
-            throw LlamaError.contextCreationFailed
-        }
-        defer { llama_free(ctx) }
-        
         let utf8Count = prompt.utf8.count
         let maxTokenCount = utf8Count + 2
         var tokens = [llama_token](repeating: 0, count: maxTokenCount)
         
         let tokenCount = llama_tokenize(v, prompt, Int32(utf8Count), &tokens, Int32(maxTokenCount), true, true)
         guard tokenCount > 0 else { throw LlamaError.tokenizationFailed }
+        
+        var contextParams = llama_context_default_params()
+        let requiredCtx = UInt32(tokenCount + 256)
+        contextParams.n_ctx = requiredCtx > 2048 ? requiredCtx : 2048
+        let requiredBatch = UInt32(tokenCount)
+        contextParams.n_batch = requiredBatch > 512 ? requiredBatch : 512
+        
+        guard let ctx = llama_init_from_model(m, contextParams) else {
+            throw LlamaError.contextCreationFailed
+        }
+        defer { llama_free(ctx) }
         
         var promptTokens = Array(tokens.prefix(Int(tokenCount)))
         let batch = llama_batch_get_one(&promptTokens, Int32(promptTokens.count))
