@@ -3,12 +3,16 @@ import SwiftUI
 
 @Observable
 @MainActor
-class ModelDownloader {
+class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     static let shared = ModelDownloader()
     
     var isDownloading = false
     var progress: Double = 0.0
     var error: String? = nil
+    
+    private var downloadTask: URLSessionDownloadTask?
+    private var destinationFilename: String?
+    private var isUrlDownload = false
     
     // Some known models and their URLs for convenience
     let knownModels = [
@@ -33,6 +37,8 @@ class ModelDownloader {
         }
         
         let filename = isUrl ? url.lastPathComponent : name
+        self.destinationFilename = filename
+        self.isUrlDownload = isUrl
         
         guard !isModelDownloaded(name: filename) else {
             if isUrl { ConfigManager.shared.vibecopModel = filename }
@@ -48,50 +54,53 @@ class ModelDownloader {
             try? FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
         
-        let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
+        let configuration = URLSessionConfiguration.default
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         
-        do {
-            let request = URLRequest(url: url)
-            let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
+        let request = URLRequest(url: url)
+        self.downloadTask = session.downloadTask(with: request)
+        self.downloadTask?.resume()
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        Task { @MainActor in
+            guard let filename = self.destinationFilename else { return }
+            let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
+            let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
             
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                self.error = "Download failed: Invalid response"
-                self.isDownloading = false
-                return
-            }
-            
-            let contentLength = Double(httpResponse.expectedContentLength)
-            var currentLength: Double = 0
-            
-            FileManager.default.createFile(atPath: destination.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: destination)
-            defer { try? handle.close() }
-            
-            var lastUpdate = Date()
-            
-            for try await byte in asyncBytes {
-                try handle.write(contentsOf: Data([byte]))
-                currentLength += 1
-                
-                let now = Date()
-                if now.timeIntervalSince(lastUpdate) > 0.1 {
-                    self.progress = contentLength > 0 ? currentLength / contentLength : 0
-                    lastUpdate = now
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
                 }
-            }
-            self.progress = 1.0
-            self.isDownloading = false
-            
-            if isUrl {
-                Task { @MainActor in
+                try FileManager.default.moveItem(at: location, to: destination)
+                
+                self.progress = 1.0
+                self.isDownloading = false
+                
+                if self.isUrlDownload {
                     ConfigManager.shared.vibecopModel = filename
                 }
+            } catch {
+                self.error = "Download failed to save: \(error.localizedDescription)"
+                self.isDownloading = false
             }
-            
-        } catch {
-            self.error = "Download failed: \(error.localizedDescription)"
-            self.isDownloading = false
-            try? FileManager.default.removeItem(at: destination)
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        Task { @MainActor in
+            if totalBytesExpectedToWrite > 0 {
+                self.progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            }
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        Task { @MainActor in
+            if let error = error {
+                self.error = "Download failed: \(error.localizedDescription)"
+                self.isDownloading = false
+            }
         }
     }
 }
