@@ -41,16 +41,57 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(openAIBaseURL, forKey: "OPENAI_BASE_URL") }
     }
     
-    var modelEasy: String {
-        didSet { UserDefaults.standard.set(modelEasy, forKey: "MODEL_EASY") }
+    var geminiModelEasy: String {
+        didSet { UserDefaults.standard.set(geminiModelEasy, forKey: "GEMINI_MODEL_EASY") }
+    }
+    var geminiModelMedium: String {
+        didSet { UserDefaults.standard.set(geminiModelMedium, forKey: "GEMINI_MODEL_MEDIUM") }
+    }
+    var geminiModelHard: String {
+        didSet { UserDefaults.standard.set(geminiModelHard, forKey: "GEMINI_MODEL_HARD") }
     }
     
-    var modelMedium: String {
-        didSet { UserDefaults.standard.set(modelMedium, forKey: "MODEL_MEDIUM") }
+    var anthropicModelEasy: String {
+        didSet { UserDefaults.standard.set(anthropicModelEasy, forKey: "ANTHROPIC_MODEL_EASY") }
+    }
+    var anthropicModelMedium: String {
+        didSet { UserDefaults.standard.set(anthropicModelMedium, forKey: "ANTHROPIC_MODEL_MEDIUM") }
+    }
+    var anthropicModelHard: String {
+        didSet { UserDefaults.standard.set(anthropicModelHard, forKey: "ANTHROPIC_MODEL_HARD") }
     }
     
-    var modelHard: String {
-        didSet { UserDefaults.standard.set(modelHard, forKey: "MODEL_HARD") }
+    var openaiModelEasy: String {
+        didSet { UserDefaults.standard.set(openaiModelEasy, forKey: "OPENAI_MODEL_EASY") }
+    }
+    var openaiModelMedium: String {
+        didSet { UserDefaults.standard.set(openaiModelMedium, forKey: "OPENAI_MODEL_MEDIUM") }
+    }
+    var openaiModelHard: String {
+        didSet { UserDefaults.standard.set(openaiModelHard, forKey: "OPENAI_MODEL_HARD") }
+    }
+    
+    func getModel(for tier: ModelTier) -> String {
+        switch primaryProvider {
+        case LLMProvider.anthropic.rawValue:
+            switch tier {
+            case .easy: return anthropicModelEasy
+            case .medium: return anthropicModelMedium
+            case .hard: return anthropicModelHard
+            }
+        case LLMProvider.openai.rawValue:
+            switch tier {
+            case .easy: return openaiModelEasy
+            case .medium: return openaiModelMedium
+            case .hard: return openaiModelHard
+            }
+        default:
+            switch tier {
+            case .easy: return geminiModelEasy
+            case .medium: return geminiModelMedium
+            case .hard: return geminiModelHard
+            }
+        }
     }
     
     var googleClientID: String {
@@ -104,9 +145,23 @@ class ConfigManager: @unchecked Sendable {
         openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
         openAIBaseURL = UserDefaults.standard.string(forKey: "OPENAI_BASE_URL") ?? ""
 
-        self.modelEasy = UserDefaults.standard.string(forKey: "MODEL_EASY") ?? "gemini-3.1-flash-lite"
-        self.modelMedium = UserDefaults.standard.string(forKey: "MODEL_MEDIUM") ?? "gemini-3.5-flash"
-        self.modelHard = UserDefaults.standard.string(forKey: "MODEL_HARD") ?? "gemini-3.1-pro-preview"
+        // Try reading old global models first for migration, else fallback to defaults
+        let oldEasy = UserDefaults.standard.string(forKey: "MODEL_EASY")
+        let oldMedium = UserDefaults.standard.string(forKey: "MODEL_MEDIUM")
+        let oldHard = UserDefaults.standard.string(forKey: "MODEL_HARD")
+
+        self.geminiModelEasy = UserDefaults.standard.string(forKey: "GEMINI_MODEL_EASY") ?? (savedProvider == "Gemini" && oldEasy != nil ? oldEasy! : "gemini-3.1-flash-lite")
+        self.geminiModelMedium = UserDefaults.standard.string(forKey: "GEMINI_MODEL_MEDIUM") ?? (savedProvider == "Gemini" && oldMedium != nil ? oldMedium! : "gemini-3.5-flash")
+        self.geminiModelHard = UserDefaults.standard.string(forKey: "GEMINI_MODEL_HARD") ?? (savedProvider == "Gemini" && oldHard != nil ? oldHard! : "gemini-3.1-pro-preview")
+        
+        self.anthropicModelEasy = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_EASY") ?? (savedProvider == "Anthropic" && oldEasy != nil ? oldEasy! : "claude-haiku-4-5-20251001")
+        self.anthropicModelMedium = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_MEDIUM") ?? (savedProvider == "Anthropic" && oldMedium != nil ? oldMedium! : "claude-sonnet-5")
+        self.anthropicModelHard = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_HARD") ?? (savedProvider == "Anthropic" && oldHard != nil ? oldHard! : "claude-fable-5")
+        
+        self.openaiModelEasy = UserDefaults.standard.string(forKey: "OPENAI_MODEL_EASY") ?? (savedProvider == "OpenAI" && oldEasy != nil ? oldEasy! : "gpt-5.6-luna")
+        self.openaiModelMedium = UserDefaults.standard.string(forKey: "OPENAI_MODEL_MEDIUM") ?? (savedProvider == "OpenAI" && oldMedium != nil ? oldMedium! : "gpt-5.6-terra")
+        self.openaiModelHard = UserDefaults.standard.string(forKey: "OPENAI_MODEL_HARD") ?? (savedProvider == "OpenAI" && oldHard != nil ? oldHard! : "gpt-5.6-sol")
+        
         self.googleClientID = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_ID") ?? ""
         self.googleClientSecret = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_SECRET") ?? ""
         self.googleAccessToken = UserDefaults.standard.string(forKey: "GOOGLE_ACCESS_TOKEN") ?? ""

@@ -8,12 +8,7 @@ struct APIError: LocalizedError {
 struct LLMClient {
     func endpoint(for tier: ModelTier) -> String {
         let config = ConfigManager.shared
-        let modelName: String
-        switch tier {
-        case .easy: modelName = config.modelEasy
-        case .medium: modelName = config.modelMedium
-        case .hard: modelName = config.modelHard
-        }
+        let modelName = config.getModel(for: tier)
         return "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent"
     }
     
@@ -28,13 +23,7 @@ struct LLMClient {
         case .hard: metricOp = .hard
         }
         
-        let modelName = {
-            switch tier {
-            case .easy: return config.modelEasy
-            case .medium: return config.modelMedium
-            case .hard: return config.modelHard
-            }
-        }()
+        let modelName = config.getModel(for: tier)
         
         let startTime = CFAbsoluteTimeGetCurrent()
         

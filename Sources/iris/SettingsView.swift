@@ -29,48 +29,42 @@ struct SettingsView: View {
                             Text(provider.rawValue).tag(provider.rawValue)
                         }
                     }
-                    .onChange(of: config.primaryProvider) { _, newProvider in
-                        // Set likely defaults based on provider
-                        if newProvider == LLMProvider.anthropic.rawValue {
-                            config.modelEasy = "claude-haiku-4-5-20251001"
-                            config.modelMedium = "claude-sonnet-5"
-                            config.modelHard = "claude-fable-5"
-                        } else if newProvider == LLMProvider.openai.rawValue {
-                            config.modelEasy = "gpt-5.6-luna"
-                            config.modelMedium = "gpt-5.6-terra"
-                            config.modelHard = "gpt-5.6-sol"
-                        } else {
-                            config.modelEasy = "gemini-3.1-flash-lite"
-                            config.modelMedium = "gemini-3.5-flash"
-                            config.modelHard = "gemini-3.1-pro-preview"
-                        }
-                    }
+                    .padding(.bottom)
                     
                     if config.primaryProvider == LLMProvider.gemini.rawValue {
                         SecureField("Gemini API Key", text: $config.geminiAPIKey)
                             .help("Required for Gemini models to function.")
                         TextField("Gemini Base URL (Optional)", text: $config.geminiBaseURL)
                             .help("Leave blank for default endpoint")
+                        TextField("Easy Subagent Model", text: $config.geminiModelEasy)
+                            .help("Used for simple and repetitive tasks.")
+                        TextField("Primary / Medium Model", text: $config.geminiModelMedium)
+                            .help("Used for standard generation and reasoning.")
+                        TextField("Hard Subagent Model", text: $config.geminiModelHard)
+                            .help("Used for complex reasoning and evaluation.")
                     } else if config.primaryProvider == LLMProvider.anthropic.rawValue {
                         SecureField("Anthropic API Key", text: $config.anthropicAPIKey)
                             .help("Required for Anthropic Claude models to function.")
                         TextField("Anthropic Base URL (Optional)", text: $config.anthropicBaseURL)
                             .help("Leave blank for default endpoint")
+                        TextField("Easy Subagent Model", text: $config.anthropicModelEasy)
+                            .help("Used for simple and repetitive tasks.")
+                        TextField("Primary / Medium Model", text: $config.anthropicModelMedium)
+                            .help("Used for standard generation and reasoning.")
+                        TextField("Hard Subagent Model", text: $config.anthropicModelHard)
+                            .help("Used for complex reasoning and evaluation.")
                     } else if config.primaryProvider == LLMProvider.openai.rawValue {
                         SecureField("OpenAI API Key", text: $config.openAIAPIKey)
                             .help("Required for OpenAI GPT/o1 models to function.")
                         TextField("OpenAI Base URL (Optional)", text: $config.openAIBaseURL)
                             .help("Overrides the default openai endpoint. Useful for deepseek or local compatible servers.")
+                        TextField("Easy Subagent Model", text: $config.openaiModelEasy)
+                            .help("Used for simple and repetitive tasks.")
+                        TextField("Primary / Medium Model", text: $config.openaiModelMedium)
+                            .help("Used for standard generation and reasoning.")
+                        TextField("Hard Subagent Model", text: $config.openaiModelHard)
+                            .help("Used for complex reasoning and evaluation.")
                     }
-                    
-                    TextField("Easy Subagent Model", text: $config.modelEasy)
-                        .help("Used for simple and repetitive tasks.")
-                    
-                    TextField("Primary / Medium Model", text: $config.modelMedium)
-                        .help("Used for standard generation and reasoning.")
-                    
-                    TextField("Hard Subagent Model", text: $config.modelHard)
-                        .help("Used for complex reasoning and evaluation.")
                 }
                 .padding(.bottom)
                 
