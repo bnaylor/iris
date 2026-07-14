@@ -22,6 +22,7 @@ struct SettingsView: View {
                 }
                 .padding(.bottom)
             }
+            .formStyle(.grouped)
             .padding(20)
             .tabItem {
                 Label("General", systemImage: "gearshape")
@@ -197,6 +198,7 @@ struct SettingsView: View {
                 }
                 .padding(.bottom)
             }
+            .formStyle(.grouped)
             .padding(20)
             .tabItem {
                 Label("Models", systemImage: "cpu")
@@ -231,6 +233,7 @@ struct SettingsView: View {
                 }
                 .padding(.bottom)
             }
+            .formStyle(.grouped)
             .padding(20)
             .tabItem {
                 Label("Integrations", systemImage: "link")
@@ -284,6 +287,7 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            .formStyle(.grouped)
             .padding(20)
             .tabItem {
                 Label("Advanced", systemImage: "lock.shield")
