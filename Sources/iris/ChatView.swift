@@ -7,6 +7,8 @@ struct ChatView: View {
     @State private var inputText = ""
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
+    @State private var showSetupWizard = false
+    @Bindable var config = ConfigManager.shared
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     
@@ -276,9 +278,19 @@ struct ChatView: View {
             }
         }
         .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)
+        .preferredColorScheme(config.appearanceTheme == "light" ? .light : (config.appearanceTheme == "dark" ? .dark : nil))
+        .sheet(isPresented: $showSetupWizard) {
+            SetupWizardView()
+                .onDisappear {
+                    if ConfigManager.shared.isConfigured {
+                        state.start()
+                    }
+                }
+        }
         .onAppear {
-            if !ConfigManager.shared.isConfigured {
-                openSettings()
+            let hasCompletedSetup = UserDefaults.standard.bool(forKey: "HAS_COMPLETED_SETUP")
+            if !hasCompletedSetup || !ConfigManager.shared.isConfigured {
+                showSetupWizard = true
             } else {
                 state.start()
             }

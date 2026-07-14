@@ -20,6 +20,10 @@ public enum GeminiAuthMode: String, CaseIterable, Identifiable, Sendable {
 class ConfigManager: @unchecked Sendable {
     @ObservationIgnored static let shared = ConfigManager()
     
+    var appearanceTheme: String {
+        didSet { UserDefaults.standard.set(appearanceTheme, forKey: "APPEARANCE_THEME") }
+    }
+    
     var copyChatsAsMarkdown: Bool {
         didSet { UserDefaults.standard.set(copyChatsAsMarkdown, forKey: "COPY_CHATS_AS_MARKDOWN") }
     }
@@ -169,6 +173,8 @@ class ConfigManager: @unchecked Sendable {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
         self.geminiAuthMode = UserDefaults.standard.string(forKey: "GEMINI_AUTH_MODE") ?? GeminiAuthMode.apiKey.rawValue
+        
+        self.appearanceTheme = UserDefaults.standard.string(forKey: "APPEARANCE_THEME") ?? "system"
         
         if UserDefaults.standard.object(forKey: "COPY_CHATS_AS_MARKDOWN") != nil {
             self.copyChatsAsMarkdown = UserDefaults.standard.bool(forKey: "COPY_CHATS_AS_MARKDOWN")

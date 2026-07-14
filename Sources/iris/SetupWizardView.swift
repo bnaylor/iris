@@ -1,0 +1,394 @@
+import SwiftUI
+
+struct WizardStepRow: View {
+    let step: Int
+    let title: String
+    let currentStep: Int
+    
+    var isActive: Bool { currentStep == step }
+    var isPast: Bool { currentStep > step }
+    
+    var body: some View {
+        HStack {
+            ZStack {
+                Circle()
+                    .fill(isActive ? Color.accentColor : (isPast ? Color.green : Color.secondary.opacity(0.3)))
+                    .frame(width: 24, height: 24)
+                if isPast {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                } else {
+                    Text("\(step)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(isActive ? .white : .primary)
+                }
+            }
+            
+            Text(title)
+                .font(.system(size: 14, weight: isActive ? .bold : .medium))
+                .foregroundColor(isActive ? .primary : .secondary)
+            
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct SetupWizardView: View {
+    @State private var currentStep: Int = 1
+    @Bindable var config = ConfigManager.shared
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Sidebar
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Iris Setup")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .padding(.bottom, 20)
+                
+                WizardStepRow(step: 1, title: "Appearance", currentStep: currentStep)
+                WizardStepRow(step: 2, title: "Base Model", currentStep: currentStep)
+                WizardStepRow(step: 3, title: "Integrations", currentStep: currentStep)
+                WizardStepRow(step: 4, title: "Vibecop", currentStep: currentStep)
+                WizardStepRow(step: 5, title: "Security", currentStep: currentStep)
+                WizardStepRow(step: 6, title: "Sandboxing", currentStep: currentStep)
+                
+                Spacer()
+            }
+            .frame(width: 220)
+            .padding(30)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.8))
+            
+            Divider()
+            
+            // Main Content
+            VStack(alignment: .leading) {
+                switch currentStep {
+                case 1: AppearanceStepView(currentStep: $currentStep)
+                case 2: BaseModelStepView(currentStep: $currentStep)
+                case 3: IntegrationsStepView(currentStep: $currentStep)
+                case 4: VibecopStepView(currentStep: $currentStep)
+                case 5: SecurityStepView(currentStep: $currentStep)
+                case 6: SandboxingStepView(currentStep: $currentStep, onFinish: finishSetup)
+                default: EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(40)
+            .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(width: 850, height: 550)
+    }
+    
+    private func finishSetup() {
+        dismiss()
+    }
+}
+
+// MARK: - Steps
+
+struct AppearanceStepView: View {
+    @Binding var currentStep: Int
+    @Bindable var config = ConfigManager.shared
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Appearance")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("Choose how Iris looks and feels. Iris features full Markdown rendering for beautiful chat transcripts and code blocks.")
+                .foregroundColor(.secondary)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Theme")
+                    .font(.headline)
+                Picker("Theme", selection: $config.appearanceTheme) {
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                    Text("Auto").tag("system")
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.top, 10)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Chat Formatting")
+                    .font(.headline)
+                Toggle("Copy Chats as Markdown", isOn: $config.copyChatsAsMarkdown)
+                Text("When enabled, copying messages will preserve their Markdown formatting (bold, code blocks, lists).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.top, 10)
+            
+            Spacer()
+            
+            HStack {
+                Spacer()
+                Button("Next") { currentStep += 1 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+    }
+}
+
+struct BaseModelStepView: View {
+    @Binding var currentStep: Int
+    @Bindable var config = ConfigManager.shared
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Base Model")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("Iris needs a primary brain. Choose a provider and enter your API credentials. You can change this anytime in Settings.")
+                .foregroundColor(.secondary)
+            
+            Picker("Provider", selection: $config.primaryProvider) {
+                ForEach(LLMProvider.allCases) { provider in
+                    Text(provider.rawValue).tag(provider.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.top, 10)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                if config.primaryProvider == LLMProvider.gemini.rawValue {
+                    Picker("Authentication", selection: $config.geminiAuthMode) {
+                        ForEach(GeminiAuthMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    
+                    if config.geminiAuthMode == GeminiAuthMode.apiKey.rawValue {
+                        SecureField("Gemini API Key", text: $config.geminiAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                } else if config.primaryProvider == LLMProvider.anthropic.rawValue {
+                    SecureField("Anthropic API Key", text: $config.anthropicAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                } else if config.primaryProvider == LLMProvider.openai.rawValue {
+                    SecureField("OpenAI API Key", text: $config.openAIAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+            
+            Spacer()
+            
+            HStack {
+                Button("Back") { currentStep -= 1 }
+                Spacer()
+                Button("Next") { currentStep += 1 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!config.isConfigured)
+            }
+        }
+    }
+}
+
+struct IntegrationsStepView: View {
+    @Binding var currentStep: Int
+    @Bindable var config = ConfigManager.shared
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Integrations")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("Connect Iris to your digital life. These connections enable agents to read your calendar, search your drive, and manage your tasks.")
+                .foregroundColor(.secondary)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Google Workspace (OAuth)")
+                    .font(.headline)
+                
+                TextField("Client ID", text: $config.googleClientID)
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Client Secret", text: $config.googleClientSecret)
+                    .textFieldStyle(.roundedBorder)
+                
+                if !config.googleAccessToken.isEmpty {
+                    Text("✅ Connected to Google Workspace")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                } else {
+                    Button("Connect") {
+                        Task { try? await OAuthManager.shared.startOAuthFlow() }
+                    }
+                    .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
+                }
+            }
+            .padding()
+            .background(Color.secondary.opacity(0.1))
+            .cornerRadius(8)
+            
+            Spacer()
+            
+            HStack {
+                Button("Back") { currentStep -= 1 }
+                Spacer()
+                Button("Next") { currentStep += 1 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+    }
+}
+
+struct VibecopStepView: View {
+    @Binding var currentStep: Int
+    @Bindable var config = ConfigManager.shared
+    @State private var downloader = ModelDownloader()
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Vibecop")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("Vibecop is a local, on-device AI copilot that monitors your main LLM interactions to prevent hallucinations and ensure output quality. It runs entirely on your Mac.")
+                .foregroundColor(.secondary)
+            
+            Toggle("Enable Vibecop", isOn: $config.enableVibecop)
+            
+            if config.enableVibecop {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Model Selection")
+                        .font(.headline)
+                    
+                    Picker("Model", selection: $config.vibecopModel) {
+                        Text("Qwen2 1.5B (Fast, ~1.1GB)").tag("qwen2-1_5b-instruct-q4_0.gguf")
+                        Text("Llama 3.2 1B (Fast, ~1.3GB)").tag("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+                        Text("Gemma 2 9B (Heavy, ~6.5GB)").tag("gemma-2-9b-it-Q4_K_M.gguf")
+                    }
+                    
+                    let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
+                    
+                    if !isDownloaded {
+                        if downloader.isDownloading {
+                            ProgressView(value: downloader.progress)
+                        } else {
+                            Button("Download Model") {
+                                Task { await downloader.downloadModel(name: config.vibecopModel) }
+                            }
+                        }
+                    } else {
+                        Text("✅ Model ready.")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    }
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            Spacer()
+            
+            HStack {
+                Button("Back") { currentStep -= 1 }
+                Spacer()
+                Button("Next") { currentStep += 1 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+    }
+}
+
+struct SecurityStepView: View {
+    @Binding var currentStep: Int
+    @Bindable var config = ConfigManager.shared
+    @State private var downloader = ModelDownloader()
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Prompt Injection Security")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("Iris can intercept untrusted data from the web before your main LLM reads it, protecting you from adversarial attacks and hidden instructions.")
+                .foregroundColor(.secondary)
+            
+            Toggle("Enable Advanced Protection", isOn: $config.enableAdvancedPromptInjectionProtection)
+            
+            if config.enableAdvancedPromptInjectionProtection {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Tier 2: CoreML Fast Interceptor")
+                        .font(.headline)
+                    Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    let coreMLName = config.promptGuardCoreMLModel.starts(with: "http") ? (URL(string: config.promptGuardCoreMLModel)?.lastPathComponent ?? "") : config.promptGuardCoreMLModel
+                    let coreMLNoZip = coreMLName.hasSuffix(".zip") ? String(coreMLName.dropLast(4)) : coreMLName
+                    let isDownloaded = downloader.isModelDownloaded(name: coreMLNoZip)
+                    
+                    if !isDownloaded {
+                        if downloader.isDownloading {
+                            ProgressView(value: downloader.progress)
+                        } else {
+                            Button("Download CoreML Model (~250MB)") {
+                                Task { await downloader.downloadModel(name: config.promptGuardCoreMLModel) }
+                            }
+                        }
+                    } else {
+                        Text("✅ CoreML model ready.")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    }
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            Spacer()
+            
+            HStack {
+                Button("Back") { currentStep -= 1 }
+                Spacer()
+                Button("Next") { currentStep += 1 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+    }
+}
+
+struct SandboxingStepView: View {
+    @Binding var currentStep: Int
+    var onFinish: () -> Void
+    @Bindable var config = ConfigManager.shared
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Sandboxing")
+                .font(.system(size: 32, weight: .bold))
+            
+            Text("By default, Iris agents can run terminal commands directly on your Mac. Sandboxing forces them to run commands inside an isolated Docker container.")
+                .foregroundColor(.secondary)
+            
+            Toggle("Enable Docker Sandboxing", isOn: $config.enableSandboxing)
+            
+            if config.enableSandboxing {
+                Text("Requires Docker Desktop to be installed and running.")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+            
+            Spacer()
+            
+            HStack {
+                Button("Back") { currentStep -= 1 }
+                Spacer()
+                Button("Finish Setup") { onFinish() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+    }
+}
