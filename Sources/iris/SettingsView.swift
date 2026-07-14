@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var isInstallingContainer = false
     @State private var installError: String?
     @State private var downloader = ModelDownloader.shared
+    @State private var showingDownloadError = false
     
     var body: some View {
         TabView {
@@ -294,6 +295,16 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 600)
+        .onChange(of: downloader.error) { _, newValue in
+            if newValue != nil {
+                showingDownloadError = true
+            }
+        }
+        .alert("Download Error", isPresented: $showingDownloadError) {
+            Button("OK", role: .cancel) { downloader.error = nil }
+        } message: {
+            Text(downloader.error ?? "An unknown error occurred.")
+        }
     }
     
 }
