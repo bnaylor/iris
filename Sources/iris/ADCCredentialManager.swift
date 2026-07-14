@@ -5,6 +5,7 @@ actor ADCCredentialManager {
     
     private var cachedToken: String?
     private var tokenExpiration: Date?
+    private var cachedQuotaProject: String?
     
     private init() {}
     
@@ -31,9 +32,47 @@ actor ADCCredentialManager {
         throw APIError(message: "Application Default Credentials (ADC) token not found. Please run 'gcloud auth application-default login --scopes=\"https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language\"' in terminal.")
     }
     
+    func getQuotaProject() async -> String? {
+        if let cached = cachedQuotaProject {
+            return cached
+        }
+        
+        if let envProject = ProcessInfo.processInfo.environment["GOOGLE_CLOUD_QUOTA_PROJECT"] ?? ProcessInfo.processInfo.environment["GOOGLE_CLOUD_PROJECT"], !envProject.isEmpty {
+            self.cachedQuotaProject = envProject
+            return envProject
+        }
+        
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let envADCPath = ProcessInfo.processInfo.environment["GOOGLE_APPLICATION_CREDENTIALS"]
+        let adcURL: URL
+        if let envADCPath = envADCPath, !envADCPath.isEmpty {
+            adcURL = URL(fileURLWithPath: envADCPath)
+        } else {
+            adcURL = home.appendingPathComponent(".config/gcloud/application_default_credentials.json")
+        }
+        
+        if FileManager.default.fileExists(atPath: adcURL.path),
+           let data = try? Data(contentsOf: adcURL),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let quotaProject = json["quota_project_id"] as? String, !quotaProject.isEmpty {
+            self.cachedQuotaProject = quotaProject
+            return quotaProject
+        }
+        
+        if let gcloudPath = findGCloudBinary() {
+            if let project = try? await runGCloud(path: gcloudPath, args: ["config", "get-value", "project"]), !project.isEmpty, !project.contains(" ") {
+                self.cachedQuotaProject = project
+                return project
+            }
+        }
+        
+        return nil
+    }
+    
     func clearCache() {
         self.cachedToken = nil
         self.tokenExpiration = nil
+        self.cachedQuotaProject = nil
     }
     
     private struct ADCFileToken {
@@ -90,7 +129,7 @@ actor ADCCredentialManager {
         }
     }
     
-    private func fetchTokenFromGCloudCLI() async throws -> String? {
+    private func findGCloudBinary() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let possibleGCloudPaths = [
             "\(home)/google-cloud-sdk/bin/gcloud",
@@ -99,15 +138,16 @@ actor ADCCredentialManager {
             "/usr/bin/gcloud"
         ]
         
-        var gcloudExecutable: String?
         for path in possibleGCloudPaths {
             if FileManager.default.isExecutableFile(atPath: path) {
-                gcloudExecutable = path
-                break
+                return path
             }
         }
-        
-        guard let binaryPath = gcloudExecutable else {
+        return nil
+    }
+    
+    private func fetchTokenFromGCloudCLI() async throws -> String? {
+        guard let binaryPath = findGCloudBinary() else {
             return nil
         }
         
@@ -144,7 +184,7 @@ actor ADCCredentialManager {
                         let data = pipe.fileHandleForReading.readDataToEndOfFile()
                         if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
                             let lines = output.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                            if let lastLine = lines.last, lastLine.starts(with: "ya29.") || lastLine.count > 20 {
+                            if let lastLine = lines.last, !lastLine.isEmpty {
                                 continuation.resume(returning: lastLine)
                                 return
                             }

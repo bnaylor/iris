@@ -65,6 +65,9 @@ struct LLMClient {
                 if isADC {
                     let accessToken = try await ADCCredentialManager.shared.getAccessToken()
                     urlRequest.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                    if let quotaProject = await ADCCredentialManager.shared.getQuotaProject() {
+                        urlRequest.addValue(quotaProject, forHTTPHeaderField: "x-goog-user-project")
+                    }
                 }
                 
                 let encoder = JSONEncoder()

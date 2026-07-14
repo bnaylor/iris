@@ -37,4 +37,12 @@ struct ADCCredentialManagerTests {
         // Ensure clearCache executes cleanly without errors
         #expect(true)
     }
+    
+    @Test("ADCCredentialManager getQuotaProject resolves environment or config")
+    func testGetQuotaProject() async {
+        await ADCCredentialManager.shared.clearCache()
+        let project = await ADCCredentialManager.shared.getQuotaProject()
+        // Should return a string or nil without crashing
+        #expect(project == nil || !project!.isEmpty)
+    }
 }
