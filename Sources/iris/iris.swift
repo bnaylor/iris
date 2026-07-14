@@ -57,10 +57,14 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         let targetId = await MainActor.run { conversationId ?? localState?.selectedConversationId }
         guard let activeId = targetId else { return }
         
+        // Sanitize incoming system events (especially those from subagents) to prevent injection
+        let structuralSafeEvent = PromptInjectionGuard.sanitizeUntrustedInput(message)
+        let safeMessage = await InjectionGuard.sanitize(structuralSafeEvent, contextTag: "system_event_\(source)", maxTier: .tier3_canary)
+        
         await MainActor.run {
-            localState?.appendMessage(role: .system, content: message, to: activeId)
+            localState?.appendMessage(role: .system, content: safeMessage, to: activeId)
         }
-        await processInput(message, source: source, conversationId: activeId)
+        await processInput(safeMessage, source: source, conversationId: activeId)
     }
     
     func start() async {
