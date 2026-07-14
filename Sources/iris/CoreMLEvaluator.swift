@@ -23,7 +23,7 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         lock.withLock { model != nil }
     }
     
-    public func loadModelIfNeeded() {
+    public func loadModelIfNeeded() throws {
         if hasModelLoaded { return }
         let coreMLPathStr = ConfigManager.shared.promptGuardCoreMLModel
         if coreMLPathStr.isEmpty { return }
@@ -44,10 +44,14 @@ public final class CoreMLEvaluator: @unchecked Sendable {
                 setModel(liveModel)
             } catch {
                 print("[CoreMLEvaluator] Failed to load CoreML model: \(error)")
+                throw error
             }
             #else
             print("[CoreMLEvaluator] Transformers framework not available. Cannot load CoreML model.")
+            throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transformers framework not available."])
             #endif
+        } else {
+            throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Model directory does not exist at \(fullPath.path)"])
         }
     }
     

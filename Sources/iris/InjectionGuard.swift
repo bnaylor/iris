@@ -66,7 +66,7 @@ public struct InjectionGuard {
         guard ConfigManager.shared.enableAdvancedPromptInjectionProtection else {
             return true
         }
-        CoreMLEvaluator.shared.loadModelIfNeeded()
+        try? CoreMLEvaluator.shared.loadModelIfNeeded()
         let startTime = Date()
         let hasModelLoaded = CoreMLEvaluator.shared.hasModelLoaded
         do {

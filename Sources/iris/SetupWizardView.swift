@@ -359,7 +359,8 @@ struct SecurityStepView: View {
     @Binding var currentStep: Int
     @Bindable var config = ConfigManager.shared
     var downloader = ModelDownloader.shared
-    @State private var testStatus: String?
+    @State private var tier2TestStatus: String?
+    @State private var tier3TestStatus: String?
     
     var body: some View {
         ScrollView {
@@ -400,23 +401,23 @@ struct SecurityStepView: View {
                                     
                                 Button("Test Model") {
                                     Task {
-                                        CoreMLEvaluator.shared.loadModelIfNeeded()
-                                        if CoreMLEvaluator.shared.hasModelLoaded {
-                                            do {
+                                        do {
+                                            try CoreMLEvaluator.shared.loadModelIfNeeded()
+                                            if CoreMLEvaluator.shared.hasModelLoaded {
                                                 _ = try await CoreMLEvaluator.shared.evaluate(text: "Hello")
-                                                testStatus = "✅ Success"
-                                            } catch {
-                                                testStatus = "❌ Failed: \(error.localizedDescription)"
+                                                tier2TestStatus = "✅ Success"
+                                            } else {
+                                                tier2TestStatus = "❌ Failed: Model not loaded"
                                             }
-                                        } else {
-                                            testStatus = "❌ Failed: Model not loaded"
+                                        } catch {
+                                            tier2TestStatus = "❌ Failed: \(error.localizedDescription)"
                                         }
                                     }
                                 }
                                 .buttonStyle(.link)
                                 .font(.caption)
                                 
-                                if let status = testStatus {
+                                if let status = tier2TestStatus {
                                     Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
                                 }
                             }
@@ -469,16 +470,16 @@ struct SecurityStepView: View {
                                             let auxConfig = AuxiliaryModelConfig(role: "promptGuard", engineType: engineType, modelPathOrName: config.promptGuardModel)
                                             let engine = try await AuxiliaryModelManager.shared.getEngine(for: "promptGuard", config: auxConfig)
                                             _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                            testStatus = "✅ Success"
+                                            tier3TestStatus = "✅ Success"
                                         } catch {
-                                            testStatus = "❌ Failed: \(error.localizedDescription)"
+                                            tier3TestStatus = "❌ Failed: \(error.localizedDescription)"
                                         }
                                     }
                                 }
                                 .buttonStyle(.link)
                                 .font(.caption)
                                 
-                                if let status = testStatus {
+                                if let status = tier3TestStatus {
                                     Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
                                 }
                             }
