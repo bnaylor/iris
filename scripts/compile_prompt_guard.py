@@ -30,7 +30,8 @@ def main():
     print(f"[*] Downloading and loading PyTorch model {model_id}...")
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForSequenceClassification.from_pretrained(model_id, torchscript=True)
+        # Some models don't support torchscript=True in from_pretrained, so we set it via config if needed or just trace it directly
+        model = AutoModelForSequenceClassification.from_pretrained(model_id)
     except Exception as e:
         print(f"[!] Error loading model: {e}")
         print("[!] If this is a gated model (like Llama Prompt Guard), make sure you are logged in using `huggingface-cli login`")
