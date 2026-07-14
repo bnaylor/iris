@@ -56,7 +56,14 @@ final class FileWatcher: @unchecked Sendable {
             
             if let stream = self.stream {
                 FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .background))
-                FSEventStreamStart(stream)
+                if !FSEventStreamStart(stream) {
+                    FSEventStreamInvalidate(stream)
+                    FSEventStreamRelease(stream)
+                    self.stream = nil
+                    continuation.finish()
+                }
+            } else {
+                continuation.finish()
             }
             
             continuation.onTermination = { [weak self] _ in

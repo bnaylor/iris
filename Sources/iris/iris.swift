@@ -95,11 +95,11 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             finalText = modifiedInput
         }
 
+        let userContent = Content(role: "user", parts: [Part(text: finalText, functionCall: nil, functionResponse: nil)])
+        await MainActor.run { localState?.appendContentToHistory(for: conversationId, content: userContent) }
+        
         var history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
         let workspacePath = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.workspacePath }
-        
-        history.append(Content(role: "user", parts: [Part(text: finalText, functionCall: nil, functionResponse: nil)]))
-        await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
         
         await ensureSystemPrompt()
         var currentSystemPrompt = systemPrompt!
@@ -323,10 +323,13 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                 }
                 
                 let modelContent = Content(role: "model", parts: responseContent.parts)
-                history.append(modelContent)
-                
                 await MainActor.run { 
-                    localState?.updateHistory(for: conversationId, history: history) 
+                    localState?.appendContentToHistory(for: conversationId, content: modelContent) 
+                }
+                history = await MainActor.run {
+                    localState?.conversations.first(where: { $0.id == conversationId })?.history ?? []
+                }
+                await MainActor.run { 
                     if let usage = activeResponse.usageMetadata {
                         localState?.updateTokenUsage(for: conversationId, usage: usage)
                     }
@@ -390,8 +393,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                     }
                     
                     let functionResponse = Content(role: "user", parts: responseParts)
-                    history.append(functionResponse)
-                    await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
+                    await MainActor.run { localState?.appendContentToHistory(for: conversationId, content: functionResponse) }
+                    history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
                     request.contents = history
                 }
                 

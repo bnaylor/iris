@@ -39,11 +39,17 @@ struct ScheduledJob: Codable, Identifiable {
 class ScheduleManager: @unchecked Sendable {
     static let shared = ScheduleManager()
     
-    private let queue = DispatchQueue(label: "com.iris.scheduler")
+    private let lock = NSLock()
     private var jobs: [ScheduledJob] = []
-    private var timer: Timer?
     
-    var onJobFired: ((String, UUID?) async -> Void)?
+    private var _onJobFired: (@Sendable (String, UUID?) async -> Void)?
+    var onJobFired: (@Sendable (String, UUID?) async -> Void)? {
+        get { lock.withLock { _onJobFired } }
+        set { lock.withLock { _onJobFired = newValue } }
+    }
+    
+    private var isRunning = false
+    private var evaluationTask: Task<Void, Never>?
     
     private init() {
         loadJobs()
@@ -58,65 +64,69 @@ class ScheduleManager: @unchecked Sendable {
     }
     
     func start() {
-        queue.async {
-            self.timer?.invalidate()
-            // Evaluate every 10 seconds to not miss minute marks
-            self.timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-                self?.evaluateJobs(fromWake: false)
+        lock.lock()
+        if isRunning {
+            lock.unlock()
+            return
+        }
+        isRunning = true
+        lock.unlock()
+        
+        evaluationTask?.cancel()
+        evaluationTask = Task {
+            while !Task.isCancelled {
+                self.evaluateJobs(fromWake: false)
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
             }
-            RunLoop.current.add(self.timer!, forMode: .default)
-            RunLoop.current.run()
         }
     }
     
     func schedule(conversationId: UUID?, prompt: String, minute: Int? = nil, hour: Int? = nil, day: Int? = nil, month: Int? = nil, weekday: Int? = nil, intervalSeconds: Int? = nil) {
-        queue.async {
-            var job = ScheduledJob(
-                conversationId: conversationId,
-                prompt: prompt,
-                minute: minute,
-                hour: hour,
-                day: day,
-                month: month,
-                weekday: weekday,
-                intervalSeconds: intervalSeconds,
-                nextFireAt: Date() // placeholder
-            )
-            job.nextFireAt = job.calculateNextFireDate(after: Date())
-            self.jobs.append(job)
-            self.saveJobs()
-        }
+        lock.lock()
+        var job = ScheduledJob(
+            conversationId: conversationId,
+            prompt: prompt,
+            minute: minute,
+            hour: hour,
+            day: day,
+            month: month,
+            weekday: weekday,
+            intervalSeconds: intervalSeconds,
+            nextFireAt: Date() // placeholder
+        )
+        job.nextFireAt = job.calculateNextFireDate(after: Date())
+        self.jobs.append(job)
+        self.saveJobs()
+        lock.unlock()
     }
     
     private func evaluateJobs(fromWake: Bool) {
-        queue.async {
-            let now = Date()
-            var firedJobs: [ScheduledJob] = []
-            var updatedJobs: [ScheduledJob] = []
-            
-            for var job in self.jobs {
-                if job.nextFireAt <= now {
-                    firedJobs.append(job)
-                    // Set next fire date relative to NOW, not relative to when it missed (to prevent firing a million times catching up)
-                    job.nextFireAt = job.calculateNextFireDate(after: now)
-                    
-                    // Keep the job if it's recurring. If it was an interval, we also recur?
-                    // Let's assume all cron and interval jobs recur. If they want one-off, we could add `isRecurring`.
-                    // Actually, let's just make everything recurring for simplicity.
-                    updatedJobs.append(job) 
-                } else {
-                    updatedJobs.append(job)
-                }
+        let now = Date()
+        var firedJobs: [ScheduledJob] = []
+        var updatedJobs: [ScheduledJob] = []
+        
+        lock.lock()
+        for var job in self.jobs {
+            if job.nextFireAt <= now {
+                firedJobs.append(job)
+                job.nextFireAt = job.calculateNextFireDate(after: now)
+                updatedJobs.append(job) 
+            } else {
+                updatedJobs.append(job)
             }
-            
-            if !firedJobs.isEmpty {
-                self.jobs = updatedJobs
-                self.saveJobs()
-                
-                for job in firedJobs {
-                    Task {
-                        await self.onJobFired?(job.prompt, job.conversationId)
-                    }
+        }
+        
+        if !firedJobs.isEmpty {
+            self.jobs = updatedJobs
+            self.saveJobs()
+        }
+        let firedCallback = self._onJobFired
+        lock.unlock()
+        
+        if !firedJobs.isEmpty, let callback = firedCallback {
+            for job in firedJobs {
+                Task {
+                    await callback(job.prompt, job.conversationId)
                 }
             }
         }
@@ -125,13 +135,13 @@ class ScheduleManager: @unchecked Sendable {
     private func loadJobs() {
         if let data = UserDefaults.standard.data(forKey: "iris_scheduled_jobs"),
            let decoded = try? JSONDecoder().decode([ScheduledJob].self, from: data) {
-            self.jobs = decoded
+            lock.withLock { self.jobs = decoded }
         }
     }
     
     private func saveJobs() {
-        if let encoded = try? JSONEncoder().encode(jobs) {
-            UserDefaults.standard.set(encoded, forKey: "iris_scheduled_jobs")
+        if let data = try? JSONEncoder().encode(jobs) {
+            UserDefaults.standard.set(data, forKey: "iris_scheduled_jobs")
         }
     }
 }

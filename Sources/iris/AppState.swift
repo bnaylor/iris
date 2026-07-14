@@ -295,6 +295,20 @@ class AppState {
         }
     }
     
+    func appendContentToHistory(for conversationId: UUID, content: Content) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].history.append(content)
+            saveConversations()
+        }
+    }
+    
+    func appendContentsToHistory(for conversationId: UUID, contents: [Content]) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].history.append(contentsOf: contents)
+            saveConversations()
+        }
+    }
+    
     func updateTokenUsage(for conversationId: UUID, usage: UsageMetadata) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].tokenUsage.promptTokenCount += usage.promptTokenCount ?? 0
@@ -378,9 +392,16 @@ class AppState {
         cont.resume(returning: approved)
     }
     
+    private var saveTask: Task<Void, Never>? = nil
+    
     private func saveConversations() {
-        if let data = try? JSONEncoder().encode(conversations) {
-            UserDefaults.standard.set(data, forKey: "iris_conversations")
+        saveTask?.cancel()
+        saveTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+            guard !Task.isCancelled else { return }
+            if let data = try? JSONEncoder().encode(conversations) {
+                UserDefaults.standard.set(data, forKey: "iris_conversations")
+            }
         }
     }
     

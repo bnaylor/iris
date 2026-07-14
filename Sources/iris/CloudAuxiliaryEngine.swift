@@ -12,9 +12,14 @@ struct CloudAuxiliaryEngine: AuxiliaryInferenceEngine {
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
         let client = LLMClient()
         
+        var finalPrompt = prompt
+        if let schema = jsonSchema {
+            finalPrompt += "\n\nYou MUST return your response as a valid JSON object matching the following schema. Return ONLY JSON, no markdown formatting or prose:\n\(schema)"
+        }
+        
         let requestContent = Content(
             role: "user", 
-            parts: [Part(text: prompt, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]
+            parts: [Part(text: finalPrompt, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]
         )
         
         let request = GeminiRequest(contents: [requestContent], systemInstruction: nil, tools: nil)

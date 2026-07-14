@@ -3,8 +3,13 @@ import Foundation
 final class SubagentManager: @unchecked Sendable {
     static let shared = SubagentManager()
     
-    // We can hold weak reference to the global app state, or a standalone state
-    weak var state: AppState?
+    private let lock = NSLock()
+    private weak var _state: AppState?
+    
+    var state: AppState? {
+        get { lock.withLock { _state } }
+        set { lock.withLock { _state = newValue } }
+    }
     
     private init() {}
     
@@ -13,7 +18,7 @@ final class SubagentManager: @unchecked Sendable {
     }
     
     func runSubagent(role: String, task: String, effort: String, parentConversationId: UUID) async -> String {
-        guard let appState = state else {
+        guard let appState = self.state else {
             return "Error: AppState not available for subagent execution."
         }
         

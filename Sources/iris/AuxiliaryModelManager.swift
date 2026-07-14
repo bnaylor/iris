@@ -3,8 +3,8 @@ import Foundation
 final class AuxiliaryModelManager: @unchecked Sendable {
     static let shared = AuxiliaryModelManager()
     
-    // In-memory engines mapped by role
-    private var engines: [String: AuxiliaryInferenceEngine] = [:]
+    // In-memory engine loading tasks mapped by role
+    private var loadingTasks: [String: Task<AuxiliaryInferenceEngine, Error>] = [:]
     private let lock = NSLock()
     
     private let modelsDir: String
@@ -21,38 +21,49 @@ final class AuxiliaryModelManager: @unchecked Sendable {
     }
     
     func getEngine(for role: String, config: AuxiliaryModelConfig) async throws -> AuxiliaryInferenceEngine {
-        let existing = lock.withLock { engines[role] }
-        if let existing = existing {
-            return existing
+        let task: Task<AuxiliaryInferenceEngine, Error> = lock.withLock {
+            if let existing = loadingTasks[role] {
+                return existing
+            } else {
+                let newTask = Task {
+                    let engine: AuxiliaryInferenceEngine
+                    switch config.engineType {
+                    case .llamaCPP:
+                        engine = try await LlamaCPPEngine()
+                    case .ollama:
+                        engine = OllamaEngine()
+                    case .mlx:
+                        engine = MLXEngine.shared
+                    case .cloud:
+                        engine = CloudAuxiliaryEngine()
+                    }
+                    
+                    try await engine.loadModel(config: config)
+                    return engine
+                }
+                loadingTasks[role] = newTask
+                return newTask
+            }
         }
         
-        let engine: AuxiliaryInferenceEngine
-        switch config.engineType {
-        case .llamaCPP:
-            engine = try await LlamaCPPEngine()
-        case .ollama:
-            engine = OllamaEngine()
-        case .mlx:
-            engine = MLXEngine.shared
-        case .cloud:
-            engine = CloudAuxiliaryEngine()
+        do {
+            return try await task.value
+        } catch {
+            _ = lock.withLock { loadingTasks.removeValue(forKey: role) }
+            throw error
         }
-        
-        try await engine.loadModel(config: config)
-        
-        lock.withLock { engines[role] = engine }
-        return engine
     }
     
     func unloadEngine(for role: String) async {
-        let engine = lock.withLock { engines.removeValue(forKey: role) }
-        
-        if let engine = engine {
+        let task = lock.withLock { loadingTasks.removeValue(forKey: role) }
+        if let engine = try? await task?.value {
             await engine.unloadModel()
         }
     }
     
     func setMockEngine(_ engine: AuxiliaryInferenceEngine, for role: String) {
-        lock.withLock { engines[role] = engine }
+        lock.withLock { 
+            loadingTasks[role] = Task { return engine }
+        }
     }
 }
