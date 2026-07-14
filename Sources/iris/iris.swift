@@ -106,7 +106,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         
         let queryVector = HolographicVector.encode(string: input)
         let facts = (try? HolographicMemoryManager.shared.search(query: input, queryVector: queryVector, limit: 5)) ?? []
-        let factString = facts.isEmpty ? "No relevant facts found." : facts.map { "- \($0.content)" }.joined(separator: "\n")
+        
+        if !facts.isEmpty {
+            try? HolographicMemoryManager.shared.reinforceFacts(ids: facts.map { $0.id })
+        }
         
         if let textPart = currentSystemPrompt.parts.first?.text {
             // Append USER.md first (mostly static)
@@ -124,7 +127,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             }
         }
         
-        if let textPart = currentSystemPrompt.parts.first?.text {
+        if !facts.isEmpty, let textPart = currentSystemPrompt.parts.first?.text {
+            let factString = facts.map { "- \($0.content)" }.joined(separator: "\n")
             // Append Holographic Memory last (highly volatile, changes per query)
             currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Holographic Memory (JIT Context)\n" + factString
         }
@@ -271,6 +275,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         
         var turnFinished = false
         while !turnFinished {
+            await Task.yield()
             do {
                 let beforeModelDecision = await HookManager.shared.fireBeforeModel(request: request)
                 if case .block(let reason) = beforeModelDecision {
@@ -393,6 +398,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                 await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
+                await MainActor.run { 
+                    localState?.clearGoal(for: conversationId)
+                    localState?.onSubagentComplete[conversationId]?("Subagent failed due to LLM Error: \(error.localizedDescription)")
+                }
             }
         }
         

@@ -45,22 +45,34 @@ final class SubagentManager: @unchecked Sendable {
             appState.appendMessage(role: .system, content: "Starting subagent with role '\(role)' to execute task:\n\(task)", to: subagentId)
         }
         
-        let finalSummary: String = await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                appState.onSubagentComplete[subagentId] = { sum in
-                    Task { @MainActor in
-                        appState.onSubagentComplete[subagentId] = nil
-                    }
-                    continuation.resume(returning: sum)
+        actor ResultHolder {
+            var summary: String? = nil
+            func setSummary(_ s: String) { summary = s }
+            func getSummary() -> String? { return summary }
+        }
+        let holder = ResultHolder()
+        
+        await MainActor.run {
+            appState.onSubagentComplete[subagentId] = { sum in
+                Task {
+                    await holder.setSummary(sum)
+                }
+                Task { @MainActor in
+                    appState.onSubagentComplete[subagentId] = nil
                 }
             }
-            
-            Task {
-                // Kick off the first turn. Since activeGoal is set, the engine will autonomously reprompt itself
-                // in a loop until goal_complete is called.
-                await engine.processInput(task, source: "System", conversationId: subagentId)
-            }
         }
+        
+        Task {
+            // Kick off the first turn. Since activeGoal is set, the engine will autonomously reprompt itself
+            // in a loop until goal_complete is called.
+            await engine.processInput(task, source: "System", conversationId: subagentId)
+        }
+        
+        while await holder.getSummary() == nil {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        let finalSummary = await holder.getSummary()!
         
         await MainActor.run {
             appState.removeSubagent(id: subagentId)

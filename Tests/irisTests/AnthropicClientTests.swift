@@ -208,8 +208,95 @@ final class AnthropicClientTests: XCTestCase {
         XCTAssertEqual(firstCandidate?.content?.parts.count, 1)
         let firstPart = firstCandidate?.content?.parts[0]
         XCTAssertNotNil(firstPart?.functionCall)
-        XCTAssertEqual(firstPart?.functionCall?.name, "get_weather")
         XCTAssertEqual(firstPart?.functionCall?.args["location"], "Boston")
+    }
+    
+    func testAnthropicMultipleToolCalls() async throws {
+        let tools = [
+            FunctionDeclaration(
+                name: "get_weather",
+                description: "Get the current weather",
+                parameters: Schema(
+                    type: "OBJECT",
+                    properties: ["location": Schema(type: "STRING", description: "City")],
+                    required: ["location"]
+                )
+            ),
+            FunctionDeclaration(
+                name: "get_time",
+                description: "Get the current time",
+                parameters: Schema(
+                    type: "OBJECT",
+                    properties: ["location": Schema(type: "STRING", description: "City")],
+                    required: ["location"]
+                )
+            )
+        ]
+        
+        let request = GeminiRequest(
+            contents: [Content(role: "user", parts: [Part(text: "What is the weather and time in Boston?", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)])],
+            systemInstruction: nil,
+            tools: [Tool(functionDeclarations: tools)]
+        )
+        
+        MockURLProtocol.handler = { urlRequest in
+            let responseJson: [String: Any] = [
+                "id": "msg_03",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet",
+                "content": [
+                    [
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "get_weather",
+                        "input": [
+                            "location": "Boston"
+                        ]
+                    ],
+                    [
+                        "type": "tool_use",
+                        "id": "call_2",
+                        "name": "get_time",
+                        "input": [
+                            "location": "Boston"
+                        ]
+                    ]
+                ],
+                "usage": [
+                    "input_tokens": 50,
+                    "output_tokens": 30
+                ]
+            ]
+            
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(
+                url: urlRequest.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await AnthropicClient.generateContent(
+            request: request,
+            model: "claude-3-5-sonnet",
+            apiKey: "test-key-anthropic"
+        )
+        
+        XCTAssertNotNil(response.candidates)
+        XCTAssertEqual(response.candidates?.count, 1)
+        let firstCandidate = response.candidates?[0]
+        XCTAssertEqual(firstCandidate?.content?.parts.count, 2)
+        
+        let firstPart = firstCandidate?.content?.parts[0]
+        XCTAssertEqual(firstPart?.functionCall?.name, "get_weather")
+        XCTAssertEqual(firstPart?.functionCall?.id, "call_1")
+        
+        let secondPart = firstCandidate?.content?.parts[1]
+        XCTAssertEqual(secondPart?.functionCall?.name, "get_time")
+        XCTAssertEqual(secondPart?.functionCall?.id, "call_2")
     }
     
     func testAnthropicErrorPropagation() async throws {

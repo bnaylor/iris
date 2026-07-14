@@ -204,6 +204,103 @@ final class OpenAIClientTests: XCTestCase {
         XCTAssertEqual(firstPart?.functionCall?.args["location"], "Boston")
     }
     
+    func testOpenAIMultipleToolCalls() async throws {
+        let tools = [
+            FunctionDeclaration(
+                name: "get_weather",
+                description: "Get the current weather",
+                parameters: Schema(
+                    type: "OBJECT",
+                    properties: ["location": Schema(type: "STRING", description: "City")],
+                    required: ["location"]
+                )
+            ),
+            FunctionDeclaration(
+                name: "get_time",
+                description: "Get the current time",
+                parameters: Schema(
+                    type: "OBJECT",
+                    properties: ["location": Schema(type: "STRING", description: "City")],
+                    required: ["location"]
+                )
+            )
+        ]
+        
+        let request = GeminiRequest(
+            contents: [Content(role: "user", parts: [Part(text: "What is the weather and time in Boston?", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)])],
+            systemInstruction: nil,
+            tools: [Tool(functionDeclarations: tools)]
+        )
+        
+        MockURLProtocol.handler = { urlRequest in
+            let responseJson: [String: Any] = [
+                "id": "chatcmpl-multi",
+                "object": "chat.completion",
+                "model": "gpt-4o",
+                "choices": [
+                    [
+                        "index": 0,
+                        "message": [
+                            "role": "assistant",
+                            "tool_calls": [
+                                [
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": [
+                                        "name": "get_weather",
+                                        "arguments": "{\"location\":\"Boston\"}"
+                                    ]
+                                ],
+                                [
+                                    "id": "call_2",
+                                    "type": "function",
+                                    "function": [
+                                        "name": "get_time",
+                                        "arguments": "{\"location\":\"Boston\"}"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                "usage": [
+                    "prompt_tokens": 50,
+                    "completion_tokens": 20,
+                    "total_tokens": 70
+                ]
+            ]
+            
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(
+                url: urlRequest.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await OpenAIClient.generateContent(
+            request: request,
+            model: "gpt-4o",
+            apiKey: "test-key-openai"
+        )
+        
+        XCTAssertNotNil(response.candidates)
+        XCTAssertEqual(response.candidates?.count, 1)
+        let firstCandidate = response.candidates?[0]
+        XCTAssertEqual(firstCandidate?.content?.parts.count, 2)
+        
+        let firstPart = firstCandidate?.content?.parts[0]
+        XCTAssertEqual(firstPart?.functionCall?.name, "get_weather")
+        XCTAssertEqual(firstPart?.functionCall?.id, "call_1")
+        
+        let secondPart = firstCandidate?.content?.parts[1]
+        XCTAssertEqual(secondPart?.functionCall?.name, "get_time")
+        XCTAssertEqual(secondPart?.functionCall?.id, "call_2")
+    }
+    
+    
     func testOpenAIErrorPropagation() async throws {
         let request = GeminiRequest(
             contents: [Content(role: "user", parts: [Part(text: "Hello", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)])],

@@ -37,45 +37,11 @@ struct LLMClient {
                 // Fallback to Gemini
                 let apiKey = config.geminiAPIKey
                 guard !apiKey.isEmpty else {
-                    throw URLError(.userAuthenticationRequired)
+                    throw APIError.init(message: "GEMINI_FALLBACK_AUTH_ERROR_1013")
                 }
                 
                 var cleanRequest = request
-                var cleanContents: [Content] = []
-                for content in cleanRequest.contents {
-                    var cleanParts: [Part] = []
-                    for part in content.parts {
-                        var cleanPart = part
-                        cleanPart.thought_signature = nil
-                        cleanPart.thoughtSignature = nil
-                        if var fnCall = cleanPart.functionCall {
-                            fnCall.thought_signature = nil
-                            fnCall.thoughtSignature = nil
-                            cleanPart.functionCall = fnCall
-                        }
-                        cleanParts.append(cleanPart)
-                    }
-                    var cleanContent = content
-                    cleanContent.parts = cleanParts
-                    cleanContents.append(cleanContent)
-                }
-                cleanRequest.contents = cleanContents
-                
-                if let sysInst = cleanRequest.systemInstruction {
-                    var cleanSysParts: [Part] = []
-                    for part in sysInst.parts {
-                        var cleanPart = part
-                        cleanPart.thought_signature = nil
-                        cleanPart.thoughtSignature = nil
-                        if var fnCall = cleanPart.functionCall {
-                            fnCall.thought_signature = nil
-                            fnCall.thoughtSignature = nil
-                            cleanPart.functionCall = fnCall
-                        }
-                        cleanSysParts.append(cleanPart)
-                    }
-                    cleanRequest.systemInstruction?.parts = cleanSysParts
-                }
+                // We no longer strip thought_signature because Gemini requires it to be echoed back
                 
                 let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
                 
