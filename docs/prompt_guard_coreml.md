@@ -44,3 +44,16 @@ Once the script finishes, it will produce a `.mlmodelc.zip` file in your directo
 4. Click **Download CoreML Model**. 
 
 Iris will automatically download the archive, unzip it into `~/.iris/models/`, and load it into the `CoreMLEvaluator` instantly. Any future evaluations will be hardware-accelerated and run locally on your Mac!
+
+## Model Selection History
+
+During development, we initially targeted Meta's official `meta-llama/Prompt-Guard-86M` for our Tier 2 interceptor. However, we encountered several significant friction points:
+
+1.  **Gating and Licensing**: Meta's model requires an active Hugging Face account with agreed-upon license terms before the weights can be downloaded. This broke the zero-friction onboarding experience we wanted for the Setup Wizard.
+2.  **Architectural Mismatches**: The Prompt-Guard-86M uses a specialized tokenization and architecture format that proved extremely difficult to reliably export to CoreML (`.mil`) while maintaining full compatibility with `swift-transformers`. There were persistent tensor shape and state-dict mismatches when attempting to trace the PyTorch model via `coremltools`.
+3.  **Performance overhead**: The custom architecture of the Llama-based guard meant compiling the model natively was slow, and bridging it through Swift's LiveCoreMLModel required extensive custom logic that was brittle across macOS versions.
+
+As a result, we pivoted to `fmops/distilbert-prompt-injection`. 
+-   **Ungated**: It can be downloaded anonymously without Hugging Face authentication.
+-   **Standard Architecture**: DistilBERT is universally supported. It converts flawlessly via `coremltools` and its standard tokenizer configuration works seamlessly out of the box with the Apple `swift-transformers` package.
+-   **Extremely Fast**: Being a distilled model, it provides incredibly rapid classification times (<50ms) on the Apple Neural Engine, making it perfect for an invisible inline interceptor.
