@@ -297,11 +297,12 @@ final class HolographicMemoryManager: @unchecked Sendable {
     func evictOldFacts() throws {
         let writer: DatabaseWriter = dbQueue ?? dbPool!
         try writer.write { db in
-            // Delete facts older than 30 days that have never been significantly reinforced (trustScore < 1.2)
+            // Delete facts older than 30 days that have never been significantly reinforced (trustScore < 1.2),
+            // OR facts that are older than 90 days regardless of trust score to prevent unbounded growth.
             let sql = """
                 DELETE FROM facts 
-                WHERE (julianday('now') - julianday(timestamp)) > 30 
-                AND trustScore < 1.2
+                WHERE ((julianday('now') - julianday(timestamp)) > 30 AND trustScore < 1.2)
+                OR ((julianday('now') - julianday(timestamp)) > 90)
                 """
             try db.execute(sql: sql)
         }

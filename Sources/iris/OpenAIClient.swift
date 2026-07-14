@@ -199,6 +199,12 @@ struct OpenAIClient {
                 }
             }
             
+            if content.parts.isEmpty {
+                // If OpenAI returns content: null and no tool calls, it results in an empty candidate.
+                // We add an explicit error message part so the agent loop doesn't just exit silently.
+                content.parts.append(Part(text: "Error: The model returned an empty response.", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
+            }
+            
             geminiResponse.candidates?.append(Candidate(content: content))
         }
         
