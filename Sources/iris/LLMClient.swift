@@ -40,7 +40,7 @@ struct LLMClient {
                     throw APIError.init(message: "GEMINI_FALLBACK_AUTH_ERROR_1013")
                 }
                 
-                var cleanRequest = request
+                let cleanRequest = request
                 // We no longer strip thought_signature because Gemini requires it to be echoed back
                 
                 let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
