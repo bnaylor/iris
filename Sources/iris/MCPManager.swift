@@ -16,6 +16,7 @@ actor MCPManager {
         let transport: StdioTransport
         let process: Process
         var availableTools: [MCP.Tool] = []
+        var sanitizedDescriptions: [String: String] = [:]
     }
     
     private var servers: [String: ActiveServer] = [:]
@@ -66,11 +67,19 @@ actor MCPManager {
         try await client.connect(transport: transport)
         let toolsResult = try await client.listTools()
         
+        var safeDesc: [String: String] = [:]
+        for tool in toolsResult.tools {
+            if let desc = tool.description {
+                safeDesc[tool.name] = await InjectionGuard.sanitize(desc, contextTag: "mcp_tool_\(tool.name)", maxTier: .tier3_canary)
+            }
+        }
+        
         servers[name] = ActiveServer(
             client: client,
             transport: transport,
             process: process,
-            availableTools: toolsResult.tools
+            availableTools: toolsResult.tools,
+            sanitizedDescriptions: safeDesc
         )
         print("MCP Server \(name) connected. Found \(toolsResult.tools.count) tools.")
     }
@@ -123,9 +132,11 @@ actor MCPManager {
                     description: nil
                 )
                 
+                let safeDescription = server.sanitizedDescriptions[tool.name] ?? tool.description ?? "MCP Tool from \(serverName)"
+                
                 declarations.append(FunctionDeclaration(
                     name: uniqueName,
-                    description: tool.description ?? "MCP Tool from \(serverName)",
+                    description: safeDescription,
                     parameters: geminiSchema
                 ))
             }

@@ -1,5 +1,6 @@
 import Foundation
 import Cocoa
+import CryptoKit
 
 final class SandboxingManager: @unchecked Sendable {
     static let shared = SandboxingManager()
@@ -37,6 +38,15 @@ final class SandboxingManager: @unchecked Sendable {
                 
                 let pkgPath = "/tmp/container-installer.pkg"
                 let (data, _) = try await URLSession.shared.data(from: url)
+                
+                let expectedHash = "0ca1c42a2269c2557efb1d82b1b38ac553e6a3a3da1b1179c439bcee1e7d6714"
+                let actualHash = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+                
+                guard actualHash == expectedHash else {
+                    await completion(false, "Security Error: Downloaded PKG hash mismatch. Expected: \(expectedHash), Got: \(actualHash)")
+                    return
+                }
+                
                 try data.write(to: URL(fileURLWithPath: pkgPath))
                 
                 // We use AppleScript to prompt for privileges to install the PKG

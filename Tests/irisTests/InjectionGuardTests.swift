@@ -98,14 +98,9 @@ final class MockInferenceEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
         if shouldHijack {
-            return "COMPROMISED"
+            return "MALICIOUS"
         } else {
-            // Extract the secret UUID from the prompt
-            if let start = prompt.components(separatedBy: "[").last,
-               let token = start.components(separatedBy: "]").first {
-                return "Here is a safe summary. \(token)"
-            }
-            return "Here is a safe summary."
+            return "SAFE"
         }
     }
 }

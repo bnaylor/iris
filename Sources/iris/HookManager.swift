@@ -128,14 +128,26 @@ struct HookManager {
             let outputPipe = Pipe()
             let errorPipe = Pipe()
             
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-c", hook.command]
+            if ConfigManager.shared.enableSandboxing {
+                guard SandboxingManager.shared.isContainerInstalled else {
+                    continuation.resume(returning: .block(reason: "Sandboxing enabled but container missing for hook execution."))
+                    return
+                }
+                process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
+                process.arguments = ["run", "--rm", ConfigManager.shared.sandboxImage, "bash", "-c", hook.command]
+            } else {
+                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                process.arguments = ["-c", hook.command]
+            }
+            
             process.standardInput = inputPipe
             process.standardOutput = outputPipe
             process.standardError = errorPipe
             
-            // Set standard environment variables
             var env = ProcessInfo.processInfo.environment
+            env.removeValue(forKey: "ANTHROPIC_API_KEY")
+            env.removeValue(forKey: "OPENAI_API_KEY")
+            env.removeValue(forKey: "GEMINI_API_KEY")
             env["GEMINI_CWD"] = FileManager.default.currentDirectoryPath
             process.environment = env
             
@@ -144,7 +156,15 @@ struct HookManager {
                 try? inputPipe.fileHandleForWriting.close()
             }
             
+            let timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(hook.timeout ?? 60) * 1_000_000_000)
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
+            
             process.terminationHandler = { proc in
+                timeoutTask.cancel()
                 let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
                 let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 

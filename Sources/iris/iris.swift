@@ -76,11 +76,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         
         await WatcherManager.shared.startAll()
         
-        // Ensure the core skills folder is always watched dynamically
-        await WatcherManager.shared.addRule(
-            path: "~/.iris/skills",
-            instructions: "The user has modified their skills directory. Reload your skills and acknowledge the change."
-        )
+        // Removed dangerous watcher on ~/.iris/skills that caused a self-reinforcing prompt injection loop
     }
     
     func processInput(_ input: String, source: String, conversationId: UUID) async {
