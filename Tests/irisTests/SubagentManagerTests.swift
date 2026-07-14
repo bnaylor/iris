@@ -181,4 +181,86 @@ final class SubagentManagerTests: XCTestCase {
             XCTAssertEqual(res, "Concurrent execution complete.")
         }
     }
+    func testNilStateReturnsError() async throws {
+        SubagentManager.shared.state = nil
+        
+        let summary = await SubagentManager.shared.runSubagent(
+            role: "security_auditor",
+            task: "Find vulnerabilities",
+            effort: "easy",
+            parentConversationId: UUID()
+        )
+        
+        XCTAssertEqual(summary, "Error: AppState not available for subagent execution.")
+    }
+    
+    func testInvalidEffortStringDefaultsToMedium() async throws {
+        let state = AppState()
+        SubagentManager.shared.setGlobalState(state)
+        
+        let lock = NSLock()
+        var usedModel = ""
+        
+        MockURLProtocol.handler = { request in
+            let bodyData: Data
+            if let stream = request.httpBodyStream {
+                stream.open()
+                let bufferSize = 1024
+                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+                var data = Data()
+                while stream.hasBytesAvailable {
+                    let read = stream.read(buffer, maxLength: bufferSize)
+                    if read > 0 { data.append(buffer, count: read) } else { break }
+                }
+                buffer.deallocate()
+                stream.close()
+                bodyData = data
+            } else {
+                bodyData = request.httpBody ?? Data()
+            }
+            
+            if let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any], let model = json["model"] as? String {
+                lock.lock()
+                usedModel = model
+                lock.unlock()
+            }
+            
+            let responseJson: [String: Any] = [
+                "id": UUID().uuidString,
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet",
+                "content": [
+                    [
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "goal_complete",
+                        "input": [
+                            "summary": "Finished with unknown effort."
+                        ]
+                    ]
+                ],
+                "usage": ["input_tokens": 10, "output_tokens": 10]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let parentConversationId = UUID()
+        await MainActor.run {
+            state.createNewConversation(id: parentConversationId)
+        }
+        
+        // Use an invalid effort string. It should fall back to .medium which is claude-3-5-sonnet
+        let summary = await SubagentManager.shared.runSubagent(
+            role: "security_auditor",
+            task: "Find vulnerabilities",
+            effort: "invalid_effort_string",
+            parentConversationId: parentConversationId
+        )
+        
+        XCTAssertEqual(summary, "Finished with unknown effort.")
+        XCTAssertEqual(usedModel, "claude-3-5-sonnet")
+    }
 }

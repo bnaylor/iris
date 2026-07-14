@@ -84,19 +84,35 @@ struct InjectionGuardTests {
         let sanitized = await InjectionGuard.sanitize(payload, maxTier: .tier3_canary)
         #expect(sanitized.contains("[CONTENT BLOCKED BY TIER 3 CANARY GUARD]"))
     }
+    @Test("Tier 3: Error Fail Closed")
+    func testTier3Error() async {
+        let payload = "Harmless data"
+        // Setup mock engine to throw an error
+        let mockEngine = MockInferenceEngine(shouldHijack: false, shouldThrow: true)
+        AuxiliaryModelManager.shared.setMockEngine(mockEngine, for: "canary")
+        
+        let sanitized = await InjectionGuard.sanitize(payload, maxTier: .tier3_canary)
+        #expect(sanitized.contains("[CONTENT BLOCKED BY TIER 3 CANARY GUARD]"))
+    }
 }
 
 final class MockInferenceEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     var shouldHijack: Bool
+    var shouldThrow: Bool
     
-    init(shouldHijack: Bool = false) {
+    init(shouldHijack: Bool = false, shouldThrow: Bool = false) {
         self.shouldHijack = shouldHijack
+        self.shouldThrow = shouldThrow
     }
     
     func loadModel(config: AuxiliaryModelConfig) async throws {}
     func unloadModel() async {}
     
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
+        if shouldThrow {
+            struct MockError: Error {}
+            throw MockError()
+        }
         if shouldHijack {
             return "MALICIOUS"
         } else {

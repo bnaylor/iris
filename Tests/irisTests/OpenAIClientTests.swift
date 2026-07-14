@@ -418,4 +418,48 @@ final class OpenAIClientTests: XCTestCase {
             XCTFail("Expected APIError, got \(error)")
         }
     }
+    
+    func testOpenAIBaseURLOverride() async throws {
+        let request = GeminiRequest(
+            contents: [Content(role: "user", parts: [Part(text: "Hello", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)])],
+            systemInstruction: nil,
+            tools: nil
+        )
+        
+        let customBaseURL = "https://custom.openai.endpoint.com/v1"
+        
+        MockURLProtocol.handler = { urlRequest in
+            XCTAssertEqual(urlRequest.url?.absoluteString, "https://custom.openai.endpoint.com/v1/chat/completions")
+            
+            let responseJson: [String: Any] = [
+                "id": "chatcmpl-123",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4o",
+                "choices": [
+                    [
+                        "index": 0,
+                        "message": [
+                            "role": "assistant",
+                            "content": "Hi!"
+                        ],
+                        "finish_reason": "stop"
+                    ]
+                ],
+                "usage": ["prompt_tokens": 9, "completion_tokens": 12, "total_tokens": 21]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await OpenAIClient.generateContent(
+            request: request,
+            model: "gpt-4o",
+            apiKey: "test-key",
+            baseURL: customBaseURL
+        )
+        
+        XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "Hi!")
+    }
 }

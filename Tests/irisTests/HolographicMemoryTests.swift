@@ -82,4 +82,68 @@ final class HolographicMemoryTests: XCTestCase {
             _ = try? memoryManager.search(query: query, queryVector: queryVector, limit: 5)
         }
     }
+    
+    func testReinforceFacts() throws {
+        let fact1 = "My favorite language is Swift because of its safety."
+        try memoryManager.addFact(content: fact1, vector: HolographicVector.encode(string: fact1))
+        
+        let results1 = try memoryManager.search(query: "Swift", queryVector: HolographicVector.encode(string: "Swift"), limit: 1, threshold: 0.0)
+        XCTAssertEqual(results1.count, 1)
+        let initialTrust = results1[0].trustScore
+        
+        try memoryManager.reinforceFacts(ids: [results1[0].id])
+        
+        let results2 = try memoryManager.search(query: "Swift", queryVector: HolographicVector.encode(string: "Swift"), limit: 1, threshold: 0.0)
+        XCTAssertEqual(results2.count, 1)
+        XCTAssertGreaterThan(results2[0].trustScore, initialTrust)
+    }
+    
+    func testEvictOldFacts() throws {
+        let writer: GRDB.DatabaseWriter = memoryManager.dbQueue!
+        
+        // Add a fact with old timestamp
+        try writer.write { db in
+            let factId = UUID().uuidString
+            let sql = """
+                INSERT INTO facts (id, content, hrrVectorData, trustScore, timestamp)
+                VALUES (?, 'Old fact', ?, 1.0, datetime('now', '-40 days'))
+                """
+            try db.execute(sql: sql, arguments: [factId, HolographicVector.encode(string: "Old fact").encodedData()])
+        }
+        
+        try memoryManager.evictOldFacts()
+        
+        let results = try memoryManager.search(query: "Old", queryVector: HolographicVector.encode(string: "Old"), limit: 1, threshold: 0.0)
+        XCTAssertEqual(results.count, 0, "Old fact should be evicted")
+    }
+    
+    func testTimeDecayRanking() throws {
+        let writer: GRDB.DatabaseWriter = memoryManager.dbQueue!
+        
+        // Add two identical facts, one old, one new
+        let query = "Time decay test"
+        let vectorData = HolographicVector.encode(string: query).encodedData()
+        
+        try writer.write { db in
+            let sql1 = """
+                INSERT INTO facts (id, content, hrrVectorData, trustScore, timestamp)
+                VALUES (?, 'Time decay test fact', ?, 1.0, datetime('now', '-10 days'))
+                """
+            try db.execute(sql: sql1, arguments: [UUID().uuidString, vectorData])
+            
+            let sql2 = """
+                INSERT INTO facts (id, content, hrrVectorData, trustScore, timestamp)
+                VALUES (?, 'Time decay test fact', ?, 1.0, datetime('now'))
+                """
+            try db.execute(sql: sql2, arguments: [UUID().uuidString, vectorData])
+        }
+        
+        let results = try memoryManager.search(query: "decay", queryVector: HolographicVector.encode(string: "decay"), limit: 2, threshold: 0.0)
+        XCTAssertEqual(results.count, 2)
+        
+        // The newer one should be ranked first due to decay
+        let age0 = Date().timeIntervalSince(results[0].timestamp)
+        let age1 = Date().timeIntervalSince(results[1].timestamp)
+        XCTAssertLessThan(age0, age1, "Newer fact should be ranked higher")
+    }
 }

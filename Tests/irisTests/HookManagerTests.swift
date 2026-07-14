@@ -112,6 +112,8 @@ import Foundation
     // Warning is treated as proceed internally by fireEvent
     if case .proceed(let modifiedData) = decision {
         #expect(modifiedData != nil)
+        let json = try? JSONSerialization.jsonObject(with: modifiedData!, options: []) as? [String: String]
+        #expect(json?["input"] == "test")
     } else {
         Issue.record("Expected proceed")
     }
@@ -233,13 +235,145 @@ import Foundation
     
     await hookManager.fireNotification(title: "Alert", body: "Something happened")
     
-    // Give the process a moment to write the file
-    try await Task.sleep(nanoseconds: 500_000_000)
+    // Poll for the process to write the file, up to 2 seconds
+    var output = ""
+    for _ in 0..<20 {
+        if let currentOutput = try? String(contentsOf: testOutputURL, encoding: .utf8), currentOutput.contains("Something happened") {
+            output = currentOutput
+            break
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
     
-    let output = try String(contentsOf: testOutputURL, encoding: .utf8)
     #expect(output.contains("Alert"))
     #expect(output.contains("Something happened"))
     
     try? FileManager.default.removeItem(at: configURL)
     try? FileManager.default.removeItem(at: testOutputURL)
+}
+
+@Test func testHookManagerChaining() async throws {
+    let tempDir = FileManager.default.temporaryDirectory
+    let configURL = tempDir.appendingPathComponent("test_settings_chaining.json")
+    
+    // Command 1 adds a field, Command 2 adds another field to the modified output of Command 1
+    let hookConfig = """
+    {
+      "hooks": {
+        "BeforeAgent": [
+          {
+            "matcher": ".*",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "jq '. + {\\"step1\\": \\"done\\"}'"
+              },
+              {
+                "type": "command",
+                "command": "jq '. + {\\"step2\\": \\"done\\"}'"
+              }
+            ]
+          }
+        ]
+      }
+    }
+    """
+    try hookConfig.write(to: configURL, atomically: true, encoding: .utf8)
+    
+    var hookManager = HookManager()
+    hookManager.configPathOverride = configURL.path
+    
+    let decision = await hookManager.fireBeforeAgent(input: "test")
+    
+    if case .proceed(let modifiedData) = decision {
+        #expect(modifiedData != nil)
+        let json = try JSONSerialization.jsonObject(with: modifiedData!, options: []) as? [String: String]
+        #expect(json?["input"] == "test")
+        #expect(json?["step1"] == "done")
+        #expect(json?["step2"] == "done")
+    } else {
+        Issue.record("Expected proceed with chained data")
+    }
+    
+    try? FileManager.default.removeItem(at: configURL)
+}
+
+@Test func testHookManagerMissingEventTypes() async throws {
+    let tempDir = FileManager.default.temporaryDirectory
+    let configURL = tempDir.appendingPathComponent("test_settings_missing_events.json")
+    
+    let hookConfig = """
+    {
+      "hooks": {
+        "AfterTool": [
+          {
+            "matcher": ".*",
+            "hooks": [ { "type": "command", "command": "jq '. + {\\"hooked\\": \\"AfterTool\\"}'" } ]
+          }
+        ],
+        "BeforeModel": [
+          {
+            "matcher": ".*",
+            "hooks": [ { "type": "command", "command": "echo '{\\"hooked\\": \\"BeforeModel\\"}'" } ]
+          }
+        ],
+        "AfterModel": [
+          {
+            "matcher": ".*",
+            "hooks": [ { "type": "command", "command": "echo '{\\"hooked\\": \\"AfterModel\\"}'" } ]
+          }
+        ],
+        "SessionStart": [
+          {
+            "matcher": ".*",
+            "hooks": [ { "type": "command", "command": "echo '{\\"hooked\\": \\"SessionStart\\"}'" } ]
+          }
+        ],
+        "AfterAgent": [
+          {
+            "matcher": ".*",
+            "hooks": [ { "type": "command", "command": "echo '{\\"hooked\\": \\"AfterAgent\\"}'" } ]
+          }
+        ]
+      }
+    }
+    """
+    try hookConfig.write(to: configURL, atomically: true, encoding: .utf8)
+    
+    var hookManager = HookManager()
+    hookManager.configPathOverride = configURL.path
+    
+    // Test AfterTool
+    let afterToolDecision = await hookManager.fireAfterTool(toolName: "test_tool", result: "result")
+    if case .proceed(let data) = afterToolDecision, let json = try? JSONSerialization.jsonObject(with: data!, options: []) as? [String: String] {
+        #expect(json["hooked"] == "AfterTool")
+    } else { Issue.record("AfterTool failed") }
+    
+    // Test BeforeModel
+    let req = GeminiRequest(contents: [], systemInstruction: nil, tools: nil)
+    let beforeModelDecision = await hookManager.fireBeforeModel(request: req)
+    if case .proceed(let data) = beforeModelDecision, let json = try? JSONSerialization.jsonObject(with: data!, options: []) as? [String: String] {
+        #expect(json["hooked"] == "BeforeModel")
+    } else { Issue.record("BeforeModel failed") }
+    
+    // Test AfterModel
+    let res = GeminiResponse(candidates: nil, usageMetadata: nil)
+    let afterModelDecision = await hookManager.fireAfterModel(response: res)
+    if case .proceed(let data) = afterModelDecision, let json = try? JSONSerialization.jsonObject(with: data!, options: []) as? [String: String] {
+        #expect(json["hooked"] == "AfterModel")
+    } else { Issue.record("AfterModel failed") }
+    
+    // Test SessionStart
+    let sessionStartDecision = await hookManager.fireSessionStart(conversationId: UUID())
+    if case .proceed(let data) = sessionStartDecision, let json = try? JSONSerialization.jsonObject(with: data!, options: []) as? [String: String] {
+        #expect(json["hooked"] == "SessionStart")
+    } else { Issue.record("SessionStart failed") }
+    
+    // Test AfterAgent
+    let afterAgentDecision = await hookManager.fireAfterAgent(output: "test")
+    if case .proceed(let data) = afterAgentDecision, let json = try? JSONSerialization.jsonObject(with: data!, options: []) as? [String: String] {
+        #expect(json["hooked"] == "AfterAgent")
+    } else { Issue.record("AfterAgent failed") }
+    
+    try? FileManager.default.removeItem(at: configURL)
 }
