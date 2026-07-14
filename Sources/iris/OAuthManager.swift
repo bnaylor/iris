@@ -40,8 +40,12 @@ final class OAuthManager: @unchecked Sendable {
             let continuationState = ContinuationState()
             
             do {
-                let listener = try NWListener(using: .tcp, on: .any)
+                let parameters = NWParameters.tcp
+                let localEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
+                parameters.requiredLocalEndpoint = localEndpoint
+                let listener = try NWListener(using: parameters)
                 let localScopes = self.scopes // capture safely
+                let csrfState = UUID().uuidString
                 
                 listener.stateUpdateHandler = { state in
                     switch state {
@@ -58,7 +62,8 @@ final class OAuthManager: @unchecked Sendable {
                             URLQueryItem(name: "response_type", value: "code"),
                             URLQueryItem(name: "scope", value: localScopes.joined(separator: " ")),
                             URLQueryItem(name: "access_type", value: "offline"),
-                            URLQueryItem(name: "prompt", value: "consent")
+                            URLQueryItem(name: "prompt", value: "consent"),
+                            URLQueryItem(name: "state", value: csrfState)
                         ]
                         
                         if let url = components.url {
@@ -83,25 +88,29 @@ final class OAuthManager: @unchecked Sendable {
                     connection.start(queue: .main)
                     connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
                         if let data = data, let requestStr = String(data: data, encoding: .utf8) {
-                            if let range = requestStr.range(of: "code="), let endRange = requestStr[range.upperBound...].range(of: " ") {
-                                let codeWithAmp = String(requestStr[range.upperBound..<endRange.lowerBound])
-                                let code = codeWithAmp.components(separatedBy: "&").first ?? codeWithAmp
-                                
-                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;}</style></head><body><div style='background:white;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;'><h2>Iris Connected! 🌈</h2><p>Authentication successful. You can close this tab and return to Iris.</p></div></body></html>"
-                                
-                                connection.send(content: response.data(using: .utf8), completion: .contentProcessed({ _ in
-                                    connection.cancel()
-                                    listener.cancel()
-                                    Task {
-                                        let alreadyCalled = await continuationState.setCalled()
-                                        if !alreadyCalled {
-                                            continuation.resume(returning: code)
-                                        }
-                                    }
-                                }))
-                            } else {
+                            
+                            guard let firstLine = requestStr.components(separatedBy: .newlines).first,
+                                  let urlPart = firstLine.components(separatedBy: " ").dropFirst().first,
+                                  let urlComps = URLComponents(string: urlPart),
+                                  let code = urlComps.queryItems?.first(where: { $0.name == "code" })?.value,
+                                  let state = urlComps.queryItems?.first(where: { $0.name == "state" })?.value,
+                                  state == csrfState else {
                                 connection.cancel()
+                                return
                             }
+                            
+                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;}</style></head><body><div style='background:white;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;'><h2>Iris Connected! 🌈</h2><p>Authentication successful. You can close this tab and return to Iris.</p></div></body></html>"
+                            
+                            connection.send(content: response.data(using: .utf8), completion: .contentProcessed({ _ in
+                                connection.cancel()
+                                listener.cancel()
+                                Task {
+                                    let alreadyCalled = await continuationState.setCalled()
+                                    if !alreadyCalled {
+                                        continuation.resume(returning: code)
+                                    }
+                                }
+                            }))
                         }
                     }
                 }

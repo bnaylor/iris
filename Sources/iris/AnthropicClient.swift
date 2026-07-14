@@ -60,9 +60,11 @@ struct AnthropicClient {
         func markLastContentBlock(_ messages: inout [[String: Any]], at index: Int) {
             var msg = messages[index]
             if var content = msg["content"] as? [[String: Any]], !content.isEmpty {
-                content[content.count - 1].merge(ephemeral) { _, new in new }
-                msg["content"] = content
-                messages[index] = msg
+                if content[content.count - 1]["type"] as? String != "tool_result" {
+                    content[content.count - 1].merge(ephemeral) { _, new in new }
+                    msg["content"] = content
+                    messages[index] = msg
+                }
             }
         }
         if anthropicMessages.count >= 2 {
