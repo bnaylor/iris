@@ -17,8 +17,13 @@ actor IrisEngine {
     init(state: AppState, tier: ModelTier = .medium) {
         self.state = state
         self.modelTier = tier
-        let soul = manager.loadSOUL()
-        let skills = manager.discoverSkills()
+        systemPrompt = nil
+    }
+    
+    private func ensureSystemPrompt() async {
+        if systemPrompt != nil { return }
+        let soul = await manager.loadSOUL()
+        let skills = await manager.discoverSkills()
         let okfInstruction = """
 
 MEMORY FORMATTING: When writing or updating memory files (like `USER.md`, `SOUL.md`, or skills in `~/.iris/skills/`), you MUST use the Open Knowledge Format (OKF). This requires a YAML frontmatter block at the top of the Markdown file (delimited by `---`) containing `type`, `title`, `description`, `tags`, and `timestamp`. You should actively use standard Markdown links to cross-link related memory files to build a navigable knowledge graph.
@@ -100,6 +105,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         history.append(Content(role: "user", parts: [Part(text: finalText, functionCall: nil, functionResponse: nil)]))
         await MainActor.run { localState?.updateHistory(for: conversationId, history: history) }
         
+        await ensureSystemPrompt()
         var currentSystemPrompt = systemPrompt!
         
         let userProfile = MemoryManager.shared.getUserProfile()
@@ -113,7 +119,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         
         if let textPart = currentSystemPrompt.parts.first?.text {
             // Append USER.md first (mostly static)
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# User Profile (USER.md)\n" + userProfile
+            let safeUserProfile = await InjectionGuard.sanitize(userProfile, contextTag: "user_profile", maxTier: .tier3_canary)
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# User Profile (USER.md)\n" + safeUserProfile
         }
         
         if let wp = workspacePath {
@@ -122,7 +129,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             if let agentsMdContent = try? String(contentsOfFile: fullPath, encoding: .utf8) {
                 if let textPart = currentSystemPrompt.parts.first?.text {
                     // Append AGENTS.md next (static per workspace)
-                    currentSystemPrompt.parts[0].text = textPart + "\n\n# Project Workspace Rules (AGENTS.md)\n" + agentsMdContent
+                    let safeAgentsMd = await InjectionGuard.sanitize(agentsMdContent, contextTag: "workspace_rules", maxTier: .tier3_canary)
+                    currentSystemPrompt.parts[0].text = textPart + "\n\n# Project Workspace Rules (AGENTS.md)\n" + safeAgentsMd
                 }
             }
         }
@@ -381,7 +389,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                     // Preserve original order of tool calls by iterating over toolCalls
                     for call in toolCalls {
                         if let match = results.first(where: { $0.0.name == call.name && $0.0.args == call.args && $0.0.id == call.id }) {
-                            responseParts.append(Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: match.0.name, response: ["result": match.1], id: match.0.id)))
+                            responseParts.append(Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: match.0.name, response: ["result": .string(match.1)], id: match.0.id)))
                         }
                     }
                     
@@ -406,12 +414,24 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         }
         
         // Auto-reprompt if we are in goal mode
-        let activeGoal = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal }
-        if let _ = activeGoal {
-            await pushToUI(role: .system, text: "Auto-continuing goal loop...", conversationId: conversationId)
-            Task {
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                await processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
+        let activeGoalResult = await MainActor.run { () -> (String?, Int) in
+            if let index = localState?.conversations.firstIndex(where: { $0.id == conversationId }) {
+                localState?.conversations[index].goalIterationCount += 1
+                return (localState?.conversations[index].activeGoal, localState?.conversations[index].goalIterationCount ?? 0)
+            }
+            return (nil, 0)
+        }
+        
+        if let _ = activeGoalResult.0 {
+            if activeGoalResult.1 > 100 {
+                await pushToUI(role: .system, text: "Goal iteration limit (100) reached. Forcing goal completion to prevent unbounded recursion.", conversationId: conversationId)
+                await MainActor.run { localState?.clearGoal(for: conversationId) }
+            } else {
+                await pushToUI(role: .system, text: "Auto-continuing goal loop (iteration \(activeGoalResult.1))...", conversationId: conversationId)
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    await processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
+                }
             }
         }
     }
@@ -420,7 +440,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         let localState = state
         var result = ""
         
-        if functionCall.name == "set_workspace", let path = functionCall.args["path"] {
+        if functionCall.name == "set_workspace", let path = functionCall.args["path"]?.stringValue {
             let currentWorkspace = path
             
             var extraHint = ""
@@ -436,16 +456,16 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             
             await MainActor.run { localState?.setWorkspace(for: conversationId, path: currentWorkspace) }
             result = "Workspace successfully set to \(currentWorkspace). You will now load AGENTS.md from this directory." + extraHint
-        } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"] {
+        } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"]?.stringValue {
             await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
             result = "Conversation renamed to '\(newTitle)'."
-        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"] {
-            let minute = Int(functionCall.args["minute"] ?? "")
-            let hour = Int(functionCall.args["hour"] ?? "")
-            let day = Int(functionCall.args["day"] ?? "")
-            let month = Int(functionCall.args["month"] ?? "")
-            let weekday = Int(functionCall.args["weekday"] ?? "")
-            let intervalSeconds = Int(functionCall.args["intervalSeconds"] ?? "")
+        } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"]?.stringValue {
+            let minute = Int(functionCall.args["minute"]?.stringValue ?? "")
+            let hour = Int(functionCall.args["hour"]?.stringValue ?? "")
+            let day = Int(functionCall.args["day"]?.stringValue ?? "")
+            let month = Int(functionCall.args["month"]?.stringValue ?? "")
+            let weekday = Int(functionCall.args["weekday"]?.stringValue ?? "")
+            let intervalSeconds = Int(functionCall.args["intervalSeconds"]?.stringValue ?? "")
             
             ScheduleManager.shared.schedule(
                 conversationId: conversationId,
@@ -458,11 +478,11 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                 intervalSeconds: intervalSeconds
             )
             result = "Job scheduled successfully. It will fire in the background."
-        } else if functionCall.name == "save_fact", let content = functionCall.args["content"] {
+        } else if functionCall.name == "save_fact", let content = functionCall.args["content"]?.stringValue {
             let vector = HolographicVector.encode(string: content)
             try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
             result = "Fact saved to holographic memory."
-        } else if functionCall.name == "search_memory", let query = functionCall.args["query"] {
+        } else if functionCall.name == "search_memory", let query = functionCall.args["query"]?.stringValue {
             let vector = HolographicVector.encode(string: query)
             let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
             if facts.isEmpty {
@@ -470,16 +490,16 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             } else {
                 result = facts.map { "- \($0.content)" }.joined(separator: "\n")
             }
-        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"] {
+        } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"]?.stringValue {
             MemoryManager.shared.updateUserProfile(content: content)
             result = "User profile updated."
         } else if functionCall.name == "reflect" {
             result = "Reflection logged. Proceed with your next action."
         } else if functionCall.name == "invoke_subagent", 
-                  let role = functionCall.args["role"], 
-                  let task = functionCall.args["task"],
-                  let effort = functionCall.args["effort"] {
-            let isBackground = (functionCall.args["background"]?.lowercased() == "true")
+                  let role = functionCall.args["role"]?.stringValue, 
+                  let task = functionCall.args["task"]?.stringValue,
+                  let effort = functionCall.args["effort"]?.stringValue {
+            let isBackground = (functionCall.args["background"]?.stringValue.lowercased() == "true")
             
             if isBackground {
                 Task {
@@ -491,7 +511,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             } else {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
-        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"] {
+        } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
             await MainActor.run { 
                 localState?.clearGoal(for: conversationId) 
                 localState?.onSubagentComplete[conversationId]?(summary)
@@ -500,10 +520,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         } else {
             var needsApproval = false
             var details = ""
-            if functionCall.name == "run_command", let cmd = functionCall.args["command"] {
+            if functionCall.name == "run_command", let cmd = functionCall.args["command"]?.stringValue {
                 needsApproval = true
                 details = cmd
-            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"] {
+            } else if functionCall.name == "read_file" || functionCall.name == "write_file", let path = functionCall.args["path"]?.stringValue {
                 needsApproval = true
                 details = path
             }
@@ -511,12 +531,12 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             if needsApproval {
                 let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
                 if approved {
-                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args.mapValues { $0.anyValue }, cwd: workspacePath)
                 } else {
                     result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
                 }
             } else {
-                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args.mapValues { $0.anyValue }, cwd: workspacePath)
             }
         }
         

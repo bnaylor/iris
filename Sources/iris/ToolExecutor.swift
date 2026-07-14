@@ -238,11 +238,18 @@ except Exception as e:
         let scriptURL = irisDir.appendingPathComponent("search_web.py")
         do {
             try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-            let escapedQuery = query.replacingOccurrences(of: "'", with: "'\\''")
-            let cmd = "python3 ~/.iris/search_web.py '\(escapedQuery)'"
-            return await runCommand(cmd, cwd: nil)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["python3", scriptURL.path, query]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return String(data: data, encoding: .utf8) ?? "Error decoding output"
         } catch {
-            return "Error writing search script: \(error)"
+            return "Error executing search script: \(error)"
         }
     }
 }

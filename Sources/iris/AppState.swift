@@ -28,6 +28,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var tokenUsage: TokenUsage = TokenUsage()
     var activeGoal: String?
     var messageCountSinceReflection: Int = 0
+    var goalIterationCount: Int = 0
     
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0) {
         self.id = id
@@ -306,6 +307,7 @@ class AppState {
     func clearGoal(for conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = nil
+            conversations[idx].goalIterationCount = 0
             saveConversations()
         }
     }
@@ -313,6 +315,7 @@ class AppState {
     func setGoal(for conversationId: UUID, goal: String) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = goal
+            conversations[idx].goalIterationCount = 0
             saveConversations()
         }
     }

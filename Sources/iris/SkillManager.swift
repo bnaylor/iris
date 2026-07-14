@@ -5,15 +5,15 @@ struct SkillManager {
     
     let configDir = ("~/.iris" as NSString).expandingTildeInPath
     
-    func loadSOUL() -> String {
+    func loadSOUL() async -> String {
         let path = "\(configDir)/prompts/SOUL.md"
         if let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            return content
+            return await InjectionGuard.sanitize(content, contextTag: "soul_prompt", maxTier: .tier3_canary)
         }
         return "You are Iris, a native macOS agent running on the local machine."
     }
     
-    func discoverSkills() -> String {
+    func discoverSkills() async -> String {
         let skillsDir = "\(configDir)/skills"
         let fileManager = FileManager.default
         var skillsSummary = "# Available Skills\n\n"
@@ -26,7 +26,8 @@ struct SkillManager {
             let skillPath = "\(skillsDir)/\(item)/SKILL.md"
             if fileManager.fileExists(atPath: skillPath) {
                 if let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    skillsSummary += parseFrontmatter(from: content, folderName: item) + "\n"
+                    let safeContent = await InjectionGuard.sanitize(content, contextTag: "skill_\(item)", maxTier: .tier3_canary)
+                    skillsSummary += parseFrontmatter(from: safeContent, folderName: item) + "\n"
                 }
             }
         }
