@@ -24,8 +24,8 @@ We provide a helper script (`scripts/compile_prompt_guard.py`) that handles trac
 Run the script and provide the Hugging Face Model ID you wish to compile:
 
 ```bash
-# Example: Compiling the recommended ProtectAI DeBERTa model (Ungated, highly recommended)
-./scripts/compile_prompt_guard.py --model protectai/deberta-v3-base-prompt-injection-v2
+# Example: Compiling the recommended DistilBERT model (Ungated, highly recommended, fastest compilation)
+./scripts/compile_prompt_guard.py --model fmops/distilbert-prompt-injection
 
 # Example: Compiling Meta's official Llama Prompt Guard 86M
 # Note: You must first run `huggingface-cli login` and accept Meta's license on HF
@@ -34,7 +34,7 @@ Run the script and provide the Hugging Face Model ID you wish to compile:
 
 ## Installing the Model
 
-Once the script finishes, it will produce a `.mlmodelc.zip` file in your directory (e.g. `deberta-v3-base-prompt-injection-v2.mlmodelc.zip`).
+Once the script finishes, it will produce a `.mlmodelc.zip` file in your directory (e.g. `distilbert-prompt-injection.mlmodelc.zip`).
 
 **To use it in Iris:**
 

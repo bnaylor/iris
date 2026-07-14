@@ -6,8 +6,8 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Compile a HuggingFace Text Classification model to CoreML (.mlmodelc zip)")
-    parser.add_argument("--model", type=str, default="protectai/deberta-v3-base-prompt-injection-v2", 
-                        help="Hugging Face model ID (e.g. meta-llama/Prompt-Guard-86M or protectai/deberta-v3-base-prompt-injection-v2)")
+    parser.add_argument("--model", type=str, default="fmops/distilbert-prompt-injection", 
+                        help="Hugging Face model ID (e.g. meta-llama/Prompt-Guard-86M or fmops/distilbert-prompt-injection)")
     parser.add_argument("--seq-len", type=int, default=512, help="Sequence length for the CoreML model input")
     args = parser.parse_args()
 
