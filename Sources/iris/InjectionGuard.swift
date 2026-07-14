@@ -66,14 +66,20 @@ public struct InjectionGuard {
         guard ConfigManager.shared.enableAdvancedPromptInjectionProtection else {
             return true
         }
+        let startTime = Date()
         do {
             let probability = try await CoreMLEvaluator.shared.evaluate(text: input)
+            let durationMs = Date().timeIntervalSince(startTime) * 1000
+            await MetricsManager.shared.trackLatency(operation: .promptGuardTier2, modelName: "CoreML", durationMs: durationMs, success: true)
+            
             if probability > 0.5 {
                 print("[InjectionGuard] Tier 2 CoreML flagged injection with probability: \(probability)")
                 return false
             }
             return true
         } catch {
+            let durationMs = Date().timeIntervalSince(startTime) * 1000
+            await MetricsManager.shared.trackLatency(operation: .promptGuardTier2, modelName: "CoreML", durationMs: durationMs, success: false)
             print("[InjectionGuard] Tier 2 CoreML error: \(error). Failing closed.")
             return false
         }
@@ -101,6 +107,7 @@ public struct InjectionGuard {
             modelPathOrName: modelName
         )
         
+        let startTime = Date()
         do {
             let engine = try await AuxiliaryModelManager.shared.getEngine(for: "canary", config: config)
             let tag = UUID().uuidString.prefix(8)
@@ -116,8 +123,12 @@ public struct InjectionGuard {
             """
             
             let response = try await engine.generate(prompt: prompt, jsonSchema: nil)
+            let durationMs = Date().timeIntervalSince(startTime) * 1000
+            await MetricsManager.shared.trackLatency(operation: .promptGuardTier3, modelName: modelName, durationMs: durationMs, success: true)
             return response.contains("SAFE") && !response.contains("MALICIOUS")
         } catch {
+            let durationMs = Date().timeIntervalSince(startTime) * 1000
+            await MetricsManager.shared.trackLatency(operation: .promptGuardTier3, modelName: modelName, durationMs: durationMs, success: false)
             print("[InjectionGuard] Canary execution failed: \(error). Failing closed for canary.")
             return false
         }

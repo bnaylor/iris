@@ -7,6 +7,8 @@ public enum MetricOperationType: String, CaseIterable, Identifiable, Sendable {
     case hard = "Model (Hard)"
     case rename = "Rename"
     case auxiliary = "Auxiliary"
+    case promptGuardTier2 = "Prompt Guard (Tier 2)"
+    case promptGuardTier3 = "Prompt Guard (Tier 3)"
     
     public var id: String { rawValue }
 }
