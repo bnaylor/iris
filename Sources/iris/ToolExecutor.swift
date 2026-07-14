@@ -110,8 +110,11 @@ struct ToolExecutor {
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
-            if ConfigManager.shared.enableSandboxing && SandboxingManager.shared.isContainerInstalled {
-                // If container exists but not at /usr/local/bin, which might find it, but we assume default for now
+            if ConfigManager.shared.enableSandboxing {
+                guard SandboxingManager.shared.isContainerInstalled else {
+                    continuation.resume(returning: "Error: Sandboxing is enabled but the container runtime is not installed. Run the /sandbox command to install it, or disable sandboxing in settings.")
+                    return
+                }
                 process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
                 var containerArgs = ["run", "--rm", ConfigManager.shared.sandboxImage, "bash", "-c", command]
                 if let cwd = cwd {
