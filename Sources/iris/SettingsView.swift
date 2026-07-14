@@ -38,8 +38,21 @@ struct SettingsView: View {
                     .padding(.bottom)
                     
                     if config.primaryProvider == LLMProvider.gemini.rawValue {
-                        SecureField("Gemini API Key", text: $config.geminiAPIKey)
-                            .help("Required for Gemini models to function.")
+                        Picker("Authentication Method", selection: $config.geminiAuthMode) {
+                            ForEach(GeminiAuthMode.allCases) { mode in
+                                Text(mode.rawValue).tag(mode.rawValue)
+                            }
+                        }
+                        
+                        if config.geminiAuthMode == GeminiAuthMode.adc.rawValue {
+                            Text("Using Application Default Credentials (ADC). Authenticate locally via `gcloud auth application-default login`.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            SecureField("Gemini API Key", text: $config.geminiAPIKey)
+                                .help("Required for Gemini models to function.")
+                        }
+                        
                         TextField("Gemini Base URL (Optional)", text: $config.geminiBaseURL)
                             .help("Leave blank for default endpoint")
                         TextField("Easy Subagent Model", text: $config.geminiModelEasy)

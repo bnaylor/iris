@@ -9,6 +9,13 @@ public enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public enum GeminiAuthMode: String, CaseIterable, Identifiable, Sendable {
+    case apiKey = "API Key"
+    case adc = "Application Default Credentials (ADC)"
+    
+    public var id: String { rawValue }
+}
+
 @Observable
 class ConfigManager: @unchecked Sendable {
     @ObservationIgnored static let shared = ConfigManager()
@@ -19,6 +26,10 @@ class ConfigManager: @unchecked Sendable {
     
     var primaryProvider: String {
         didSet { UserDefaults.standard.set(primaryProvider, forKey: "PRIMARY_PROVIDER") }
+    }
+    
+    var geminiAuthMode: String {
+        didSet { UserDefaults.standard.set(geminiAuthMode, forKey: "GEMINI_AUTH_MODE") }
     }
     
     var geminiAPIKey: String {
@@ -141,6 +152,7 @@ class ConfigManager: @unchecked Sendable {
     init() {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
+        self.geminiAuthMode = UserDefaults.standard.string(forKey: "GEMINI_AUTH_MODE") ?? GeminiAuthMode.apiKey.rawValue
         
         if UserDefaults.standard.object(forKey: "COPY_CHATS_AS_MARKDOWN") != nil {
             self.copyChatsAsMarkdown = UserDefaults.standard.bool(forKey: "COPY_CHATS_AS_MARKDOWN")
@@ -246,6 +258,9 @@ class ConfigManager: @unchecked Sendable {
         case LLMProvider.openai.rawValue:
             return !openAIAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
         default:
+            if geminiAuthMode == GeminiAuthMode.adc.rawValue {
+                return true
+            }
             return !geminiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
         }
     }

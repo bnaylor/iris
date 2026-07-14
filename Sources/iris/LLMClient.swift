@@ -35,9 +35,11 @@ struct LLMClient {
                 response = try await OpenAIClient.generateContent(request: request, model: modelName, apiKey: config.openAIAPIKey, baseURL: config.openAIBaseURL)
             } else {
                 // Fallback to Gemini
+                let isADC = config.geminiAuthMode == GeminiAuthMode.adc.rawValue
                 let apiKey = config.geminiAPIKey
-                guard !apiKey.isEmpty else {
-                    throw APIError.init(message: "GEMINI_FALLBACK_AUTH_ERROR_1013")
+                
+                if !isADC && apiKey.isEmpty {
+                    throw APIError(message: "GEMINI_FALLBACK_AUTH_ERROR_1013")
                 }
                 
                 let cleanRequest = request
@@ -48,7 +50,10 @@ struct LLMClient {
                 guard var urlComponents = URLComponents(string: baseURLString) else {
                     throw APIError(message: "Invalid Gemini base URL configuration: \(baseURLString)")
                 }
-                urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+                
+                if !isADC {
+                    urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+                }
 
                 guard let requestURL = urlComponents.url else {
                     throw APIError(message: "Failed to construct Gemini request URL.")
@@ -56,6 +61,11 @@ struct LLMClient {
                 var urlRequest = URLRequest(url: requestURL)
                 urlRequest.httpMethod = "POST"
                 urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                
+                if isADC {
+                    let accessToken = try await ADCCredentialManager.shared.getAccessToken()
+                    urlRequest.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
                 
                 let encoder = JSONEncoder()
                 encoder.keyEncodingStrategy = .useDefaultKeys

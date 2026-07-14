@@ -47,8 +47,8 @@ Iris provides some native primitives to the LLM:
 
 ## 🛠️ Usage
 
-When started, Iris launches as a native macOS App. If you haven't configured your API keys, the **Settings Window** will automatically pop up. 
-All keys are saved securely to your local `UserDefaults`.
+When started, Iris launches as a native macOS App. If you haven't configured your API keys or authentication method, the **Settings Window** will automatically pop up. 
+All keys are saved securely to your local Keychain and `UserDefaults`. Gemini supports both standard API Keys and **Application Default Credentials (ADC)** via `gcloud`.
 
 ```bash
 swift run
