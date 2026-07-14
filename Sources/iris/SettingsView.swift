@@ -141,6 +141,61 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.bottom)
+                
+                Section(header: Text("Advanced Prompt Injection Protection").font(.headline)) {
+                    Toggle("Enable Protection (Tier 2 & 3)", isOn: $config.enableAdvancedPromptInjectionProtection)
+                    
+                    if config.enableAdvancedPromptInjectionProtection {
+                        Picker("Engine", selection: $config.promptGuardEngine) {
+                            Text("Llama.cpp (Embedded)").tag("llama_cpp")
+                            Text("Ollama (Local Daemon)").tag("ollama")
+                            Text("MLX (Apple Silicon)").tag("mlx")
+                            Text("Cloud (Primary Provider)").tag("cloud")
+                        }
+                        
+                        if config.promptGuardEngine == "llama_cpp" {
+                            TextField("GGUF Model", text: $config.promptGuardModel)
+                                .help("The GGUF model file name for the Tier 3 Canary (must be in ~/.iris/models/)")
+                            
+                            let isDownloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
+                            if !isDownloaded {
+                                if downloader.isDownloading {
+                                    HStack {
+                                        ProgressView(value: downloader.progress)
+                                            .progressViewStyle(.linear)
+                                        Text("\(Int(downloader.progress * 100))%")
+                                            .font(.caption)
+                                    }
+                                } else {
+                                    Button("Download Model") {
+                                        Task {
+                                            await downloader.downloadModel(name: config.promptGuardModel)
+                                        }
+                                    }
+                                    Text("This will download approx. 1-2GB of weights to your disk.")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                                
+                                if let error = downloader.error {
+                                    Text("Error: \(error)").foregroundColor(.red).font(.caption)
+                                }
+                            } else {
+                                Text("✅ Model is downloaded and ready.")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        } else {
+                            TextField("Model Name", text: $config.promptGuardModel)
+                                .help("The model to use for the Tier 3 Canary evaluation")
+                        }
+                        
+                        Text("This model is used as a sacrificial canary to test untrusted payloads for malicious instructions.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.bottom)
             }
             .padding(20)
             .tabItem {

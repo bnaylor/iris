@@ -63,6 +63,9 @@ public struct InjectionGuard {
     }
     
     private static func executeTier2CoreML(_ input: String) async -> Bool {
+        guard ConfigManager.shared.enableAdvancedPromptInjectionProtection else {
+            return true
+        }
         do {
             let probability = try await CoreMLEvaluator.shared.evaluate(text: input)
             if probability > 0.5 {
@@ -77,11 +80,11 @@ public struct InjectionGuard {
     }
     
     private static func executeTier3Canary(_ input: String) async -> Bool {
-        guard ConfigManager.shared.enableVibecop else {
+        guard ConfigManager.shared.enableAdvancedPromptInjectionProtection else {
             return true
         }
         
-        let engineTypeString = ConfigManager.shared.vibecopEngine
+        let engineTypeString = ConfigManager.shared.promptGuardEngine
         let engineType: AuxiliaryEngineType
         switch engineTypeString {
         case "ollama": engineType = .ollama
@@ -90,7 +93,7 @@ public struct InjectionGuard {
         default: engineType = .llamaCPP
         }
         
-        let modelName = ConfigManager.shared.vibecopModel
+        let modelName = ConfigManager.shared.promptGuardModel
         
         let config = AuxiliaryModelConfig(
             role: "canary",
@@ -115,8 +118,8 @@ public struct InjectionGuard {
             let response = try await engine.generate(prompt: prompt, jsonSchema: nil)
             return response.contains("SAFE") && !response.contains("MALICIOUS")
         } catch {
-            print("[InjectionGuard] Canary execution failed: \(error). Failing open for canary.")
-            return true
+            print("[InjectionGuard] Canary execution failed: \(error). Failing closed for canary.")
+            return false
         }
     }
 }

@@ -149,6 +149,18 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(vibecopModel, forKey: "VIBECOP_MODEL") }
     }
     
+    var enableAdvancedPromptInjectionProtection: Bool {
+        didSet { UserDefaults.standard.set(enableAdvancedPromptInjectionProtection, forKey: "ENABLE_PROMPT_INJECTION_PROTECTION") }
+    }
+    
+    var promptGuardEngine: String {
+        didSet { UserDefaults.standard.set(promptGuardEngine, forKey: "PROMPT_GUARD_ENGINE") }
+    }
+    
+    var promptGuardModel: String {
+        didSet { UserDefaults.standard.set(promptGuardModel, forKey: "PROMPT_GUARD_MODEL") }
+    }
+    
     init() {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
@@ -249,6 +261,18 @@ class ConfigManager: @unchecked Sendable {
         
         let savedVibecop = UserDefaults.standard.string(forKey: "VIBECOP_MODEL") ?? ""
         self.vibecopModel = savedVibecop.isEmpty ? "Llama-3.2-1B-Instruct-Q4_K_M.gguf" : savedVibecop
+        
+        if UserDefaults.standard.object(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION") != nil {
+            self.enableAdvancedPromptInjectionProtection = UserDefaults.standard.bool(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION")
+        } else {
+            self.enableAdvancedPromptInjectionProtection = true // Default to true
+        }
+        
+        let savedPromptEngine = UserDefaults.standard.string(forKey: "PROMPT_GUARD_ENGINE") ?? ""
+        self.promptGuardEngine = savedPromptEngine.isEmpty ? "llama_cpp" : savedPromptEngine
+        
+        let savedPromptModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_MODEL") ?? ""
+        self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen-1.5B-Q4_K_M.gguf" : savedPromptModel
     }
     
     var isConfigured: Bool {
