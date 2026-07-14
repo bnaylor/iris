@@ -293,32 +293,71 @@ struct VibecopStepView: View {
                     Text("Model Selection")
                         .font(.headline)
                     
-                    Picker("Model", selection: $config.vibecopModel) {
-                        Text("Qwen3.5 2B (Fast, ~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
-                        Text("Gemma 4 E2B (Fast, ~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
-                        Text("Gemma 4 12B (Heavy, ~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
+                    Picker("Engine", selection: $config.vibecopEngine) {
+                        Text("Llama.cpp").tag("llama_cpp")
+                        Text("Ollama").tag("ollama")
+                        Text("MLX").tag("mlx")
+                        Text("Cloud").tag("cloud")
                     }
+                    .pickerStyle(.segmented)
                     
-                    let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
-                    
-                    if !isDownloaded {
-                        if downloader.isDownloading && downloader.currentDownloadName == config.vibecopModel {
-                            ProgressView(value: downloader.progress)
+                    if config.vibecopEngine == "llama_cpp" {
+                        Picker("Model", selection: $config.vibecopModel) {
+                            Text("Qwen3.5 2B (Fast, ~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
+                            Text("Gemma 4 E2B (Fast, ~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
+                            Text("Gemma 4 12B (Heavy, ~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
+                        }
+                        
+                        let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
+                        
+                        if !isDownloaded {
+                            if downloader.isDownloading && downloader.currentDownloadName == config.vibecopModel {
+                                ProgressView(value: downloader.progress)
+                            } else {
+                                Button("Download Model") {
+                                    Task { await downloader.downloadModel(name: config.vibecopModel) }
+                                }
+                            }
                         } else {
-                            Button("Download Model") {
-                                Task { await downloader.downloadModel(name: config.vibecopModel) }
+                            HStack {
+                                Text("✅ Model ready.")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    
+                                Button("Test Model") {
+                                Task {
+                                    do {
+                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                        testStatus = "✅ Success"
+                                    } catch {
+                                        testStatus = "❌ Failed: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            
+                            if let status = testStatus {
+                                Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                            }
                             }
                         }
                     } else {
+                        TextField("Model Name", text: $config.vibecopModel)
+                            .textFieldStyle(.roundedBorder)
+                        
                         HStack {
-                            Text("✅ Model ready.")
+                            Text("✅ Assuming model is ready via external daemon.")
                                 .foregroundColor(.green)
                                 .font(.caption)
-                            
+                                
                             Button("Test Model") {
                                 Task {
                                     do {
-                                        let engineType = AuxiliaryEngineType(rawValue: "llama_cpp") ?? .llamaCPP
+                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
                                         let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
                                         let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
                                         _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
@@ -441,29 +480,30 @@ struct SecurityStepView: View {
                         }
                         .pickerStyle(.segmented)
                         
-                        Picker("Model", selection: $config.promptGuardModel) {
-                            Text("Qwen3.5 2B (~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
-                            Text("Gemma 4 E2B (~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
-                            Text("Gemma 4 12B (~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
-                        }
-                        
-                        let isTier3Downloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
-                        
-                        if !isTier3Downloaded {
-                            if downloader.isDownloading && downloader.currentDownloadName == config.promptGuardModel {
-                                ProgressView(value: downloader.progress)
-                            } else {
-                                Button("Download Model") {
-                                    Task { await downloader.downloadModel(name: config.promptGuardModel) }
-                                }
+                        if config.promptGuardEngine == "llama_cpp" {
+                            Picker("Model", selection: $config.promptGuardModel) {
+                                Text("Qwen3.5 2B (~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
+                                Text("Gemma 4 E2B (~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
+                                Text("Gemma 4 12B (~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
                             }
-                        } else {
-                            HStack {
-                                Text("✅ Tier 3 Model ready.")
-                                    .foregroundColor(.green)
-                                    .font(.caption)
-                                    
-                                Button("Test Model") {
+                            
+                            let isTier3Downloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
+                            
+                            if !isTier3Downloaded {
+                                if downloader.isDownloading && downloader.currentDownloadName == config.promptGuardModel {
+                                    ProgressView(value: downloader.progress)
+                                } else {
+                                    Button("Download Model") {
+                                        Task { await downloader.downloadModel(name: config.promptGuardModel) }
+                                    }
+                                }
+                            } else {
+                                HStack {
+                                    Text("✅ Tier 3 Model ready.")
+                                        .foregroundColor(.green)
+                                        .font(.caption)
+                                        
+                                    Button("Test Model") {
                                     Task {
                                         do {
                                             let engineType = AuxiliaryEngineType(rawValue: config.promptGuardEngine) ?? .llamaCPP
@@ -484,7 +524,37 @@ struct SecurityStepView: View {
                                 }
                             }
                         }
+                    } else {
+                        TextField("Model Name", text: $config.promptGuardModel)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        HStack {
+                            Text("✅ Assuming model is ready via external daemon.")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                                
+                            Button("Test Model") {
+                                Task {
+                                    do {
+                                        let engineType = AuxiliaryEngineType(rawValue: config.promptGuardEngine) ?? .llamaCPP
+                                        let auxConfig = AuxiliaryModelConfig(role: "promptGuard", engineType: engineType, modelPathOrName: config.promptGuardModel)
+                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "promptGuard", config: auxConfig)
+                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                        tier3TestStatus = "✅ Success"
+                                    } catch {
+                                        tier3TestStatus = "❌ Failed: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            
+                            if let status = tier3TestStatus {
+                                Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                            }
+                        }
                     }
+                }
                     .padding()
                     .background(Color.secondary.opacity(0.1))
                     .cornerRadius(8)
