@@ -483,6 +483,8 @@ struct SandboxingStepView: View {
     @Binding var currentStep: Int
     var onFinish: () -> Void
     @Bindable var config = ConfigManager.shared
+    @State private var isInstalling = false
+    @State private var installStatus: String?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -493,6 +495,49 @@ struct SandboxingStepView: View {
                 .foregroundColor(.secondary)
             
             Toggle("Enable Container Sandboxing", isOn: $config.enableSandboxing)
+            
+            if config.enableSandboxing {
+                let isInstalled = SandboxingManager.shared.isContainerInstalled
+                
+                if !isInstalled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("⚠️ apple/container engine is not installed.")
+                            .foregroundColor(.orange)
+                            .font(.headline)
+                        
+                        if isInstalling {
+                            ProgressView("Downloading & installing PKG (requires Admin)...")
+                        } else {
+                            Button("Install Container Engine") {
+                                isInstalling = true
+                                installStatus = nil
+                                SandboxingManager.shared.installContainer { success, error in
+                                    isInstalling = false
+                                    if success {
+                                        installStatus = "✅ Installed successfully!"
+                                    } else {
+                                        installStatus = "❌ Installation failed: \(error ?? "Unknown error")"
+                                    }
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        
+                        if let status = installStatus {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundColor(status.starts(with: "✅") ? .green : .red)
+                        }
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+                } else {
+                    Text("✅ Container engine installed and ready.")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                }
+            }
             
             Spacer()
             
