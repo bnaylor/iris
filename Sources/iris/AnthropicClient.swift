@@ -146,7 +146,9 @@ struct AnthropicClient {
             }
         }
         
-        let url = URL(string: endpointUrl)!
+        guard let url = URL(string: endpointUrl) else {
+            throw APIError(message: "Invalid baseURL configuration: \(endpointUrl)")
+        }
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")

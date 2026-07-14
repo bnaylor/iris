@@ -156,7 +156,9 @@ struct OpenAIClient {
             }
         }
         
-        let url = URL(string: endpointUrl)!
+        guard let url = URL(string: endpointUrl) else {
+            throw APIError(message: "Invalid baseURL configuration: \(endpointUrl)")
+        }
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
