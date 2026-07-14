@@ -208,7 +208,7 @@ final class AnthropicClientTests: XCTestCase {
         XCTAssertEqual(firstCandidate?.content?.parts.count, 1)
         let firstPart = firstCandidate?.content?.parts[0]
         XCTAssertNotNil(firstPart?.functionCall)
-        XCTAssertEqual(firstPart?.functionCall?.args["location"], "Boston")
+        XCTAssertEqual(firstPart?.functionCall?.args["location"], .string("Boston"))
     }
     
     func testAnthropicMultipleToolCalls() async throws {
@@ -297,6 +297,77 @@ final class AnthropicClientTests: XCTestCase {
         let secondPart = firstCandidate?.content?.parts[1]
         XCTAssertEqual(secondPart?.functionCall?.name, "get_time")
         XCTAssertEqual(secondPart?.functionCall?.id, "call_2")
+    }
+    
+    func testAnthropicMultiTurnRoundTrip() async throws {
+        let history = [
+            Content(role: "user", parts: [Part(text: "What is 5 + 5?", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]),
+            Content(role: "model", parts: [Part(text: nil, functionCall: FunctionCall(name: "calculate", args: ["equation": .string("5+5")], id: "call_1"), functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]),
+            Content(role: "user", parts: [Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: "calculate", response: ["result": .string("10")], id: "call_1"), thought_signature: nil, thoughtSignature: nil)])
+        ]
+        
+        let request = GeminiRequest(
+            contents: history,
+            systemInstruction: nil,
+            tools: nil
+        )
+        
+        MockURLProtocol.handler = { urlRequest in
+            guard let bodyData = urlRequest.bodyData,
+                  let bodyJson = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let messages = bodyJson["messages"] as? [[String: Any]] else {
+                XCTFail("Failed to read HTTP request body")
+                return (HTTPURLResponse(), Data())
+            }
+            
+            XCTAssertEqual(messages.count, 3)
+            
+            // Turn 1: user text
+            XCTAssertEqual(messages[0]["role"] as? String, "user")
+            
+            // Turn 2: model tool_use
+            XCTAssertEqual(messages[1]["role"] as? String, "assistant")
+            let modelContent = messages[1]["content"] as? [[String: Any]]
+            XCTAssertEqual(modelContent?.count, 1)
+            XCTAssertEqual(modelContent?[0]["type"] as? String, "tool_use")
+            XCTAssertEqual(modelContent?[0]["id"] as? String, "call_1")
+            XCTAssertEqual(modelContent?[0]["name"] as? String, "calculate")
+            let input = modelContent?[0]["input"] as? [String: Any]
+            XCTAssertEqual(input?["equation"] as? String, "5+5")
+            
+            // Turn 3: user tool_result
+            XCTAssertEqual(messages[2]["role"] as? String, "user")
+            let userContent = messages[2]["content"] as? [[String: Any]]
+            XCTAssertEqual(userContent?.count, 1)
+            XCTAssertEqual(userContent?[0]["type"] as? String, "tool_result")
+            XCTAssertEqual(userContent?[0]["tool_use_id"] as? String, "call_1")
+            XCTAssertNil(userContent?[0]["cache_control"], "tool_result should not have cache_control")
+            
+            let responseJson: [String: Any] = [
+                "id": "msg_04",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet",
+                "content": [
+                    [
+                        "type": "text",
+                        "text": "The result is 10."
+                    ]
+                ],
+                "usage": ["input_tokens": 10, "output_tokens": 10]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await AnthropicClient.generateContent(
+            request: request,
+            model: "claude-3-5-sonnet",
+            apiKey: "test"
+        )
+        
+        XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "The result is 10.")
     }
     
     func testAnthropicErrorPropagation() async throws {

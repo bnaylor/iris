@@ -201,7 +201,7 @@ final class OpenAIClientTests: XCTestCase {
         let firstPart = firstCandidate?.content?.parts[0]
         XCTAssertNotNil(firstPart?.functionCall)
         XCTAssertEqual(firstPart?.functionCall?.name, "get_weather")
-        XCTAssertEqual(firstPart?.functionCall?.args["location"], "Boston")
+        XCTAssertEqual(firstPart?.functionCall?.args["location"], .string("Boston"))
     }
     
     func testOpenAIMultipleToolCalls() async throws {
@@ -300,6 +300,90 @@ final class OpenAIClientTests: XCTestCase {
         XCTAssertEqual(secondPart?.functionCall?.id, "call_2")
     }
     
+    
+    func testOpenAIMultiTurnRoundTrip() async throws {
+        let history = [
+            Content(role: "user", parts: [Part(text: "What is 5 + 5?", functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]),
+            Content(role: "model", parts: [Part(text: nil, functionCall: FunctionCall(name: "calculate", args: ["equation": .string("5+5")], id: "call_1"), functionResponse: nil, thought_signature: nil, thoughtSignature: nil)]),
+            Content(role: "user", parts: [Part(text: nil, functionCall: nil, functionResponse: FunctionResponse(name: "calculate", response: ["result": .string("10")], id: "call_1"), thought_signature: nil, thoughtSignature: nil)])
+        ]
+        
+        let request = GeminiRequest(
+            contents: history,
+            systemInstruction: nil,
+            tools: nil
+        )
+        
+        MockURLProtocol.handler = { urlRequest in
+            guard let bodyData = urlRequest.bodyData,
+                  let bodyJson = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let messages = bodyJson["messages"] as? [[String: Any]] else {
+                XCTFail("Failed to read HTTP request body")
+                return (HTTPURLResponse(), Data())
+            }
+            
+            XCTAssertEqual(messages.count, 3)
+            
+            // Turn 1: user text
+            XCTAssertEqual(messages[0]["role"] as? String, "user")
+            
+            // Turn 2: model tool_calls
+            XCTAssertEqual(messages[1]["role"] as? String, "assistant")
+            let toolCalls = messages[1]["tool_calls"] as? [[String: Any]]
+            XCTAssertEqual(toolCalls?.count, 1)
+            XCTAssertEqual(toolCalls?[0]["type"] as? String, "function")
+            XCTAssertEqual(toolCalls?[0]["id"] as? String, "call_1")
+            
+            let functionDict = toolCalls?[0]["function"] as? [String: Any]
+            XCTAssertEqual(functionDict?["name"] as? String, "calculate")
+            let argumentsString = functionDict?["arguments"] as? String
+            
+            let argsData = argumentsString?.data(using: .utf8) ?? Data()
+            let argsJson = (try? JSONSerialization.jsonObject(with: argsData)) as? [String: Any]
+            XCTAssertEqual(argsJson?["equation"] as? String, "5+5")
+            
+            // Turn 3: tool message
+            XCTAssertEqual(messages[2]["role"] as? String, "tool")
+            XCTAssertEqual(messages[2]["tool_call_id"] as? String, "call_1")
+            let contentString = messages[2]["content"] as? String
+            let contentData = contentString?.data(using: .utf8) ?? Data()
+            let contentJson = (try? JSONSerialization.jsonObject(with: contentData)) as? [String: Any]
+            XCTAssertEqual(contentJson?["result"] as? String, "10")
+            
+            let responseJson: [String: Any] = [
+                "id": "chatcmpl-123",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4o",
+                "choices": [
+                    [
+                        "index": 0,
+                        "message": [
+                            "role": "assistant",
+                            "content": "The result is 10."
+                        ],
+                        "finish_reason": "stop"
+                    ]
+                ],
+                "usage": [
+                    "prompt_tokens": 10,
+                    "completion_tokens": 10,
+                    "total_tokens": 20
+                ]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await OpenAIClient.generateContent(
+            request: request,
+            model: "gpt-4o",
+            apiKey: "test"
+        )
+        
+        XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "The result is 10.")
+    }
     
     func testOpenAIErrorPropagation() async throws {
         let request = GeminiRequest(

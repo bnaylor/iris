@@ -364,7 +364,7 @@ When building features, adding functionality, or modifying behavior, you MUST ad
                             group.addTask {
                                 let toolCallDict: [String: Any] = [
                                     "name": call.name,
-                                    "args": call.args
+                                    "args": call.args.mapValues { $0.anyValue }
                                 ]
                                 if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
                                    let jsonString = String(data: jsonData, encoding: .utf8) {
