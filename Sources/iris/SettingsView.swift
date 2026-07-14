@@ -88,7 +88,15 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.bottom)
-                
+            }
+            .formStyle(.grouped)
+            .padding(20)
+            .tabItem {
+                Label("Models", systemImage: "cpu")
+            }
+            
+            // MARK: - Vibecop Tab
+            Form {
                 Section(header: Text("Vibecop Guardian").font(.headline)) {
                     Toggle("Enable Vibecop", isOn: $config.enableVibecop)
                     
@@ -143,7 +151,15 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.bottom)
-                
+            }
+            .formStyle(.grouped)
+            .padding(20)
+            .tabItem {
+                Label("Vibecop", systemImage: "eye.circle")
+            }
+            
+            // MARK: - Security Tab
+            Form {
                 Section(header: Text("Advanced Prompt Injection Protection").font(.headline)) {
                     Toggle("Enable Protection (Tier 2 & 3)", isOn: $config.enableAdvancedPromptInjectionProtection)
                     
@@ -245,7 +261,7 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .padding(20)
             .tabItem {
-                Label("Models", systemImage: "cpu")
+                Label("Security", systemImage: "lock.shield")
             }
             
             // MARK: - Integrations Tab
