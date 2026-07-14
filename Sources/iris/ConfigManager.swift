@@ -22,7 +22,7 @@ class ConfigManager: @unchecked Sendable {
     }
     
     var geminiAPIKey: String {
-        didSet { UserDefaults.standard.set(geminiAPIKey, forKey: "GEMINI_API_KEY") }
+        didSet { updateSecret(key: "GEMINI_API_KEY", value: geminiAPIKey) }
     }
     
     var geminiBaseURL: String {
@@ -30,7 +30,7 @@ class ConfigManager: @unchecked Sendable {
     }
     
     var anthropicAPIKey: String {
-        didSet { UserDefaults.standard.set(anthropicAPIKey, forKey: "ANTHROPIC_API_KEY") }
+        didSet { updateSecret(key: "ANTHROPIC_API_KEY", value: anthropicAPIKey) }
     }
     
     var anthropicBaseURL: String {
@@ -38,7 +38,7 @@ class ConfigManager: @unchecked Sendable {
     }
     
     var openAIAPIKey: String {
-        didSet { UserDefaults.standard.set(openAIAPIKey, forKey: "OPENAI_API_KEY") }
+        didSet { updateSecret(key: "OPENAI_API_KEY", value: openAIAPIKey) }
     }
     
     var openAIBaseURL: String {
@@ -99,19 +99,19 @@ class ConfigManager: @unchecked Sendable {
     }
     
     var googleClientID: String {
-        didSet { UserDefaults.standard.set(googleClientID, forKey: "GOOGLE_CLIENT_ID") }
+        didSet { updateSecret(key: "GOOGLE_CLIENT_ID", value: googleClientID) }
     }
     
     var googleClientSecret: String {
-        didSet { UserDefaults.standard.set(googleClientSecret, forKey: "GOOGLE_CLIENT_SECRET") }
+        didSet { updateSecret(key: "GOOGLE_CLIENT_SECRET", value: googleClientSecret) }
     }
     
     var googleAccessToken: String {
-        didSet { UserDefaults.standard.set(googleAccessToken, forKey: "GOOGLE_ACCESS_TOKEN") }
+        didSet { updateSecret(key: "GOOGLE_ACCESS_TOKEN", value: googleAccessToken) }
     }
     
     var googleRefreshToken: String {
-        didSet { UserDefaults.standard.set(googleRefreshToken, forKey: "GOOGLE_REFRESH_TOKEN") }
+        didSet { updateSecret(key: "GOOGLE_REFRESH_TOKEN", value: googleRefreshToken) }
     }
     
     var googleTokenExpiry: Double {
@@ -148,11 +148,36 @@ class ConfigManager: @unchecked Sendable {
             self.copyChatsAsMarkdown = true
         }
         
-        geminiAPIKey = UserDefaults.standard.string(forKey: "GEMINI_API_KEY") ?? ""
+        var keychainSecrets = KeychainManager.shared.loadSecrets()
+        var secretsMigrated = false
+        
+        func migrate(key: String, dest: inout String) {
+            if let keychainValue = keychainSecrets[key] {
+                dest = keychainValue
+            } else if let udValue = UserDefaults.standard.string(forKey: key), !udValue.isEmpty {
+                dest = udValue
+                keychainSecrets[key] = udValue
+                UserDefaults.standard.removeObject(forKey: key)
+                secretsMigrated = true
+            } else {
+                dest = ""
+            }
+        }
+        
+        var geminiKey = ""
+        migrate(key: "GEMINI_API_KEY", dest: &geminiKey)
+        self.geminiAPIKey = geminiKey
+        
+        var anthropicKey = ""
+        migrate(key: "ANTHROPIC_API_KEY", dest: &anthropicKey)
+        self.anthropicAPIKey = anthropicKey
+        
+        var openaiKey = ""
+        migrate(key: "OPENAI_API_KEY", dest: &openaiKey)
+        self.openAIAPIKey = openaiKey
+        
         geminiBaseURL = UserDefaults.standard.string(forKey: "GEMINI_BASE_URL") ?? ""
-        anthropicAPIKey = UserDefaults.standard.string(forKey: "ANTHROPIC_API_KEY") ?? ""
         anthropicBaseURL = UserDefaults.standard.string(forKey: "ANTHROPIC_BASE_URL") ?? ""
-        openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
         openAIBaseURL = UserDefaults.standard.string(forKey: "OPENAI_BASE_URL") ?? ""
 
         // Try reading old global models first for migration, else fallback to defaults.
@@ -183,10 +208,25 @@ class ConfigManager: @unchecked Sendable {
         self.openaiModelMedium = resolveModel(key: "OPENAI_MODEL_MEDIUM", provider: "OpenAI", migrated: oldMedium, fallback: "gpt-5.6-terra")
         self.openaiModelHard = resolveModel(key: "OPENAI_MODEL_HARD", provider: "OpenAI", migrated: oldHard, fallback: "gpt-5.6-sol")
         
-        self.googleClientID = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_ID") ?? ""
-        self.googleClientSecret = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_SECRET") ?? ""
-        self.googleAccessToken = UserDefaults.standard.string(forKey: "GOOGLE_ACCESS_TOKEN") ?? ""
-        self.googleRefreshToken = UserDefaults.standard.string(forKey: "GOOGLE_REFRESH_TOKEN") ?? ""
+        var gClientId = ""
+        migrate(key: "GOOGLE_CLIENT_ID", dest: &gClientId)
+        self.googleClientID = gClientId
+        
+        var gClientSecret = ""
+        migrate(key: "GOOGLE_CLIENT_SECRET", dest: &gClientSecret)
+        self.googleClientSecret = gClientSecret
+        
+        var gAccessToken = ""
+        migrate(key: "GOOGLE_ACCESS_TOKEN", dest: &gAccessToken)
+        self.googleAccessToken = gAccessToken
+        
+        var gRefreshToken = ""
+        migrate(key: "GOOGLE_REFRESH_TOKEN", dest: &gRefreshToken)
+        self.googleRefreshToken = gRefreshToken
+        
+        if secretsMigrated {
+            KeychainManager.shared.saveSecrets(keychainSecrets)
+        }
         self.googleTokenExpiry = UserDefaults.standard.double(forKey: "GOOGLE_TOKEN_EXPIRY")
         self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
         self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
@@ -208,5 +248,11 @@ class ConfigManager: @unchecked Sendable {
         default:
             return !geminiAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
         }
+    }
+    
+    private func updateSecret(key: String, value: String) {
+        var secrets = KeychainManager.shared.loadSecrets()
+        secrets[key] = value
+        KeychainManager.shared.saveSecrets(secrets)
     }
 }
