@@ -28,7 +28,7 @@ actor ADCCredentialManager {
             return gcloudToken
         }
         
-        throw APIError(message: "Application Default Credentials (ADC) token not found. Please run 'gcloud auth application-default login' in terminal.")
+        throw APIError(message: "Application Default Credentials (ADC) token not found. Please run 'gcloud auth application-default login --scopes=\"https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language\"' in terminal.")
     }
     
     func clearCache() {

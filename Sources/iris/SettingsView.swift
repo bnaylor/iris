@@ -45,7 +45,7 @@ struct SettingsView: View {
                         }
                         
                         if config.geminiAuthMode == GeminiAuthMode.adc.rawValue {
-                            Text("Using Application Default Credentials (ADC). Authenticate locally via `gcloud auth application-default login`.")
+                            Text("Using Application Default Credentials (ADC). Authenticate locally via:\n`gcloud auth application-default login --scopes=\"https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language\"`")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         } else {
