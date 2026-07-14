@@ -12,3 +12,4 @@ test_*.py
 test_*.swift
 *.py
 .iris/
+errors.txt

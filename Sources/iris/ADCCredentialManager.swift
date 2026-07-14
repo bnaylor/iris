@@ -111,13 +111,8 @@ actor ADCCredentialManager {
             return nil
         }
         
-        // Try `gcloud auth application-default print-access-token` first
+        // Try `gcloud auth application-default print-access-token`
         if let token = try await runGCloud(path: binaryPath, args: ["auth", "application-default", "print-access-token"]) {
-            return token
-        }
-        
-        // Fallback to `gcloud auth print-access-token`
-        if let token = try await runGCloud(path: binaryPath, args: ["auth", "print-access-token"]) {
             return token
         }
         

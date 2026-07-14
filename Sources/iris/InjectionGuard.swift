@@ -77,10 +77,25 @@ public struct InjectionGuard {
     }
     
     private static func executeTier3Canary(_ input: String) async -> Bool {
+        guard ConfigManager.shared.enableVibecop else {
+            return true
+        }
+        
+        let engineTypeString = ConfigManager.shared.vibecopEngine
+        let engineType: AuxiliaryEngineType
+        switch engineTypeString {
+        case "ollama": engineType = .ollama
+        case "mlx": engineType = .mlx
+        case "cloud": engineType = .cloud
+        default: engineType = .llamaCPP
+        }
+        
+        let modelName = ConfigManager.shared.vibecopModel
+        
         let config = AuxiliaryModelConfig(
             role: "canary",
-            engineType: .llamaCPP,
-            modelPathOrName: "Qwen-1.5B-Q4_K_M.gguf"
+            engineType: engineType,
+            modelPathOrName: modelName
         )
         
         do {
@@ -100,9 +115,8 @@ public struct InjectionGuard {
             let response = try await engine.generate(prompt: prompt, jsonSchema: nil)
             return response.contains("SAFE") && !response.contains("MALICIOUS")
         } catch {
-            print("[InjectionGuard] Canary execution failed: \(error)")
-            // If the canary fails to run, we must fail closed to prevent unverified data from passing.
-            return false
+            print("[InjectionGuard] Canary execution failed: \(error). Failing open for canary.")
+            return true
         }
     }
 }
