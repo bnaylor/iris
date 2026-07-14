@@ -4,6 +4,8 @@ Iris is a lightweight, compiled, native macOS agent harness designed to run auto
 
 It features **native Model Context Protocol (MCP) support** for limitless tool expansion and **built-in zero-dependency Google Workspace integrations** (Calendar, Docs, Drive, Sheets, Gmail, and Tasks).
 
+![Iris Screenshot](assets/screenshot_1.jpg)
+
 ## 🚀 Architecture
 
 At its core, Iris is a Swift-based execution chassis that bridges your local environment and cloud LLMs.
