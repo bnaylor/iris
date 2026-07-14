@@ -46,9 +46,10 @@ final class HolographicMemoryTests: XCTestCase {
         // Search for Swift
         let query = "Swift"
         let queryVector = HolographicVector.encode(string: query)
-        let results = try memoryManager.search(query: query, queryVector: queryVector, limit: 5)
+        let results = try memoryManager.search(query: query, queryVector: queryVector, limit: 5, threshold: 0.1)
         
         XCTAssertEqual(results.count, 2, "Should find 2 facts mentioning Swift")
+        guard results.count >= 2 else { return }
         
         // The results should be ranked. fact1 and fact3.
         XCTAssertTrue(results[0].content.contains("Swift"))

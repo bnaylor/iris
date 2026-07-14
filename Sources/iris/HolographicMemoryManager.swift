@@ -225,9 +225,12 @@ final class HolographicMemoryManager: @unchecked Sendable {
         } else if let pool = dbPool {
             try pool.write { db in try fact.insert(db) }
         }
+        
+        // Evict old unused facts occasionally when adding new ones
+        try? evictOldFacts()
     }
     
-    func search(query: String, queryVector: HolographicVector, limit: Int = 5) throws -> [HolographicFact] {
+    func search(query: String, queryVector: HolographicVector, limit: Int = 5, threshold: Float = 0.3) throws -> [HolographicFact] {
         let reader: DatabaseReader = dbQueue ?? dbPool!
         return try reader.read { db in
             // Step 1: Lexical filtering via FTS5
@@ -240,18 +243,60 @@ final class HolographicMemoryManager: @unchecked Sendable {
                 """
             let candidates = try HolographicFact.fetchAll(db, sql: sql, arguments: [ftsPattern])
             
-            // Step 2: Semantic Ranking in Swift
-            // Rank = (Sim * W_sim) + (Trust * W_trust)
-            let scored = candidates.map { fact -> (HolographicFact, Float) in
+            // Step 2: Semantic Ranking in Swift with Time Decay
+            let now = Date()
+            let scored = candidates.compactMap { fact -> (HolographicFact, Float)? in
                 let sim = fact.vector.similarity(to: queryVector)
-                let score = sim + Float(fact.trustScore * 0.1)
-                return (fact, score)
+                let baseScore = sim + Float(fact.trustScore * 0.1)
+                
+                // Calculate age in days
+                let ageInSeconds = now.timeIntervalSince(fact.timestamp)
+                let ageInDays = max(0, ageInSeconds / 86400.0)
+                
+                // Exponential decay (half-life of ~14 days if not reinforced)
+                let decayFactor = Float(exp(-0.05 * ageInDays))
+                let decayedScore = baseScore * decayFactor
+                
+                if decayedScore >= threshold {
+                    return (fact, decayedScore)
+                }
+                return nil
             }
             
             return scored
                 .sorted { $0.1 > $1.1 }
                 .prefix(limit)
                 .map { $0.0 }
+        }
+    }
+    
+    /// Reinforces facts by bumping their trust score and resetting their timestamp, keeping them fresh.
+    func reinforceFacts(ids: [String]) throws {
+        guard !ids.isEmpty else { return }
+        let writer: DatabaseWriter = dbQueue ?? dbPool!
+        try writer.write { db in
+            let placeholders = ids.map { _ in "?" }.joined(separator: ", ")
+            let sql = """
+                UPDATE facts
+                SET timestamp = CURRENT_TIMESTAMP,
+                    trustScore = trustScore + 0.1
+                WHERE id IN (\(placeholders))
+                """
+            try db.execute(sql: sql, arguments: StatementArguments(ids))
+        }
+    }
+    
+    /// Garbage collection for facts that haven't been reinforced recently and have low trust
+    func evictOldFacts() throws {
+        let writer: DatabaseWriter = dbQueue ?? dbPool!
+        try writer.write { db in
+            // Delete facts older than 30 days that have never been significantly reinforced (trustScore < 1.2)
+            let sql = """
+                DELETE FROM facts 
+                WHERE (julianday('now') - julianday(timestamp)) > 30 
+                AND trustScore < 1.2
+                """
+            try db.execute(sql: sql)
         }
     }
 }
