@@ -25,8 +25,10 @@
 - [x] Add settings for different models for easy/medium/hard effort levels
     - [x] iris auto-selects the model for subagents based on task complexity
 - [x] UI element to monitor active subagents (pane, tab, popup, something that gives more info about what subagents are running, for how long, what they're doing, etc.)
-- [ ] Parallel tool calls
-- [ ] Parallel/background subagent execution
-- [ ] Add cloud models for vibecop
-- [ ] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
+- [x] Parallel tool calls
+- [x] Parallel/background subagent execution
+- [x] Add cloud models for vibecop
+- [x] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
+- [ ] Reimagine sandboxing flows.  We should allow for even the main agent's access to be sandboxed.  Per-workspace?
+
 
