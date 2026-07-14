@@ -8,6 +8,10 @@ struct SettingsView: View {
     @State private var downloader = ModelDownloader.shared
     @State private var showingDownloadError = false
     
+    @State private var vibecopTestStatus: String?
+    @State private var tier2TestStatus: String?
+    @State private var tier3TestStatus: String?
+    
     var body: some View {
         TabView {
             // MARK: - General Tab
@@ -136,13 +140,61 @@ struct SettingsView: View {
                                     Text("Error: \(error)").foregroundColor(.red).font(.caption)
                                 }
                             } else {
-                                Text("✅ Model is downloaded and ready.")
+                                HStack {
+                                    Text("✅ Model is downloaded and ready.")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                    
+                                    Button("Test Model") {
+                                        Task {
+                                            do {
+                                                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                vibecopTestStatus = "✅ Success"
+                                            } catch {
+                                                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.link)
                                     .font(.caption)
-                                    .foregroundColor(.green)
+                                    
+                                    if let status = vibecopTestStatus {
+                                        Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    }
+                                }
                             }
                         } else {
-                            TextField("Ollama Model", text: $config.vibecopModel)
-                                .help("The Ollama model to use for Vibecop background evaluation (e.g. qwen3.5, gemma4:12b)")
+                            TextField("Ollama/Cloud Model", text: $config.vibecopModel)
+                                .help("The external model to use for Vibecop background evaluation (e.g. qwen3.5, gemma4:12b)")
+                            
+                            HStack {
+                                Text("✅ Assuming model is ready via external daemon.")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    
+                                Button("Test Model") {
+                                    Task {
+                                        do {
+                                            let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                            let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                            let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                            _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                            vibecopTestStatus = "✅ Success"
+                                        } catch {
+                                            vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.link)
+                                .font(.caption)
+                                
+                                if let status = vibecopTestStatus {
+                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                }
+                            }
                         }
                         
                         Text("Vibecop runs periodically in the background to evaluate the conversation state.")
@@ -157,18 +209,23 @@ struct SettingsView: View {
             .tabItem {
                 Label("Vibecop", systemImage: "eye.circle")
             }
-            
-            // MARK: - Security Tab
+                       // MARK: - Security Tab
             Form {
-                Section(header: Text("Advanced Prompt Injection Protection").font(.headline)) {
+                Section(header: Text("General Protection").font(.headline)) {
                     Toggle("Enable Protection (Tier 2 & 3)", isOn: $config.enableAdvancedPromptInjectionProtection)
-                    
                     if config.enableAdvancedPromptInjectionProtection {
-                        
-                        Divider().padding(.vertical, 4)
-                        
-                        Text("Tier 2: Fast CoreML Evaluator")
-                            .font(.subheadline).bold()
+                        Text("Iris will intercept untrusted data from the web before your main LLM reads it, protecting you from adversarial attacks and hidden instructions.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                if config.enableAdvancedPromptInjectionProtection {
+                    Section(header: Text("Tier 2: Fast CoreML Evaluator").font(.headline)) {
+                        Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            
                         TextField("CoreML .zip URL or Path", text: $config.promptGuardCoreMLModel)
                             .help("Provide a URL to a .mlmodelc.zip to download and enable the Tier 2 CoreML evaluator.")
                         
@@ -196,16 +253,41 @@ struct SettingsView: View {
                                         .foregroundColor(.orange)
                                 }
                             } else {
-                                Text("✅ Tier 2 CoreML model is present.")
+                                HStack {
+                                    Text("✅ Tier 2 CoreML model is present.")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                        
+                                    Button("Test Model") {
+                                        Task {
+                                            do {
+                                                try CoreMLEvaluator.shared.loadModelIfNeeded()
+                                                if CoreMLEvaluator.shared.hasModelLoaded {
+                                                    _ = try await CoreMLEvaluator.shared.evaluate(text: "Hello")
+                                                    tier2TestStatus = "✅ Success"
+                                                } else {
+                                                    tier2TestStatus = "❌ Failed: Model not loaded"
+                                                }
+                                            } catch {
+                                                tier2TestStatus = "❌ Failed: \(error.localizedDescription)"
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.link)
                                     .font(.caption)
-                                    .foregroundColor(.green)
+                                    
+                                    if let status = tier2TestStatus {
+                                        Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    }
+                                }
                             }
                         }
-                        
-                        Divider().padding(.vertical, 4)
-                        
-                        Text("Tier 3: Canary Probe")
-                            .font(.subheadline).bold()
+                    }
+                    
+                    Section(header: Text("Tier 3: Canary Probe").font(.headline)) {
+                        Text("This model is used as a sacrificial canary to test untrusted payloads for malicious instructions.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                             
                         Picker("Engine", selection: $config.promptGuardEngine) {
                             Text("Llama.cpp (Embedded)").tag("llama_cpp")
@@ -242,22 +324,66 @@ struct SettingsView: View {
                                     Text("Error: \(error)").foregroundColor(.red).font(.caption)
                                 }
                             } else {
-                                Text("✅ Model is downloaded and ready.")
+                                HStack {
+                                    Text("✅ Model is downloaded and ready.")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                        
+                                    Button("Test Model") {
+                                        Task {
+                                            do {
+                                                let engineType = AuxiliaryEngineType(rawValue: config.promptGuardEngine) ?? .llamaCPP
+                                                let auxConfig = AuxiliaryModelConfig(role: "promptGuard", engineType: engineType, modelPathOrName: config.promptGuardModel)
+                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "promptGuard", config: auxConfig)
+                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                tier3TestStatus = "✅ Success"
+                                            } catch {
+                                                tier3TestStatus = "❌ Failed: \(error.localizedDescription)"
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.link)
                                     .font(.caption)
-                                    .foregroundColor(.green)
+                                    
+                                    if let status = tier3TestStatus {
+                                        Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    }
+                                }
                             }
                         } else {
                             TextField("Model Name", text: $config.promptGuardModel)
                                 .help("The model to use for the Tier 3 Canary evaluation")
+                                
+                            HStack {
+                                Text("✅ Assuming model is ready via external daemon.")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    
+                                Button("Test Model") {
+                                    Task {
+                                        do {
+                                            let engineType = AuxiliaryEngineType(rawValue: config.promptGuardEngine) ?? .llamaCPP
+                                            let auxConfig = AuxiliaryModelConfig(role: "promptGuard", engineType: engineType, modelPathOrName: config.promptGuardModel)
+                                            let engine = try await AuxiliaryModelManager.shared.getEngine(for: "promptGuard", config: auxConfig)
+                                            _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                            tier3TestStatus = "✅ Success"
+                                        } catch {
+                                            tier3TestStatus = "❌ Failed: \(error.localizedDescription)"
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.link)
+                                .font(.caption)
+                                
+                                if let status = tier3TestStatus {
+                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                }
+                            }
                         }
-                        
-                        Text("This model is used as a sacrificial canary to test untrusted payloads for malicious instructions.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                 }
-                .padding(.bottom)
             }
+            .padding(.bottom)
             .formStyle(.grouped)
             .padding(20)
             .tabItem {

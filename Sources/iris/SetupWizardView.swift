@@ -466,6 +466,9 @@ struct SecurityStepView: View {
                     .background(Color.secondary.opacity(0.1))
                     .cornerRadius(8)
                     
+                    Divider()
+                        .padding(.vertical, 8)
+                    
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Tier 3: Auxiliary LLM (Heuristic)")
                             .font(.headline)
