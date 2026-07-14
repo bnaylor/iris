@@ -148,6 +148,49 @@ struct SettingsView: View {
                     Toggle("Enable Protection (Tier 2 & 3)", isOn: $config.enableAdvancedPromptInjectionProtection)
                     
                     if config.enableAdvancedPromptInjectionProtection {
+                        
+                        Divider().padding(.vertical, 4)
+                        
+                        Text("Tier 2: Fast CoreML Evaluator")
+                            .font(.subheadline).bold()
+                        TextField("CoreML .zip URL or Path", text: $config.promptGuardCoreMLModel)
+                            .help("Provide a URL to a .mlmodelc.zip to download and enable the Tier 2 CoreML evaluator.")
+                        
+                        if !config.promptGuardCoreMLModel.isEmpty {
+                            let coreMLFilename = config.promptGuardCoreMLModel.starts(with: "http") ? (URL(string: config.promptGuardCoreMLModel)?.lastPathComponent ?? config.promptGuardCoreMLModel) : config.promptGuardCoreMLModel
+                            let coreMLNameNoZip = coreMLFilename.hasSuffix(".zip") ? String(coreMLFilename.dropLast(4)) : coreMLFilename
+                            let isCoreMLDownloaded = downloader.isModelDownloaded(name: coreMLNameNoZip)
+                            
+                            if !isCoreMLDownloaded {
+                                if downloader.isDownloading {
+                                    HStack {
+                                        ProgressView(value: downloader.progress)
+                                            .progressViewStyle(.linear)
+                                        Text("\(Int(downloader.progress * 100))%")
+                                            .font(.caption)
+                                    }
+                                } else {
+                                    Button("Download CoreML Model") {
+                                        Task {
+                                            await downloader.downloadModel(name: config.promptGuardCoreMLModel)
+                                        }
+                                    }
+                                    Text("Downloads and unzips the CoreML model to enable Tier 2 locally.")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            } else {
+                                Text("✅ Tier 2 CoreML model is present.")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        
+                        Divider().padding(.vertical, 4)
+                        
+                        Text("Tier 3: Canary Probe")
+                            .font(.subheadline).bold()
+                            
                         Picker("Engine", selection: $config.promptGuardEngine) {
                             Text("Llama.cpp (Embedded)").tag("llama_cpp")
                             Text("Ollama (Local Daemon)").tag("ollama")

@@ -77,6 +77,15 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
             }
             try FileManager.default.moveItem(at: location, to: destination)
             
+            if filename.hasSuffix(".zip") {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+                process.arguments = ["-o", destination.path, "-d", dirPath]
+                try process.run()
+                process.waitUntilExit()
+                try? FileManager.default.removeItem(at: destination) // clean up zip
+            }
+            
             Task { @MainActor in
                 self.progress = 1.0
                 self.isDownloading = false

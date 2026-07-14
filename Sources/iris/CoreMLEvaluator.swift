@@ -23,6 +23,34 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         lock.withLock { model != nil }
     }
     
+    public func loadModelIfNeeded() {
+        if hasModelLoaded { return }
+        let coreMLPathStr = ConfigManager.shared.promptGuardCoreMLModel
+        if coreMLPathStr.isEmpty { return }
+        
+        let filename = coreMLPathStr.starts(with: "http") ? (URL(string: coreMLPathStr)?.lastPathComponent ?? coreMLPathStr) : coreMLPathStr
+        var modelDirName = filename
+        if modelDirName.hasSuffix(".zip") {
+            modelDirName = String(modelDirName.dropLast(4))
+        }
+        
+        let basePath = ("~/.iris/models/" as NSString).expandingTildeInPath
+        let fullPath = URL(fileURLWithPath: basePath).appendingPathComponent(modelDirName)
+        
+        if FileManager.default.fileExists(atPath: fullPath.path) {
+            #if canImport(Transformers)
+            do {
+                let liveModel = try LiveCoreMLModel(modelURL: fullPath, tokenizerConfigURL: fullPath)
+                setModel(liveModel)
+            } catch {
+                print("[CoreMLEvaluator] Failed to load CoreML model: \(error)")
+            }
+            #else
+            print("[CoreMLEvaluator] Transformers framework not available. Cannot load CoreML model.")
+            #endif
+        }
+    }
+    
     public func evaluate(text: String) async throws -> Double {
         let currentModel = lock.withLock { model }
         guard let m = currentModel else {

@@ -161,6 +161,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(promptGuardModel, forKey: "PROMPT_GUARD_MODEL") }
     }
     
+    var promptGuardCoreMLModel: String {
+        didSet { UserDefaults.standard.set(promptGuardCoreMLModel, forKey: "PROMPT_GUARD_COREML_MODEL") }
+    }
+    
     init() {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
@@ -273,6 +277,8 @@ class ConfigManager: @unchecked Sendable {
         
         let savedPromptModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_MODEL") ?? ""
         self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen-1.5B-Q4_K_M.gguf" : savedPromptModel
+        
+        self.promptGuardCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
     }
     
     var isConfigured: Bool {
