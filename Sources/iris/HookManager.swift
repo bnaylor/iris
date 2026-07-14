@@ -25,7 +25,19 @@ enum HookDecision {
 
 struct HookManager {
     static let shared = HookManager()
-    
+
+    /// Environment variables scrubbed before spawning any hook process so that
+    /// provider API keys and Google OAuth secrets never leak into hook scripts.
+    static let sensitiveEnvKeys: [String] = [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_ACCESS_TOKEN",
+        "GOOGLE_REFRESH_TOKEN",
+    ]
+
     var configPathOverride: String?
     
     private var configPath: String {
@@ -145,9 +157,9 @@ struct HookManager {
             process.standardError = errorPipe
             
             var env = ProcessInfo.processInfo.environment
-            env.removeValue(forKey: "ANTHROPIC_API_KEY")
-            env.removeValue(forKey: "OPENAI_API_KEY")
-            env.removeValue(forKey: "GEMINI_API_KEY")
+            for key in HookManager.sensitiveEnvKeys {
+                env.removeValue(forKey: key)
+            }
             env["GEMINI_CWD"] = FileManager.default.currentDirectoryPath
             process.environment = env
             

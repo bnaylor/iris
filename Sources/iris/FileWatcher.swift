@@ -38,7 +38,9 @@ final class FileWatcher: @unchecked Sendable {
                 guard let info = clientCallBackInfo else { return }
                 let wrapper = Unmanaged<ContinuationWrapper>.fromOpaque(info).takeUnretainedValue()
                 
-                let paths = unsafeBitCast(eventPaths, to: NSArray.self) as! [String]
+                // The stream is created with kFSEventStreamCreateFlagUseCFTypes, so eventPaths
+                // is a CFArray of CFStrings. Bridge it safely rather than reinterpreting raw bits.
+                guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
                 wrapper.continuation.yield(paths)
             }
             

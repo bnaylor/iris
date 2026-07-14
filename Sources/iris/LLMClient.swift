@@ -45,10 +45,15 @@ struct LLMClient {
                 
                 let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
                 
-                var urlComponents = URLComponents(string: baseURLString)!
+                guard var urlComponents = URLComponents(string: baseURLString) else {
+                    throw APIError(message: "Invalid Gemini base URL configuration: \(baseURLString)")
+                }
                 urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-                
-                var urlRequest = URLRequest(url: urlComponents.url!)
+
+                guard let requestURL = urlComponents.url else {
+                    throw APIError(message: "Failed to construct Gemini request URL.")
+                }
+                var urlRequest = URLRequest(url: requestURL)
                 urlRequest.httpMethod = "POST"
                 urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
                 

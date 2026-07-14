@@ -85,7 +85,7 @@ final class SubagentManager: @unchecked Sendable {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             iterations += 1
         }
-        let finalSummary = await holder.getSummary()!
+        let finalSummary = await holder.getSummary() ?? "Subagent completed with no summary."
         
         await MainActor.run {
             appState.removeSubagent(id: subagentId)

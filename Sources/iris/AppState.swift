@@ -85,11 +85,18 @@ struct ActiveSubagent: Identifiable, Hashable {
 class AppState {
     var conversations: [Conversation] = []
     var selectedConversationId: UUID?
-    var isThinking = false
+    /// Read-only for observers. Ownership is centralized through `beginThinking()`/`endThinking()`
+    /// so overlapping turns (concurrent sends, subagents, auto-reprompt) can't leave it stuck.
+    private(set) var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
     var pendingApproval: ToolApprovalRequest?
     var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
-    
+
+    /// Reference count of in-flight "thinking" work. `isThinking` is derived from this.
+    private var thinkingCount = 0
+    /// Tracked UI-initiated tasks so they can be cancelled (e.g. when a conversation is deleted).
+    private var activeTasks: [UUID: (conversationId: UUID?, task: Task<Void, Never>)] = [:]
+
     private var engine: IrisEngine!
     
     init() {
@@ -103,6 +110,44 @@ class AppState {
     
     var activeConversationIndex: Int? {
         conversations.firstIndex(where: { $0.id == selectedConversationId })
+    }
+
+    // MARK: - Thinking state
+
+    /// Acquire one unit of "thinking". Balanced by `endThinking()`.
+    func beginThinking() {
+        thinkingCount += 1
+        isThinking = true
+    }
+
+    /// Release one unit of "thinking".
+    func endThinking() {
+        thinkingCount = max(0, thinkingCount - 1)
+        isThinking = thinkingCount > 0
+    }
+
+    /// Runs UI-initiated engine work while holding the thinking indicator and tracking the
+    /// task so it can be cancelled. The `work` closure must not touch `isThinking` directly.
+    private func runThinkingTask(conversationId: UUID?, _ work: @escaping @MainActor () async -> Void) {
+        let id = UUID()
+        beginThinking()
+        let task = Task { @MainActor [weak self] in
+            await work()
+            guard let self else { return }
+            self.activeTasks[id] = nil
+            self.endThinking()
+        }
+        activeTasks[id] = (conversationId, task)
+    }
+
+    /// Cancels any tracked tasks associated with a conversation and asks the engine to stop
+    /// its auto-reprompt loop for it.
+    private func cancelTasks(for conversationId: UUID) {
+        for (_, entry) in activeTasks where entry.conversationId == conversationId {
+            entry.task.cancel()
+        }
+        let engine = self.engine
+        Task { await engine?.cancelReprompt(for: conversationId) }
     }
     
     func createNewConversation(id: UUID = UUID()) {
@@ -146,6 +191,7 @@ class AppState {
     }
     
     func deleteConversation(_ id: UUID) {
+        cancelTasks(for: id)
         conversations.removeAll { $0.id == id }
         if selectedConversationId == id {
             selectedConversationId = conversations.last?.id
@@ -184,11 +230,11 @@ class AppState {
                 conversations[idx].activeGoal = nil
                 saveConversations()
             }
+            cancelTasks(for: convId)
             appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
             return
         } else if trimmed.hasPrefix("/reflect") {
             appendMessage(role: .system, content: "Triggering manual memory reflection...", to: convId)
-            isThinking = true
             let reflectionPrompt = """
             System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. 
             
@@ -202,34 +248,28 @@ class AppState {
             ---
             Verify that your cross-links between files are still valid, and reorganize or fix any broken links. Output a transparent summary of the gist of the updates and grooming performed for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'
             """
-            Task {
+            runThinkingTask(conversationId: convId) { [self] in
                 await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
-                isThinking = false
             }
             return
         } else if trimmed.hasPrefix("/vibecop init") {
             appendMessage(role: .system, content: "Initializing Vibecop Guardian mode...", to: convId)
-            isThinking = true
             let initPrompt = "System Event [Vibecop Init]: Analyze the current workspace directory to understand the project structure, language, framework, and tooling. Generate a custom Guardian prompt that defines what terminal commands and file operations are 'routine' for this specific workspace, and what should be escalated to the user. Write this prompt to a new file at `.iris/vibecop.md` inside the workspace using the `write_file` tool. Output a transparent summary of the generated rules for the user."
-            Task {
+            runThinkingTask(conversationId: convId) { [self] in
                 await engine.processInput(initPrompt, source: "System", conversationId: convId)
-                isThinking = false
             }
             return
         } else if trimmed.hasPrefix("/rename") {
             appendMessage(role: .system, content: "Triggering automatic conversation rename...", to: convId)
-            isThinking = true
             let renamePrompt = "System Event [Rename Trigger]: Evaluate the conversation history and use the `rename_conversation` tool to assign a short, descriptive title (1-4 words) that captures the true gist of this conversation."
-            Task {
+            runThinkingTask(conversationId: convId) { [self] in
                 await engine.processInput(renamePrompt, source: "System", conversationId: convId)
-                isThinking = false
             }
             return
         }
-        
+
         appendMessage(role: .user, content: messageContent, to: convId)
-        isThinking = true
-        
+
         if let idx = conversations.firstIndex(where: { $0.id == convId }) {
             conversations[idx].messageCountSinceReflection += 1
             saveConversations()
@@ -241,37 +281,31 @@ class AppState {
             if shouldReflect {
                 conversations[idx].messageCountSinceReflection = 0
                 saveConversations()
-                
+
                 // We'll queue the reflection system message after the current task finishes.
-                Task {
+                runThinkingTask(conversationId: convId) { [self] in
                     await engine.processInput(messageContent, source: "UI", conversationId: convId)
-                    
+
                     let reflectionPrompt = "System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. Output a transparent summary of the gist of the updates for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'"
                     appendMessage(role: .system, content: "Triggering automatic memory reflection...", to: convId)
-                    isThinking = true
                     await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
-                    isThinking = false
                 }
             } else if shouldRename {
-                Task {
+                runThinkingTask(conversationId: convId) { [self] in
                     await engine.processInput(messageContent, source: "UI", conversationId: convId)
-                    
+
                     let renamePrompt = "System Event [Rename Trigger]: Evaluate the conversation history and use the `rename_conversation` tool to assign a short, descriptive title (1-4 words) that captures the true gist of this conversation."
                     appendMessage(role: .system, content: "Triggering automatic conversation rename...", to: convId)
-                    isThinking = true
                     await engine.processInput(renamePrompt, source: "System", conversationId: convId)
-                    isThinking = false
                 }
             } else {
-                Task {
+                runThinkingTask(conversationId: convId) { [self] in
                     await engine.processInput(messageContent, source: "UI", conversationId: convId)
-                    isThinking = false
                 }
             }
         } else {
-            Task {
+            runThinkingTask(conversationId: convId) { [self] in
                 await engine.processInput(messageContent, source: "UI", conversationId: convId)
-                isThinking = false
             }
         }
     }

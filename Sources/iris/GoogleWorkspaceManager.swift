@@ -143,9 +143,13 @@ actor GoogleWorkspaceManager {
             let authHeader = try await getAuthHeader()
             let max = maxResults ?? "10"
             let timeMin = ISO8601DateFormatter().string(from: Date())
-            let urlStr = "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=\(max)&timeMin=\(timeMin)&singleEvents=true&orderBy=startTime"
-            
-            var request = URLRequest(url: URL(string: urlStr)!)
+            let encodedTimeMin = timeMin.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? timeMin
+            let urlStr = "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=\(max)&timeMin=\(encodedTimeMin)&singleEvents=true&orderBy=startTime"
+
+            guard let url = URL(string: urlStr) else {
+                return "Error: Failed to construct calendar request URL."
+            }
+            var request = URLRequest(url: url)
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
             
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -276,7 +280,10 @@ actor GoogleWorkspaceManager {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             
             let rawMessage = "To: \(to)\nSubject: \(subject)\n\n\(body)"
-            let encodedMessage = rawMessage.data(using: .utf8)!.base64EncodedString()
+            guard let rawData = rawMessage.data(using: .utf8) else {
+                return "Error: Failed to encode email body as UTF-8."
+            }
+            let encodedMessage = rawData.base64EncodedString()
                 .replacingOccurrences(of: "+", with: "-")
                 .replacingOccurrences(of: "/", with: "_")
                 .replacingOccurrences(of: "=", with: "")

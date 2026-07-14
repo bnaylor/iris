@@ -64,14 +64,13 @@ class ScheduleManager: @unchecked Sendable {
     }
     
     func start() {
-        lock.lock()
-        if isRunning {
-            lock.unlock()
-            return
+        let alreadyRunning = lock.withLock { () -> Bool in
+            if isRunning { return true }
+            isRunning = true
+            return false
         }
-        isRunning = true
-        lock.unlock()
-        
+        if alreadyRunning { return }
+
         evaluationTask?.cancel()
         evaluationTask = Task {
             while !Task.isCancelled {

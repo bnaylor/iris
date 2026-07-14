@@ -1,8 +1,8 @@
 import Foundation
 
-final class OllamaEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
+actor OllamaEngine: AuxiliaryInferenceEngine {
     private var modelName: String = ""
-    
+
     func loadModel(config: AuxiliaryModelConfig) async throws {
         self.modelName = config.modelPathOrName
         // Ollama handles loading automatically, but we could explicitly preload here if we wanted via the generate endpoint.

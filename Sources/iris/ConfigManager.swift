@@ -155,22 +155,33 @@ class ConfigManager: @unchecked Sendable {
         openAIAPIKey = UserDefaults.standard.string(forKey: "OPENAI_API_KEY") ?? ""
         openAIBaseURL = UserDefaults.standard.string(forKey: "OPENAI_BASE_URL") ?? ""
 
-        // Try reading old global models first for migration, else fallback to defaults
+        // Try reading old global models first for migration, else fallback to defaults.
+        // The old global keys only migrate onto whichever provider was active at the time.
         let oldEasy = UserDefaults.standard.string(forKey: "MODEL_EASY")
         let oldMedium = UserDefaults.standard.string(forKey: "MODEL_MEDIUM")
         let oldHard = UserDefaults.standard.string(forKey: "MODEL_HARD")
 
-        self.geminiModelEasy = UserDefaults.standard.string(forKey: "GEMINI_MODEL_EASY") ?? (savedProvider == "Gemini" && oldEasy != nil ? oldEasy! : "gemini-3.1-flash-lite")
-        self.geminiModelMedium = UserDefaults.standard.string(forKey: "GEMINI_MODEL_MEDIUM") ?? (savedProvider == "Gemini" && oldMedium != nil ? oldMedium! : "gemini-3.5-flash")
-        self.geminiModelHard = UserDefaults.standard.string(forKey: "GEMINI_MODEL_HARD") ?? (savedProvider == "Gemini" && oldHard != nil ? oldHard! : "gemini-3.1-pro-preview")
-        
-        self.anthropicModelEasy = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_EASY") ?? (savedProvider == "Anthropic" && oldEasy != nil ? oldEasy! : "claude-haiku-4-5-20251001")
-        self.anthropicModelMedium = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_MEDIUM") ?? (savedProvider == "Anthropic" && oldMedium != nil ? oldMedium! : "claude-sonnet-5")
-        self.anthropicModelHard = UserDefaults.standard.string(forKey: "ANTHROPIC_MODEL_HARD") ?? (savedProvider == "Anthropic" && oldHard != nil ? oldHard! : "claude-fable-5")
-        
-        self.openaiModelEasy = UserDefaults.standard.string(forKey: "OPENAI_MODEL_EASY") ?? (savedProvider == "OpenAI" && oldEasy != nil ? oldEasy! : "gpt-5.6-luna")
-        self.openaiModelMedium = UserDefaults.standard.string(forKey: "OPENAI_MODEL_MEDIUM") ?? (savedProvider == "OpenAI" && oldMedium != nil ? oldMedium! : "gpt-5.6-terra")
-        self.openaiModelHard = UserDefaults.standard.string(forKey: "OPENAI_MODEL_HARD") ?? (savedProvider == "OpenAI" && oldHard != nil ? oldHard! : "gpt-5.6-sol")
+        func resolveModel(key: String, provider: String, migrated: String?, fallback: String) -> String {
+            if let saved = UserDefaults.standard.string(forKey: key) {
+                return saved
+            }
+            if savedProvider == provider, let migrated {
+                return migrated
+            }
+            return fallback
+        }
+
+        self.geminiModelEasy = resolveModel(key: "GEMINI_MODEL_EASY", provider: "Gemini", migrated: oldEasy, fallback: "gemini-3.1-flash-lite")
+        self.geminiModelMedium = resolveModel(key: "GEMINI_MODEL_MEDIUM", provider: "Gemini", migrated: oldMedium, fallback: "gemini-3.5-flash")
+        self.geminiModelHard = resolveModel(key: "GEMINI_MODEL_HARD", provider: "Gemini", migrated: oldHard, fallback: "gemini-3.1-pro-preview")
+
+        self.anthropicModelEasy = resolveModel(key: "ANTHROPIC_MODEL_EASY", provider: "Anthropic", migrated: oldEasy, fallback: "claude-haiku-4-5-20251001")
+        self.anthropicModelMedium = resolveModel(key: "ANTHROPIC_MODEL_MEDIUM", provider: "Anthropic", migrated: oldMedium, fallback: "claude-sonnet-5")
+        self.anthropicModelHard = resolveModel(key: "ANTHROPIC_MODEL_HARD", provider: "Anthropic", migrated: oldHard, fallback: "claude-fable-5")
+
+        self.openaiModelEasy = resolveModel(key: "OPENAI_MODEL_EASY", provider: "OpenAI", migrated: oldEasy, fallback: "gpt-5.6-luna")
+        self.openaiModelMedium = resolveModel(key: "OPENAI_MODEL_MEDIUM", provider: "OpenAI", migrated: oldMedium, fallback: "gpt-5.6-terra")
+        self.openaiModelHard = resolveModel(key: "OPENAI_MODEL_HARD", provider: "OpenAI", migrated: oldHard, fallback: "gpt-5.6-sol")
         
         self.googleClientID = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_ID") ?? ""
         self.googleClientSecret = UserDefaults.standard.string(forKey: "GOOGLE_CLIENT_SECRET") ?? ""
