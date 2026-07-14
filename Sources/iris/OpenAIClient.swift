@@ -36,7 +36,7 @@ struct OpenAIClient {
                 } else if let fc = part.functionCall {
                     let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
-                    let argsData = try? JSONSerialization.data(withJSONObject: fc.args)
+                    let argsData = try? JSONSerialization.data(withJSONObject: fc.args.mapValues { $0.anyValue })
                     let argsString = String(data: argsData ?? Data(), encoding: .utf8) ?? "{}"
                     
                     toolCalls.append([
@@ -49,7 +49,7 @@ struct OpenAIClient {
                     ])
                 } else if let fr = part.functionResponse {
                     let id = fr.id ?? "call_\(fr.name)_0" // Fallback if no ID is provided
-                    let respData = try? JSONSerialization.data(withJSONObject: fr.response)
+                    let respData = try? JSONSerialization.data(withJSONObject: fr.response.mapValues { $0.anyValue })
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
                     toolResponses.append([
@@ -181,7 +181,7 @@ struct OpenAIClient {
             if let toolCalls = msg["tool_calls"] as? [[String: Any]] {
                 for call in toolCalls {
                     if let f = call["function"] as? [String: Any], let name = f["name"] as? String, let id = call["id"] as? String, let argsStr = f["arguments"] as? String {
-                        let argsDict = (try? JSONSerialization.jsonObject(with: argsStr.data(using: .utf8) ?? Data())) as? [String: String] ?? [:]
+                        let argsDict = (try? JSONDecoder().decode([String: JSONValue].self, from: argsStr.data(using: .utf8) ?? Data())) ?? [:]
                         content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: argsDict, id: id, thought_signature: reasoning, thoughtSignature: reasoning), functionResponse: nil, thought_signature: reasoning, thoughtSignature: reasoning))
                     }
                 }

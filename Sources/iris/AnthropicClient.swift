@@ -30,11 +30,11 @@ struct AnthropicClient {
                         "type": "tool_use",
                         "id": id,
                         "name": fc.name,
-                        "input": fc.args
+                        "input": fc.args.mapValues { $0.anyValue }
                     ])
                 } else if let fr = part.functionResponse {
                     let id = fr.id ?? "call_\(fr.name)_0"
-                    let respData = try? JSONSerialization.data(withJSONObject: fr.response)
+                    let respData = try? JSONSerialization.data(withJSONObject: fr.response.mapValues { $0.anyValue })
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
                     partsArray.append([
@@ -165,12 +165,12 @@ struct AnthropicClient {
                     if type == "text", let text = part["text"] as? String {
                         content.parts.append(Part(text: text, functionCall: nil, functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
                     } else if type == "tool_use", let id = part["id"] as? String, let name = part["name"] as? String, let input = part["input"] as? [String: Any] {
-                        // Convert [String: Any] back to [String: String] since Iris FunctionCall args are [String: String]
-                        var stringArgs: [String: String] = [:]
-                        for (k, v) in input {
-                            stringArgs[k] = "\(v)"
+                        var jsonArgs: [String: JSONValue] = [:]
+                        if let data = try? JSONSerialization.data(withJSONObject: input),
+                           let decoded = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
+                            jsonArgs = decoded
                         }
-                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: stringArgs, id: id, thought_signature: nil, thoughtSignature: nil), functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
+                        content.parts.append(Part(text: nil, functionCall: FunctionCall(name: name, args: jsonArgs, id: id, thought_signature: nil, thoughtSignature: nil), functionResponse: nil, thought_signature: nil, thoughtSignature: nil))
                     }
                 }
             }
