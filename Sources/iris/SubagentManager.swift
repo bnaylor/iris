@@ -39,37 +39,34 @@ final class SubagentManager: @unchecked Sendable {
         let customPromptText = generateRolePrompt(role: role)
         await engine.setSystemPrompt(text: customPromptText)
         
-        // 4. Inject the initial task
+        // 4. Inject the initial task and set the goal so the engine auto-loops
         await MainActor.run {
+            appState.setGoal(for: subagentId, goal: task)
             appState.appendMessage(role: .system, content: "Starting subagent with role '\(role)' to execute task:\n\(task)", to: subagentId)
         }
         
-        actor ResultHolder {
-            var summary: String? = nil
-            func setSummary(_ s: String) { summary = s }
-            func getSummary() -> String? { return summary }
-        }
-        let holder = ResultHolder()
-        
-        await MainActor.run {
-            appState.onSubagentComplete = { [weak holder] id, sum in
-                if id == subagentId {
-                    Task { await holder?.setSummary(sum) }
+        let finalSummary: String = await withCheckedContinuation { continuation in
+            Task { @MainActor in
+                appState.onSubagentComplete[subagentId] = { sum in
+                    Task { @MainActor in
+                        appState.onSubagentComplete[subagentId] = nil
+                    }
+                    continuation.resume(returning: sum)
                 }
             }
+            
+            Task {
+                // Kick off the first turn. Since activeGoal is set, the engine will autonomously reprompt itself
+                // in a loop until goal_complete is called.
+                await engine.processInput(task, source: "System", conversationId: subagentId)
+            }
         }
-        
-        // Kick off the first turn
-        await engine.processInput(task, source: "System", conversationId: subagentId)
         
         await MainActor.run {
             appState.removeSubagent(id: subagentId)
         }
         
-        if let finalSummary = await holder.getSummary() {
-            return finalSummary
-        }
-        return "Subagent finished without calling goal_complete."
+        return finalSummary
     }
     
     private func generateRolePrompt(role: String) -> String {

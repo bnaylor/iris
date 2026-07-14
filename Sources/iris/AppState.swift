@@ -87,7 +87,7 @@ class AppState {
     var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
     var pendingApproval: ToolApprovalRequest?
-    var onSubagentComplete: (@Sendable (UUID, String) -> Void)?
+    var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
     
     private var engine: IrisEngine!
     
@@ -306,6 +306,13 @@ class AppState {
     func clearGoal(for conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = nil
+            saveConversations()
+        }
+    }
+    
+    func setGoal(for conversationId: UUID, goal: String) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].activeGoal = goal
             saveConversations()
         }
     }
