@@ -8,7 +8,8 @@ struct SkillManager {
     func loadSOUL() async -> String {
         let path = "\(configDir)/prompts/SOUL.md"
         if let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            return await InjectionGuard.sanitize(content, contextTag: "soul_prompt", maxTier: .tier3_canary)
+            let structuralSafe = PromptInjectionGuard.sanitizeUntrustedInput(content)
+            return await InjectionGuard.sanitize(structuralSafe, contextTag: "soul_prompt", maxTier: .tier3_canary)
         }
         return "You are Iris, a native macOS agent running on the local machine."
     }
@@ -26,7 +27,8 @@ struct SkillManager {
             let skillPath = "\(skillsDir)/\(item)/SKILL.md"
             if fileManager.fileExists(atPath: skillPath) {
                 if let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    let safeContent = await InjectionGuard.sanitize(content, contextTag: "skill_\(item)", maxTier: .tier3_canary)
+                    let structuralSafe = PromptInjectionGuard.sanitizeUntrustedInput(content)
+                    let safeContent = await InjectionGuard.sanitize(structuralSafe, contextTag: "skill_\(item)", maxTier: .tier3_canary)
                     skillsSummary += parseFrontmatter(from: safeContent, folderName: item) + "\n"
                 }
             }

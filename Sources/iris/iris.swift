@@ -113,11 +113,12 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             try? HolographicMemoryManager.shared.reinforceFacts(ids: facts.map { $0.id })
         }
         
-        if let textPart = currentSystemPrompt.parts.first?.text {
-            // Append USER.md first (mostly static)
-            let safeUserProfile = await InjectionGuard.sanitize(userProfile, contextTag: "user_profile", maxTier: .tier3_canary)
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# User Profile (USER.md)\n" + safeUserProfile
-        }
+    if let textPart = currentSystemPrompt.parts.first?.text {
+        // Append USER.md first (mostly static)
+        let structuralSafeUserProfile = PromptInjectionGuard.sanitizeUntrustedInput(userProfile)
+        let safeUserProfile = await InjectionGuard.sanitize(structuralSafeUserProfile, contextTag: "user_profile", maxTier: .tier3_canary)
+        currentSystemPrompt.parts[0].text = textPart + "\n\n# User Profile (USER.md)\n" + safeUserProfile
+    }
         
         if let wp = workspacePath {
             let agentsMdPath = (wp as NSString).expandingTildeInPath
@@ -125,7 +126,8 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             if let agentsMdContent = try? String(contentsOfFile: fullPath, encoding: .utf8) {
                 if let textPart = currentSystemPrompt.parts.first?.text {
                     // Append AGENTS.md next (static per workspace)
-                    let safeAgentsMd = await InjectionGuard.sanitize(agentsMdContent, contextTag: "workspace_rules", maxTier: .tier3_canary)
+                    let structuralSafeAgentsMd = PromptInjectionGuard.sanitizeUntrustedInput(agentsMdContent)
+                    let safeAgentsMd = await InjectionGuard.sanitize(structuralSafeAgentsMd, contextTag: "workspace_rules", maxTier: .tier3_canary)
                     currentSystemPrompt.parts[0].text = textPart + "\n\n# Project Workspace Rules (AGENTS.md)\n" + safeAgentsMd
                 }
             }
