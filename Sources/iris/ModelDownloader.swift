@@ -15,7 +15,8 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     // Some known models and their URLs for convenience
     let knownModels = [
         "Llama-3.2-1B-Instruct-Q4_K_M.gguf": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
-        "Qwen-1.5B-Q4_K_M.gguf": "https://huggingface.co/Qwen/Qwen2-1.5B-Instruct-GGUF/resolve/main/qwen2-1_5b-instruct-q4_k_m.gguf"
+        "Qwen2-1.5B-Instruct-Q4_K_M.gguf": "https://huggingface.co/Qwen/Qwen2-1.5B-Instruct-GGUF/resolve/main/qwen2-1_5b-instruct-q4_k_m.gguf",
+        "gemma-2-9b-it-Q4_K_M.gguf": "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf"
     ]
     
     func isModelDownloaded(name: String) -> Bool {

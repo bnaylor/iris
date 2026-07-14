@@ -79,10 +79,15 @@ struct SetupWizardView: View {
             .padding(40)
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(width: 850, height: 550)
+        .frame(width: 850, height: 600)
     }
     
     private func finishSetup() {
+        // Force creation of memory DB and USER.md immediately
+        _ = MemoryManager.shared
+        _ = HolographicMemoryManager.shared
+        
+        UserDefaults.standard.set(true, forKey: "HAS_COMPLETED_SETUP")
         dismiss()
     }
 }
@@ -138,6 +143,8 @@ struct AppearanceStepView: View {
 struct BaseModelStepView: View {
     @Binding var currentStep: Int
     @Bindable var config = ConfigManager.shared
+    @State private var testStatus: String?
+    @State private var isTesting = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -175,6 +182,31 @@ struct BaseModelStepView: View {
                     SecureField("OpenAI API Key", text: $config.openAIAPIKey)
                         .textFieldStyle(.roundedBorder)
                 }
+                
+                HStack {
+                    Button(isTesting ? "Testing..." : "Test Connection") {
+                        Task {
+                            isTesting = true
+                            testStatus = nil
+                            do {
+                                let request = GeminiRequest(contents: [Content(role: "user", parts: [Part(text: "Respond with exactly one word: Hello", functionCall: nil, functionResponse: nil)])], systemInstruction: nil, tools: nil)
+                                _ = try await LLMClient().generateContent(request: request)
+                                testStatus = "✅ Connection successful!"
+                            } catch {
+                                testStatus = "❌ Failed: \(error.localizedDescription)"
+                            }
+                            isTesting = false
+                        }
+                    }
+                    .disabled(isTesting || !config.isConfigured)
+                    
+                    if let status = testStatus {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundColor(status.starts(with: "✅") ? .green : .red)
+                    }
+                }
+                .padding(.top, 8)
             }
             
             Spacer()
@@ -243,14 +275,15 @@ struct IntegrationsStepView: View {
 struct VibecopStepView: View {
     @Binding var currentStep: Int
     @Bindable var config = ConfigManager.shared
-    @State private var downloader = ModelDownloader()
+    var downloader = ModelDownloader.shared
+    @State private var testStatus: String?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Vibecop")
                 .font(.system(size: 32, weight: .bold))
             
-            Text("Vibecop is a local, on-device AI copilot that monitors your main LLM interactions to prevent hallucinations and ensure output quality. It runs entirely on your Mac.")
+            Text("Vibecop is an independent LLM copilot that enables \"smart approvals\" for commands that can be tuned to fit your project specifics.")
                 .foregroundColor(.secondary)
             
             Toggle("Enable Vibecop", isOn: $config.enableVibecop)
@@ -261,7 +294,7 @@ struct VibecopStepView: View {
                         .font(.headline)
                     
                     Picker("Model", selection: $config.vibecopModel) {
-                        Text("Qwen2 1.5B (Fast, ~1.1GB)").tag("qwen2-1_5b-instruct-q4_0.gguf")
+                        Text("Qwen2 1.5B (Fast, ~1.1GB)").tag("Qwen2-1.5B-Instruct-Q4_K_M.gguf")
                         Text("Llama 3.2 1B (Fast, ~1.3GB)").tag("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
                         Text("Gemma 2 9B (Heavy, ~6.5GB)").tag("gemma-2-9b-it-Q4_K_M.gguf")
                     }
@@ -277,9 +310,31 @@ struct VibecopStepView: View {
                             }
                         }
                     } else {
-                        Text("✅ Model ready.")
-                            .foregroundColor(.green)
+                        HStack {
+                            Text("✅ Model ready.")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                            
+                            Button("Test Model") {
+                                Task {
+                                    do {
+                                        let engineType = AuxiliaryEngineType(rawValue: "llama_cpp") ?? .llamaCPP
+                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                        testStatus = "✅ Success"
+                                    } catch {
+                                        testStatus = "❌ Failed: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                            .buttonStyle(.link)
                             .font(.caption)
+                            
+                            if let status = testStatus {
+                                Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                            }
+                        }
                     }
                 }
                 .padding()
@@ -303,57 +358,122 @@ struct VibecopStepView: View {
 struct SecurityStepView: View {
     @Binding var currentStep: Int
     @Bindable var config = ConfigManager.shared
-    @State private var downloader = ModelDownloader()
+    var downloader = ModelDownloader.shared
+    @State private var testStatus: String?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text("Prompt Injection Security")
-                .font(.system(size: 32, weight: .bold))
-            
-            Text("Iris can intercept untrusted data from the web before your main LLM reads it, protecting you from adversarial attacks and hidden instructions.")
-                .foregroundColor(.secondary)
-            
-            Toggle("Enable Advanced Protection", isOn: $config.enableAdvancedPromptInjectionProtection)
-            
-            if config.enableAdvancedPromptInjectionProtection {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Tier 2: CoreML Fast Interceptor")
-                        .font(.headline)
-                    Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    let coreMLName = config.promptGuardCoreMLModel.starts(with: "http") ? (URL(string: config.promptGuardCoreMLModel)?.lastPathComponent ?? "") : config.promptGuardCoreMLModel
-                    let coreMLNoZip = coreMLName.hasSuffix(".zip") ? String(coreMLName.dropLast(4)) : coreMLName
-                    let isDownloaded = downloader.isModelDownloaded(name: coreMLNoZip)
-                    
-                    if !isDownloaded {
-                        if downloader.isDownloading {
-                            ProgressView(value: downloader.progress)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Prompt Injection Security")
+                    .font(.system(size: 32, weight: .bold))
+                
+                Text("Iris can intercept untrusted data from the web before your main LLM reads it, protecting you from adversarial attacks and hidden instructions.")
+                    .foregroundColor(.secondary)
+                
+                Toggle("Enable Advanced Protection", isOn: $config.enableAdvancedPromptInjectionProtection)
+                
+                if config.enableAdvancedPromptInjectionProtection {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Tier 2: CoreML Fast Interceptor")
+                            .font(.headline)
+                        Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        let coreMLName = config.promptGuardCoreMLModel.starts(with: "http") ? (URL(string: config.promptGuardCoreMLModel)?.lastPathComponent ?? "") : config.promptGuardCoreMLModel
+                        let coreMLNoZip = coreMLName.hasSuffix(".zip") ? String(coreMLName.dropLast(4)) : coreMLName
+                        let isDownloaded = downloader.isModelDownloaded(name: coreMLNoZip)
+                        
+                        if !isDownloaded {
+                            if downloader.isDownloading {
+                                ProgressView(value: downloader.progress)
+                            } else {
+                                Button("Download CoreML Model (~250MB)") {
+                                    Task { await downloader.downloadModel(name: config.promptGuardCoreMLModel) }
+                                }
+                            }
                         } else {
-                            Button("Download CoreML Model (~250MB)") {
-                                Task { await downloader.downloadModel(name: config.promptGuardCoreMLModel) }
+                            Text("✅ CoreML model ready.")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Tier 3: Auxiliary LLM (Heuristic)")
+                            .font(.headline)
+                        Text("A local GGUF model evaluates suspicious payloads using deep logic.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Picker("Engine", selection: $config.promptGuardEngine) {
+                            Text("Llama.cpp").tag("llama_cpp")
+                            Text("Ollama").tag("ollama")
+                            Text("MLX").tag("mlx")
+                        }
+                        .pickerStyle(.segmented)
+                        
+                        Picker("Model", selection: $config.promptGuardModel) {
+                            Text("Qwen2 1.5B").tag("Qwen2-1.5B-Instruct-Q4_K_M.gguf")
+                            Text("Llama 3.2 1B").tag("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+                            Text("Gemma 2 9B").tag("gemma-2-9b-it-Q4_K_M.gguf")
+                        }
+                        
+                        let isTier3Downloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
+                        
+                        if !isTier3Downloaded {
+                            if downloader.isDownloading {
+                                ProgressView(value: downloader.progress)
+                            } else {
+                                Button("Download Model") {
+                                    Task { await downloader.downloadModel(name: config.promptGuardModel) }
+                                }
+                            }
+                        } else {
+                            HStack {
+                                Text("✅ Tier 3 Model ready.")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    
+                                Button("Test Model") {
+                                    Task {
+                                        do {
+                                            let engineType = AuxiliaryEngineType(rawValue: config.promptGuardEngine) ?? .llamaCPP
+                                            let auxConfig = AuxiliaryModelConfig(role: "promptGuard", engineType: engineType, modelPathOrName: config.promptGuardModel)
+                                            let engine = try await AuxiliaryModelManager.shared.getEngine(for: "promptGuard", config: auxConfig)
+                                            _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                            testStatus = "✅ Success"
+                                        } catch {
+                                            testStatus = "❌ Failed: \(error.localizedDescription)"
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.link)
+                                .font(.caption)
+                                
+                                if let status = testStatus {
+                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                }
                             }
                         }
-                    } else {
-                        Text("✅ CoreML model ready.")
-                            .foregroundColor(.green)
-                            .font(.caption)
                     }
+                    .padding()
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
                 }
-                .padding()
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            Spacer()
-            
-            HStack {
-                Button("Back") { currentStep -= 1 }
+                
                 Spacer()
-                Button("Next") { currentStep += 1 }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                
+                HStack {
+                    Button("Back") { currentStep -= 1 }
+                    Spacer()
+                    Button("Next") { currentStep += 1 }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                }
             }
         }
     }
@@ -369,16 +489,10 @@ struct SandboxingStepView: View {
             Text("Sandboxing")
                 .font(.system(size: 32, weight: .bold))
             
-            Text("By default, Iris agents can run terminal commands directly on your Mac. Sandboxing forces them to run commands inside an isolated Docker container.")
+            Text("By default, Iris agents can run terminal commands directly on your Mac. Sandboxing forces them to run commands inside an isolated OCI container using macOS's native `apple/container` virtualization.")
                 .foregroundColor(.secondary)
             
-            Toggle("Enable Docker Sandboxing", isOn: $config.enableSandboxing)
-            
-            if config.enableSandboxing {
-                Text("Requires Docker Desktop to be installed and running.")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
+            Toggle("Enable Container Sandboxing", isOn: $config.enableSandboxing)
             
             Spacer()
             
