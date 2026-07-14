@@ -664,6 +664,14 @@ struct IrisApp: App {
         WindowGroup("Iris") {
             ChatView()
         }
+        .commands {
+            CommandGroup(after: .appSettings) {
+                Divider()
+                Button("Rerun Setup Wizard...") {
+                    NotificationCenter.default.post(name: NSNotification.Name("RerunSetupWizard"), object: nil)
+                }
+            }
+        }
         
         Window("Diagnostics", id: "diagnostics") {
             DiagnosticsView()

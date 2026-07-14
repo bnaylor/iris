@@ -295,6 +295,9 @@ struct ChatView: View {
                 state.start()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RerunSetupWizard"))) { _ in
+            showSetupWizard = true
+        }
     }
     
     private func linkWorkspace(to id: UUID) {
