@@ -1,13 +1,13 @@
 import Foundation
-#if canImport(Transformers)
-import Transformers
+#if canImport(Tokenizers)
+import Tokenizers
 #endif
 
-public func testTokenizerLoad() {
-    #if canImport(Transformers)
+public func testTokenizerLoad() async {
+    #if canImport(Tokenizers)
     do {
         let url = URL(fileURLWithPath: ("/Users/bnaylor/.iris/models/distilbert-prompt-injection.mlmodelc" as NSString).expandingTildeInPath)
-        let tokenizer = try AutoTokenizer.from(modelFolder: url)
+        let _ = try await AutoTokenizer.from(modelFolder: url)
         print("Tokenizer Success")
     } catch {
         print("Tokenizer Error: \(error)")

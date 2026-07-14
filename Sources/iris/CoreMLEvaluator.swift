@@ -23,7 +23,7 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         lock.withLock { model != nil }
     }
     
-    public func loadModelIfNeeded() throws {
+    public func loadModelIfNeeded() async throws {
         if hasModelLoaded { return }
         let coreMLPathStr = ConfigManager.shared.promptGuardCoreMLModel
         if coreMLPathStr.isEmpty { return }
@@ -38,17 +38,17 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         let fullPath = URL(fileURLWithPath: basePath).appendingPathComponent(modelDirName)
         
         if FileManager.default.fileExists(atPath: fullPath.path) {
-            #if canImport(Transformers)
+            #if canImport(Tokenizers)
             do {
-                let liveModel = try LiveCoreMLModel(modelURL: fullPath, tokenizerConfigURL: fullPath)
+                let liveModel = try await LiveCoreMLModel(modelURL: fullPath, tokenizerConfigURL: fullPath)
                 setModel(liveModel)
             } catch {
                 print("[CoreMLEvaluator] Failed to load CoreML model: \(error)")
                 throw error
             }
             #else
-            print("[CoreMLEvaluator] Transformers framework not available. Cannot load CoreML model.")
-            throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transformers framework not available."])
+            print("[CoreMLEvaluator] Tokenizers framework not available. Cannot load CoreML model.")
+            throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Tokenizers framework not available."])
             #endif
         } else {
             throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Model directory does not exist at \(fullPath.path)"])
@@ -68,17 +68,17 @@ public final class CoreMLEvaluator: @unchecked Sendable {
     }
 }
 
-#if canImport(Transformers)
-import Transformers
+#if canImport(Tokenizers)
+import Tokenizers
 
 public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
     private let mlModel: MLModel
-    private let tokenizer: AutoTokenizer
+    private let tokenizer: any Tokenizer
     private let sequenceLength: Int
     
-    public init(modelURL: URL, tokenizerConfigURL: URL, sequenceLength: Int = 512) throws {
+    public init(modelURL: URL, tokenizerConfigURL: URL, sequenceLength: Int = 512) async throws {
         self.mlModel = try MLModel(contentsOf: modelURL)
-        self.tokenizer = try AutoTokenizer.from(modelFolder: tokenizerConfigURL)
+        self.tokenizer = try await AutoTokenizer.from(modelFolder: tokenizerConfigURL)
         self.sequenceLength = sequenceLength
     }
     
@@ -112,7 +112,7 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
             "attention_mask": attentionMaskArray
         ])
         
-        let prediction = try mlModel.prediction(from: featureProvider)
+        let prediction = try await mlModel.prediction(from: featureProvider)
         
         // DeBERTa typically outputs "logits". We need to extract the injection probability.
         // Assuming logits is a float array, where index 1 is "injection". (Depends on the HF model's id2label).

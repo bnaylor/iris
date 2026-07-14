@@ -441,7 +441,7 @@ struct SecurityStepView: View {
                                 Button("Test Model") {
                                     Task {
                                         do {
-                                            try CoreMLEvaluator.shared.loadModelIfNeeded()
+                                            try await CoreMLEvaluator.shared.loadModelIfNeeded()
                                             if CoreMLEvaluator.shared.hasModelLoaded {
                                                 _ = try await CoreMLEvaluator.shared.evaluate(text: "Hello")
                                                 tier2TestStatus = "✅ Success"
