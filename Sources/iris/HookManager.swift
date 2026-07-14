@@ -37,8 +37,8 @@ struct HookManager {
         return try? JSONDecoder().decode(HookConfig.self, from: data)
     }
     
-    func fireBeforeTool(toolName: String, args: [String: String]) async -> HookDecision {
-        return await fireEvent(eventName: "BeforeTool", targetMatcher: toolName, payload: try? JSONSerialization.data(withJSONObject: args))
+    func fireBeforeTool(toolName: String, args: [String: JSONValue]) async -> HookDecision {
+        return await fireEvent(eventName: "BeforeTool", targetMatcher: toolName, payload: try? JSONEncoder().encode(args))
     }
     
     func fireAfterTool(toolName: String, result: String) async -> HookDecision {

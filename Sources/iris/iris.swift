@@ -533,23 +533,20 @@ When building features, adding functionality, or modifying behavior, you MUST ad
             if needsApproval {
                 let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
                 if approved {
-                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args.mapValues { $0.anyValue }, cwd: workspacePath)
+                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
                 } else {
                     result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
                 }
             } else {
-                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args.mapValues { $0.anyValue }, cwd: workspacePath)
+                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
             }
         }
         
         return result
     }
     
-    private func executeToolWithHooks(name: String, args: [String: Any], cwd: String?) async -> String {
-        var execArgs: [String: String] = [:]
-        for (k, v) in args {
-            execArgs[k] = "\(v)"
-        }
+    private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?) async -> String {
+        var execArgs: [String: JSONValue] = args
         
         let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs)
         if case .block(let reason) = beforeDecision {
@@ -557,8 +554,12 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         }
         
         if case .proceed(let modifiedData) = beforeDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            for (k, v) in json {
-                execArgs[k] = "\(v)"
+            // Re-encode and decode via JSONValue to keep it simple, or map manually
+            if let updatedArgsData = try? JSONSerialization.data(withJSONObject: json),
+               let updatedArgs = try? JSONDecoder().decode([String: JSONValue].self, from: updatedArgsData) {
+                for (k, v) in updatedArgs {
+                    execArgs[k] = v
+                }
             }
         }
         

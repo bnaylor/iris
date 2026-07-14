@@ -75,23 +75,23 @@ struct ToolExecutor {
         return tools
     }
     
-    func execute(name: String, args: [String: String], cwd: String? = nil) async -> String {
+    func execute(name: String, args: [String: JSONValue], cwd: String? = nil) async -> String {
         switch name {
         case "run_command":
-            guard let command = args["command"] else { return "Error: Missing command" }
+            guard let command = args["command"]?.stringValue else { return "Error: Missing command" }
             return await runCommand(command, cwd: cwd)
         case "read_file":
-            guard let path = args["path"] else { return "Error: Missing path" }
+            guard let path = args["path"]?.stringValue else { return "Error: Missing path" }
             return await readFile(path)
         case "write_file":
-            guard let path = args["path"], let content = args["content"] else { return "Error: Missing path or content" }
+            guard let path = args["path"]?.stringValue, let content = args["content"]?.stringValue else { return "Error: Missing path or content" }
             return await writeFile(path, content: content)
         case "register_directory_watcher":
-            guard let path = args["path"], let instructions = args["instructions"] else { return "Error: Missing path or instructions" }
+            guard let path = args["path"]?.stringValue, let instructions = args["instructions"]?.stringValue else { return "Error: Missing path or instructions" }
             await WatcherManager.shared.addRule(path: path, instructions: instructions)
             return "Successfully registered watcher for \(path). You will be notified automatically when files change."
         case "search_web":
-            guard let query = args["query"] else { return "Error: Missing query" }
+            guard let query = args["query"]?.stringValue else { return "Error: Missing query" }
             return await searchWeb(query: query)
         case let n where n.hasPrefix("google_tasks_"):
             return await GoogleTasksManager.shared.execute(name: name, args: args)

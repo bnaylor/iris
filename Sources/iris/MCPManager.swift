@@ -144,7 +144,7 @@ actor MCPManager {
         return declarations
     }
     
-    func callTool(name: String, args: [String: String]) async -> String {
+    func callTool(name: String, args: [String: JSONValue]) async -> String {
         let parts = name.components(separatedBy: "___")
         guard parts.count == 2, let serverName = parts.first, let toolName = parts.last else {
             return "Error: Invalid MCP tool name format."
@@ -156,7 +156,11 @@ actor MCPManager {
         
         var mcpArgs: [String: Value] = [:]
         for (k, v) in args {
-            mcpArgs[k] = .string(v) // Naive mapping
+            if let mcpValue = try? Value(v) {
+                mcpArgs[k] = mcpValue
+            } else {
+                mcpArgs[k] = .string(v.stringValue)
+            }
         }
         
         do {

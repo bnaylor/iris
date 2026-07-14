@@ -43,16 +43,16 @@ actor GoogleTasksManager {
         ]
     }
     
-    func execute(name: String, args: [String: String]) async -> String {
+    func execute(name: String, args: [String: JSONValue]) async -> String {
         switch name {
         case "google_tasks_list_tasklists":
             return await listTaskLists()
         case "google_tasks_list_tasks":
-            guard let tasklist = args["tasklist"] else { return "Error: Missing tasklist ID" }
+            guard let tasklist = args["tasklist"]?.stringValue else { return "Error: Missing tasklist ID" }
             return await listTasks(tasklist: tasklist)
         case "google_tasks_create_task":
-            guard let tasklist = args["tasklist"], let title = args["title"] else { return "Error: Missing tasklist ID or title" }
-            return await createTask(tasklist: tasklist, title: title, notes: args["notes"])
+            guard let tasklist = args["tasklist"]?.stringValue, let title = args["title"]?.stringValue else { return "Error: Missing tasklist ID or title" }
+            return await createTask(tasklist: tasklist, title: title, notes: args["notes"]?.stringValue)
         default:
             return "Error: Unknown Google Tasks tool \(name)"
         }

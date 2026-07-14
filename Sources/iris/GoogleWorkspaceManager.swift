@@ -101,28 +101,28 @@ actor GoogleWorkspaceManager {
         ]
     }
     
-    func execute(name: String, args: [String: String]) async -> String {
+    func execute(name: String, args: [String: JSONValue]) async -> String {
         switch name {
         case "google_calendar_list_events":
-            return await listCalendarEvents(maxResults: args["maxResults"])
+            return await listCalendarEvents(maxResults: args["maxResults"]?.stringValue)
         case "google_calendar_create_event":
-            guard let summary = args["summary"], let start = args["start"], let end = args["end"] else {
+            guard let summary = args["summary"]?.stringValue, let start = args["start"]?.stringValue, let end = args["end"]?.stringValue else {
                 return "Error: Missing required parameters."
             }
             return await createCalendarEvent(summary: summary, start: start, end: end)
         case "google_docs_get":
-            guard let documentId = args["documentId"] else { return "Error: Missing documentId" }
+            guard let documentId = args["documentId"]?.stringValue else { return "Error: Missing documentId" }
             return await getDocument(documentId: documentId)
         case "google_drive_search":
-            guard let query = args["query"] else { return "Error: Missing query" }
+            guard let query = args["query"]?.stringValue else { return "Error: Missing query" }
             return await searchDrive(query: query)
         case "google_sheets_get":
-            guard let spreadsheetId = args["spreadsheetId"], let range = args["range"] else { return "Error: Missing parameters" }
+            guard let spreadsheetId = args["spreadsheetId"]?.stringValue, let range = args["range"]?.stringValue else { return "Error: Missing parameters" }
             return await getSheetValues(spreadsheetId: spreadsheetId, range: range)
         case "gmail_list_unread":
-            return await listUnreadGmail(maxResults: args["maxResults"])
+            return await listUnreadGmail(maxResults: args["maxResults"]?.stringValue)
         case "gmail_send_email":
-            guard let to = args["to"], let subject = args["subject"], let body = args["body"] else {
+            guard let to = args["to"]?.stringValue, let subject = args["subject"]?.stringValue, let body = args["body"]?.stringValue else {
                 return "Error: Missing required parameters."
             }
             return await sendEmail(to: to, subject: subject, body: body)
