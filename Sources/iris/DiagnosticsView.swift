@@ -9,23 +9,28 @@ struct DiagnosticsView: View {
                 .font(.headline)
                 .padding()
             
-            Table(metrics.recentMetrics) {
-                TableColumn("Time") { metric in
-                    Text(metric.timestamp, style: .time)
-                }
+            Table(metrics.aggregatedMetrics) {
                 TableColumn("Operation") { metric in
                     Text(metric.operation.rawValue)
                 }
                 TableColumn("Model") { metric in
                     Text(metric.modelName)
                 }
-                TableColumn("Latency") { metric in
-                    Text(String(format: "%.0f ms", metric.durationMs))
-                        .foregroundColor(metric.durationMs > 5000 ? .orange : .primary)
+                TableColumn("Count") { metric in
+                    Text("\(metric.count)")
                 }
-                TableColumn("Status") { metric in
-                    Image(systemName: metric.success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(metric.success ? .green : .red)
+                TableColumn("Min") { metric in
+                    Text(String(format: "%.0f ms", metric.minMs))
+                }
+                TableColumn("Avg") { metric in
+                    Text(String(format: "%.0f ms", metric.avgMs))
+                }
+                TableColumn("Max") { metric in
+                    Text(String(format: "%.0f ms", metric.maxMs))
+                        .foregroundColor(metric.maxMs > 5000 ? .orange : .primary)
+                }
+                TableColumn("StdDev") { metric in
+                    Text(String(format: "%.0f ms", metric.stddevMs))
                 }
             }
         }
