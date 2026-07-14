@@ -19,6 +19,10 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         }
     }
     
+    public var hasModelLoaded: Bool {
+        lock.withLock { model != nil }
+    }
+    
     public func evaluate(text: String) async throws -> Double {
         let currentModel = lock.withLock { model }
         guard let m = currentModel else {
