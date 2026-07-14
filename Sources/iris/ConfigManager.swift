@@ -278,7 +278,8 @@ class ConfigManager: @unchecked Sendable {
         let savedPromptModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_MODEL") ?? ""
         self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen-1.5B-Q4_K_M.gguf" : savedPromptModel
         
-        self.promptGuardCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
+        let savedCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
+        self.promptGuardCoreMLModel = savedCoreMLModel.isEmpty ? "https://luthen.scromp.net/iris/distilbert-prompt-injection.mlmodelc.zip" : savedCoreMLModel
     }
     
     var isConfigured: Bool {
