@@ -29,7 +29,7 @@ import Foundation
     var hookManager = HookManager()
     hookManager.configPathOverride = configURL.path
     
-    let decision = await hookManager.fireBeforeTool(toolName: "test_tool", args: ["test": "val"])
+    let decision = await hookManager.fireBeforeTool(toolName: "test_tool", args: ["test": .string("val")])
     
     if case .proceed(let modifiedData) = decision {
         #expect(modifiedData != nil)

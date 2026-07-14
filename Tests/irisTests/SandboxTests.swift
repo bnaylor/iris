@@ -37,7 +37,7 @@ final class SandboxTests: XCTestCase {
         ConfigManager.shared.sandboxImage = "ubuntu:latest"
         
         let executor = ToolExecutor()
-        let result = await executor.execute(name: "run_command", args: ["command": "echo 'hello'"], cwd: "/tmp")
+        let result = await executor.execute(name: "run_command", args: ["command": .string("echo 'hello'")], cwd: "/tmp")
         
         // We just assert that it hits the sandboxing code path.
         // It will either complain about missing container, or run it.
