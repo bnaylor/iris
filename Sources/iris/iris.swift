@@ -689,6 +689,7 @@ struct IrisApp: App {
             }
             Divider()
             Button("Settings...") {
+                NSApp.activate(ignoringOtherApps: true)
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             }
             Button("Quit") {
