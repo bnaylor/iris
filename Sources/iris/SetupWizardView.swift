@@ -302,7 +302,7 @@ struct VibecopStepView: View {
                     let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
                     
                     if !isDownloaded {
-                        if downloader.isDownloading {
+                        if downloader.isDownloading && downloader.currentDownloadName == config.vibecopModel {
                             ProgressView(value: downloader.progress)
                         } else {
                             Button("Download Model") {
@@ -385,7 +385,7 @@ struct SecurityStepView: View {
                         let isDownloaded = downloader.isModelDownloaded(name: coreMLNoZip)
                         
                         if !isDownloaded {
-                            if downloader.isDownloading {
+                            if downloader.isDownloading && downloader.currentDownloadName == coreMLName {
                                 ProgressView(value: downloader.progress)
                             } else {
                                 Button("Download CoreML Model (~250MB)") {
@@ -393,9 +393,33 @@ struct SecurityStepView: View {
                                 }
                             }
                         } else {
-                            Text("✅ CoreML model ready.")
-                                .foregroundColor(.green)
+                            HStack {
+                                Text("✅ CoreML model ready.")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    
+                                Button("Test Model") {
+                                    Task {
+                                        CoreMLEvaluator.shared.loadModelIfNeeded()
+                                        if CoreMLEvaluator.shared.hasModelLoaded {
+                                            do {
+                                                _ = try await CoreMLEvaluator.shared.evaluate(text: "Hello")
+                                                testStatus = "✅ Success"
+                                            } catch {
+                                                testStatus = "❌ Failed: \(error.localizedDescription)"
+                                            }
+                                        } else {
+                                            testStatus = "❌ Failed: Model not loaded"
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.link)
                                 .font(.caption)
+                                
+                                if let status = testStatus {
+                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                }
+                            }
                         }
                     }
                     .padding()
@@ -425,7 +449,7 @@ struct SecurityStepView: View {
                         let isTier3Downloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
                         
                         if !isTier3Downloaded {
-                            if downloader.isDownloading {
+                            if downloader.isDownloading && downloader.currentDownloadName == config.promptGuardModel {
                                 ProgressView(value: downloader.progress)
                             } else {
                                 Button("Download Model") {

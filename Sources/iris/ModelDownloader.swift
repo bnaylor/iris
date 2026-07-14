@@ -9,6 +9,7 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     var isDownloading = false
     var progress: Double = 0.0
     var error: String? = nil
+    var currentDownloadName: String? = nil
     
     private var downloadTask: URLSessionDownloadTask?
     
@@ -49,6 +50,7 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         self.isDownloading = true
         self.progress = 0.0
         self.error = nil
+        self.currentDownloadName = filename
         
         let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
         if !FileManager.default.fileExists(atPath: dirPath) {
@@ -90,11 +92,13 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
             Task { @MainActor in
                 self.progress = 1.0
                 self.isDownloading = false
+                self.currentDownloadName = nil
             }
         } catch {
             Task { @MainActor in
                 self.error = "Download failed to save: \(error.localizedDescription)"
                 self.isDownloading = false
+                self.currentDownloadName = nil
             }
         }
     }
@@ -112,6 +116,7 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
             if let error = error {
                 self.error = "Download failed: \(error.localizedDescription)"
                 self.isDownloading = false
+                self.currentDownloadName = nil
             }
         }
     }
