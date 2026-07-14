@@ -119,7 +119,7 @@ struct SettingsView: View {
                                             await downloader.downloadModel(name: config.vibecopModel)
                                         }
                                     }
-                                    Text("This will download approx. 1-2GB of weights to your disk.")
+                                    Text("This will download approx. \(downloader.approximateSize(for: config.vibecopModel)) of weights to your disk.")
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 }
@@ -134,7 +134,7 @@ struct SettingsView: View {
                             }
                         } else {
                             TextField("Ollama Model", text: $config.vibecopModel)
-                                .help("The Ollama model to use for Vibecop background evaluation (e.g. llama3.2, gemma2:9b)")
+                                .help("The Ollama model to use for Vibecop background evaluation (e.g. qwen3.5, gemma4:12b)")
                         }
                         
                         Text("Vibecop runs periodically in the background to evaluate the conversation state.")
@@ -217,7 +217,7 @@ struct SettingsView: View {
                                             await downloader.downloadModel(name: config.promptGuardModel)
                                         }
                                     }
-                                    Text("This will download approx. 1-2GB of weights to your disk.")
+                                    Text("This will download approx. \(downloader.approximateSize(for: config.promptGuardModel)) of weights to your disk.")
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 }

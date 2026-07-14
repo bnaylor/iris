@@ -270,7 +270,7 @@ class ConfigManager: @unchecked Sendable {
         self.vibecopEngine = savedEngine.isEmpty ? "llama_cpp" : savedEngine
         
         let savedVibecop = UserDefaults.standard.string(forKey: "VIBECOP_MODEL") ?? ""
-        self.vibecopModel = savedVibecop.isEmpty ? "Llama-3.2-1B-Instruct-Q4_K_M.gguf" : savedVibecop
+        self.vibecopModel = savedVibecop.isEmpty ? "gemma-4-E2B-it-Q4_K_M.gguf" : savedVibecop
         
         if UserDefaults.standard.object(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION") != nil {
             self.enableAdvancedPromptInjectionProtection = UserDefaults.standard.bool(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION")
@@ -282,7 +282,7 @@ class ConfigManager: @unchecked Sendable {
         self.promptGuardEngine = savedPromptEngine.isEmpty ? "llama_cpp" : savedPromptEngine
         
         let savedPromptModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_MODEL") ?? ""
-        self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen-1.5B-Q4_K_M.gguf" : savedPromptModel
+        self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen3.5-2B-Q4_K_M.gguf" : savedPromptModel
         
         let savedCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
         self.promptGuardCoreMLModel = savedCoreMLModel.isEmpty ? "https://luthen.scromp.net/iris/distilbert-prompt-injection.mlmodelc.zip" : savedCoreMLModel

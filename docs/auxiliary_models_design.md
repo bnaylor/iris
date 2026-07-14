@@ -4,7 +4,7 @@
 Iris requires small, dedicated local models (Auxiliary Models) to perform fast, specialized background tasks without burning primary cloud API tokens, incurring network latency, or compromising security.
 
 **Primary Use Cases:**
-1. **Vibecop ("Smart Approval")**: Evaluates commands/actions proposed by the primary model to automatically approve safe actions or block dangerous ones (e.g., using Gemma-9B or Llama-3-8B).
+1. **Vibecop ("Smart Approval")**: Evaluates commands/actions proposed by the primary model to automatically approve safe actions or block dangerous ones (e.g., using Gemma 4 12B or Gemma 4 E2B).
 2. **Prompt Injection Guardian**: A fast classifier or heuristic model to analyze user input for adversarial attacks (Tiers 2 & 3 of the security model).
 
 ---

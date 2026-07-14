@@ -294,9 +294,9 @@ struct VibecopStepView: View {
                         .font(.headline)
                     
                     Picker("Model", selection: $config.vibecopModel) {
-                        Text("Qwen2 1.5B (Fast, ~1.1GB)").tag("Qwen2-1.5B-Instruct-Q4_K_M.gguf")
-                        Text("Llama 3.2 1B (Fast, ~1.3GB)").tag("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
-                        Text("Gemma 2 9B (Heavy, ~6.5GB)").tag("gemma-2-9b-it-Q4_K_M.gguf")
+                        Text("Qwen3.5 2B (Fast, ~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
+                        Text("Gemma 4 E2B (Fast, ~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
+                        Text("Gemma 4 12B (Heavy, ~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
                     }
                     
                     let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
@@ -442,9 +442,9 @@ struct SecurityStepView: View {
                         .pickerStyle(.segmented)
                         
                         Picker("Model", selection: $config.promptGuardModel) {
-                            Text("Qwen2 1.5B").tag("Qwen2-1.5B-Instruct-Q4_K_M.gguf")
-                            Text("Llama 3.2 1B").tag("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
-                            Text("Gemma 2 9B").tag("gemma-2-9b-it-Q4_K_M.gguf")
+                            Text("Qwen3.5 2B (~\(downloader.approximateSize(for: "Qwen3.5-2B-Q4_K_M.gguf")))").tag("Qwen3.5-2B-Q4_K_M.gguf")
+                            Text("Gemma 4 E2B (~\(downloader.approximateSize(for: "gemma-4-E2B-it-Q4_K_M.gguf")))").tag("gemma-4-E2B-it-Q4_K_M.gguf")
+                            Text("Gemma 4 12B (~\(downloader.approximateSize(for: "gemma-4-12B-it-Q4_K_M.gguf")))").tag("gemma-4-12B-it-Q4_K_M.gguf")
                         }
                         
                         let isTier3Downloaded = downloader.isModelDownloaded(name: config.promptGuardModel)

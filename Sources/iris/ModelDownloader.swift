@@ -15,10 +15,23 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     
     // Some known models and their URLs for convenience
     let knownModels = [
-        "Llama-3.2-1B-Instruct-Q4_K_M.gguf": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
-        "Qwen2-1.5B-Instruct-Q4_K_M.gguf": "https://huggingface.co/Qwen/Qwen2-1.5B-Instruct-GGUF/resolve/main/qwen2-1_5b-instruct-q4_k_m.gguf",
-        "gemma-2-9b-it-Q4_K_M.gguf": "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf"
+        "Qwen3.5-2B-Q4_K_M.gguf": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
+        "gemma-4-E2B-it-Q4_K_M.gguf": "https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q4_K_M.gguf",
+        "gemma-4-12B-it-Q4_K_M.gguf": "https://huggingface.co/bartowski/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf"
     ]
+
+    // Approximate on-disk sizes for known models, for UI download prompts.
+    let knownModelSizes = [
+        "Qwen3.5-2B-Q4_K_M.gguf": "1.3GB",
+        "gemma-4-E2B-it-Q4_K_M.gguf": "3.1GB",
+        "gemma-4-12B-it-Q4_K_M.gguf": "7.4GB"
+    ]
+
+    /// Human-readable approximate download size for a model name, falling back
+    /// to a range when the model is custom/unknown (e.g. a user-supplied URL).
+    func approximateSize(for name: String) -> String {
+        knownModelSizes[name] ?? "1–8GB"
+    }
     
     func isModelDownloaded(name: String) -> Bool {
         let filename = name.starts(with: "http") ? (URL(string: name)?.lastPathComponent ?? name) : name
