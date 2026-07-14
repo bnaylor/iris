@@ -392,10 +392,15 @@ class AppState {
     }
     
     private func loadConversations() {
-        if let data = UserDefaults.standard.data(forKey: "iris_conversations"),
-           let decoded = try? JSONDecoder().decode([Conversation].self, from: data) {
-            self.conversations = decoded
-            self.selectedConversationId = decoded.last?.id
+        if let data = UserDefaults.standard.data(forKey: "iris_conversations") {
+            do {
+                let decoded = try JSONDecoder().decode([Conversation].self, from: data)
+                self.conversations = decoded
+                self.selectedConversationId = decoded.last?.id
+            } catch {
+                print("Failed to decode conversations: \(error)")
+                UserDefaults.standard.set(data, forKey: "iris_conversations_backup_\(Date().timeIntervalSince1970)")
+            }
         }
     }
 }

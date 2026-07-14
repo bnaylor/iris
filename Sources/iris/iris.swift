@@ -425,7 +425,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         if let _ = activeGoalResult.0 {
             if activeGoalResult.1 > 100 {
                 await pushToUI(role: .system, text: "Goal iteration limit (100) reached. Forcing goal completion to prevent unbounded recursion.", conversationId: conversationId)
-                await MainActor.run { localState?.clearGoal(for: conversationId) }
+                await MainActor.run { 
+                    localState?.clearGoal(for: conversationId)
+                    localState?.onSubagentComplete[conversationId]?("Subagent failed due to iteration limit.")
+                }
             } else {
                 await pushToUI(role: .system, text: "Auto-continuing goal loop (iteration \(activeGoalResult.1))...", conversationId: conversationId)
                 Task {

@@ -16,6 +16,7 @@ struct OpenAIClient {
         }
         
         var callIdCounter = 0
+        var pendingIdsForName: [String: [String]] = [:]
         
         for content in request.contents {
             let role = content.role == "model" ? "assistant" : "user"
@@ -36,6 +37,7 @@ struct OpenAIClient {
                 } else if let fc = part.functionCall {
                     let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
+                    pendingIdsForName[fc.name, default: []].append(id)
                     let argsData = try? JSONSerialization.data(withJSONObject: fc.args.mapValues { $0.anyValue })
                     let argsString = String(data: argsData ?? Data(), encoding: .utf8) ?? "{}"
                     
@@ -48,7 +50,15 @@ struct OpenAIClient {
                         ]
                     ])
                 } else if let fr = part.functionResponse {
-                    let id = fr.id ?? "call_\(fr.name)_0" // Fallback if no ID is provided
+                    let id: String
+                    if let existingId = fr.id {
+                        id = existingId
+                    } else if var pending = pendingIdsForName[fr.name], !pending.isEmpty {
+                        id = pending.removeFirst()
+                        pendingIdsForName[fr.name] = pending
+                    } else {
+                        id = "call_\(fr.name)_0" // Fallback if no ID is provided
+                    }
                     let respData = try? JSONSerialization.data(withJSONObject: fr.response.mapValues { $0.anyValue })
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
@@ -75,15 +85,15 @@ struct OpenAIClient {
                 message["tool_calls"] = toolCalls
             }
             
-            if !toolResponses.isEmpty {
-                // OpenAI requires tool responses to be separate messages
-                // If we have a mix, we should just append the tool responses directly to openAIMessages
-                // Wait, if it's user role, we can just drop the tool responses in as individual messages
-                for tr in toolResponses {
-                    openAIMessages.append(tr)
-                }
-            } else {
+            let hasContent = message["content"] != nil
+            let hasToolCalls = message["tool_calls"] != nil
+            
+            if hasContent || hasToolCalls || toolResponses.isEmpty {
                 openAIMessages.append(message)
+            }
+            
+            for tr in toolResponses {
+                openAIMessages.append(tr)
             }
         }
         

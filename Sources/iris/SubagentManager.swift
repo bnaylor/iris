@@ -69,8 +69,16 @@ final class SubagentManager: @unchecked Sendable {
             await engine.processInput(task, source: "System", conversationId: subagentId)
         }
         
+        var iterations = 0
+        let maxIterations = 3000 // 100ms * 3000 = 5 minutes
+        
         while await holder.getSummary() == nil {
+            if iterations >= maxIterations {
+                await holder.setSummary("Subagent timed out after 5 minutes.")
+                break
+            }
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            iterations += 1
         }
         let finalSummary = await holder.getSummary()!
         

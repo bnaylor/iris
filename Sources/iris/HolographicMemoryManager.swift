@@ -153,7 +153,14 @@ struct FactRelation: Codable, FetchableRecord, PersistableRecord {
 
 /// Manages the local SQLite database for holographic memory using GRDB.
 final class HolographicMemoryManager: @unchecked Sendable {
-    static let shared = try! HolographicMemoryManager()
+    static let shared: HolographicMemoryManager = {
+        do {
+            return try HolographicMemoryManager()
+        } catch {
+            print("WARNING: HolographicMemoryManager failed to initialize on disk. Falling back to in-memory mode. Error: \(error)")
+            return try! HolographicMemoryManager(inMemory: true)
+        }
+    }()
     
     private let dbPool: DatabasePool?
     

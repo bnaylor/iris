@@ -14,6 +14,7 @@ struct AnthropicClient {
         }
         
         var callIdCounter = 0
+        var pendingIdsForName: [String: [String]] = [:]
         
         for content in request.contents {
             let role = content.role == "model" ? "assistant" : "user"
@@ -25,6 +26,7 @@ struct AnthropicClient {
                 } else if let fc = part.functionCall {
                     let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
+                    pendingIdsForName[fc.name, default: []].append(id)
                     
                     partsArray.append([
                         "type": "tool_use",
@@ -33,7 +35,15 @@ struct AnthropicClient {
                         "input": fc.args.mapValues { $0.anyValue }
                     ])
                 } else if let fr = part.functionResponse {
-                    let id = fr.id ?? "call_\(fr.name)_0"
+                    let id: String
+                    if let existingId = fr.id {
+                        id = existingId
+                    } else if var pending = pendingIdsForName[fr.name], !pending.isEmpty {
+                        id = pending.removeFirst()
+                        pendingIdsForName[fr.name] = pending
+                    } else {
+                        id = "call_\(fr.name)_0"
+                    }
                     let respData = try? JSONSerialization.data(withJSONObject: fr.response.mapValues { $0.anyValue })
                     let respString = String(data: respData ?? Data(), encoding: .utf8) ?? "{}"
                     
