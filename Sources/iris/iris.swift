@@ -631,6 +631,10 @@ When building features, adding functionality, or modifying behavior, you MUST ad
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Bypass static destructors in llama.cpp ggml-metal to prevent GGML_ASSERT crash on exit
         _exit(0)
