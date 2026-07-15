@@ -248,7 +248,7 @@ struct SettingsView: View {
                                             await downloader.downloadModel(name: config.promptGuardCoreMLModel)
                                         }
                                     }
-                                    Text("Downloads and unzips the model to enable Tier 2 locally.")
+                                    Text("Downloads and unzips the model to enable Tier 2 locally (~650 MB for the default DeBERTa model).")
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 }

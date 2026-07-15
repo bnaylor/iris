@@ -428,7 +428,7 @@ struct SecurityStepView: View {
                             if downloader.isDownloading && downloader.currentDownloadName == coreMLName {
                                 ProgressView(value: downloader.progress)
                             } else {
-                                Button("Download Model") {
+                                Button("Download Model (~650 MB)") {
                                     Task { await downloader.downloadModel(name: config.promptGuardCoreMLModel) }
                                 }
                             }
