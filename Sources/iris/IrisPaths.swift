@@ -23,6 +23,7 @@ struct IrisPaths: Sendable {
     var memoryMd: URL { memoryDir.appendingPathComponent("memory.md") }
     var skillsDir: URL { memoryDir.appendingPathComponent("skills") }
     var artifactsDir: URL { memoryDir.appendingPathComponent("artifacts") }
+    var libraryDir: URL { memoryDir.appendingPathComponent("library") }
     var holographicDB: URL { memoryDir.appendingPathComponent("holographic_memory.sqlite") }
 
     // config/
@@ -37,7 +38,7 @@ struct IrisPaths: Sendable {
     /// Create the bucket directories if absent. Called by the migrator and by managers that
     /// need their directory to exist before writing.
     func ensureDirectories() throws {
-        for dir in [memoryDir, skillsDir, artifactsDir, configDir, modelsDir] {
+        for dir in [memoryDir, skillsDir, artifactsDir, libraryDir, configDir, modelsDir] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

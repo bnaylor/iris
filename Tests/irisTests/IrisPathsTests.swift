@@ -15,6 +15,7 @@ struct IrisPathsTests {
         #expect(p.memoryMd.path == "/tmp/iris-test-root/memory/memory.md")
         #expect(p.skillsDir.path == "/tmp/iris-test-root/memory/skills")
         #expect(p.artifactsDir.path == "/tmp/iris-test-root/memory/artifacts")
+        #expect(p.libraryDir.path == "/tmp/iris-test-root/memory/library")
         #expect(p.holographicDB.path == "/tmp/iris-test-root/memory/holographic_memory.sqlite")
         #expect(p.configDir.path == "/tmp/iris-test-root/config")
         #expect(p.settingsJSON.path == "/tmp/iris-test-root/config/settings.json")
@@ -30,7 +31,7 @@ struct IrisPathsTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let p = IrisPaths(root: root)
         try p.ensureDirectories()
-        for dir in [p.memoryDir, p.skillsDir, p.artifactsDir, p.configDir, p.modelsDir] {
+        for dir in [p.memoryDir, p.skillsDir, p.artifactsDir, p.libraryDir, p.configDir, p.modelsDir] {
             var isDir: ObjCBool = false
             #expect(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir))
             #expect(isDir.boolValue)
