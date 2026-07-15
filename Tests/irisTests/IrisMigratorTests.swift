@@ -79,6 +79,51 @@ struct IrisMigratorTests {
         #expect(read(p.userMd) == "already-migrated")
     }
 
+    @Test("directory merge into pre-created destination that already has a different file")
+    func testDirectoryMergeIntoPreCreatedDest() {
+        let root = makeRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let p = IrisPaths(root: root)
+        // Pre-create destination (simulating ensureDirectories) with an existing file.
+        write(p.skillsDir.appendingPathComponent("keep.md"), "kept")
+        // Old skills/ source has a different file.
+        write(root.appendingPathComponent("skills/new.md"), "new")
+        IrisMigrator.migrate(p)
+        // Both files must exist under skillsDir.
+        #expect(read(p.skillsDir.appendingPathComponent("keep.md")) == "kept")
+        #expect(read(p.skillsDir.appendingPathComponent("new.md")) == "new")
+        // Old source directory must be gone (fully drained).
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("skills").path))
+    }
+
+    @Test("non-destructive collision: destination file wins, source item left behind")
+    func testNonDestructiveCollision() {
+        let root = makeRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let p = IrisPaths(root: root)
+        // Destination already has dup.md.
+        write(p.skillsDir.appendingPathComponent("dup.md"), "dest")
+        // Old skills/ has a same-named file with different content.
+        write(root.appendingPathComponent("skills/dup.md"), "src")
+        IrisMigrator.migrate(p)
+        // Destination must NOT be overwritten.
+        #expect(read(p.skillsDir.appendingPathComponent("dup.md")) == "dest")
+        // Source item must still exist (collision left it behind).
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("skills/dup.md").path))
+    }
+
+    @Test("re-run idempotency for directories: second migrate call is a no-op")
+    func testReRunIdempotencyForDirectories() {
+        let root = makeRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let p = IrisPaths(root: root)
+        write(root.appendingPathComponent("skills/a.md"), "alpha")
+        // First run.
+        IrisMigrator.migrate(p)
+        #expect(read(p.skillsDir.appendingPathComponent("a.md")) == "alpha")
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("skills").path))
+        // Second run — source is gone, destination untouched.
+        IrisMigrator.migrate(p)
+        #expect(read(p.skillsDir.appendingPathComponent("a.md")) == "alpha")
+    }
+
     @Test("holographic DB moves with its WAL sidecars")
     func testHolographicSidecars() {
         let root = makeRoot(); defer { try? FileManager.default.removeItem(at: root) }

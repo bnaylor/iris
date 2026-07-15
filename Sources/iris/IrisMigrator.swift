@@ -41,50 +41,64 @@ enum IrisMigrator {
         }
     }
 
-    /// Move only when the source exists and the destination does not — idempotent and never
-    /// overwrites an already-migrated file.
+    /// Move source to destination — idempotent and never overwrites an already-migrated item.
+    ///
+    /// - File source: moved only when destination does not already exist.
+    /// - Directory source: destination is ensured, then contents are merged item-by-item
+    ///   (recursive, non-destructive). The source directory is removed only once fully drained.
+    ///   A collision leaves the source item in place so that the next `migrate()` call can
+    ///   retry — satisfying the crash-safe / re-runnable guarantee.
     private static func moveIfNeeded(_ fm: FileManager, from: URL, to: URL) {
-        guard fm.fileExists(atPath: from.path) else { return }
-
         var fromIsDir: ObjCBool = false
-        let fromExists = fm.fileExists(atPath: from.path, isDirectory: &fromIsDir)
-        guard fromExists else { return }
+        guard fm.fileExists(atPath: from.path, isDirectory: &fromIsDir) else { return }
 
-        var toIsDir: ObjCBool = false
-        let toExists = fm.fileExists(atPath: to.path, isDirectory: &toIsDir)
-
-        if toExists {
-            // If destination exists and is a directory, check if it's empty
-            if toIsDir.boolValue {
-                let contents = try? fm.contentsOfDirectory(at: to, includingPropertiesForKeys: nil)
-                if let contents = contents, !contents.isEmpty {
-                    return  // Don't overwrite non-empty destination
-                }
-                // Destination is an empty directory; move source's contents into it
-                if fromIsDir.boolValue {
-                    moveDirectoryContents(fm, from: from, to: to)
-                    try? fm.removeItem(at: from)
-                }
-                return
-            } else {
-                // Destination file exists, don't overwrite
-                return
+        if fromIsDir.boolValue {
+            // Ensure the destination directory exists (it may have been pre-created by ensureDirectories).
+            try? fm.createDirectory(at: to, withIntermediateDirectories: true)
+            mergeDirectory(fm, from: from, into: to)
+            // Remove source only if fully drained.
+            let remaining = try? fm.contentsOfDirectory(at: from, includingPropertiesForKeys: nil)
+            if remaining?.isEmpty == true {
+                try? fm.removeItem(at: from)
             }
+        } else {
+            // File: skip if destination already exists (non-destructive).
+            guard !fm.fileExists(atPath: to.path) else { return }
+            try? fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.moveItem(at: from, to: to)
         }
-
-        // Destination doesn't exist; perform normal move
-        try? fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? fm.moveItem(at: from, to: to)
     }
 
-    /// Move all contents from source directory to destination directory.
-    private static func moveDirectoryContents(_ fm: FileManager, from: URL, to: URL) {
-        guard let contents = try? fm.contentsOfDirectory(at: from, includingPropertiesForKeys: nil) else {
+    /// Recursively merge the contents of `from` into `into`, item-by-item, non-destructively.
+    ///
+    /// For each item in `from`:
+    /// - If no destination item exists: move it.
+    /// - If both source and destination are directories: recurse (merge subtrees).
+    /// - If destination already has a file of that name: leave source item untouched (collision).
+    private static func mergeDirectory(_ fm: FileManager, from: URL, into: URL) {
+        guard let items = try? fm.contentsOfDirectory(at: from, includingPropertiesForKeys: nil) else {
             return
         }
-        for item in contents {
-            let dest = to.appendingPathComponent(item.lastPathComponent)
-            try? fm.moveItem(at: item, to: dest)
+        for item in items {
+            let dest = into.appendingPathComponent(item.lastPathComponent)
+            var srcIsDir: ObjCBool = false
+            var dstIsDir: ObjCBool = false
+            let srcExists = fm.fileExists(atPath: item.path, isDirectory: &srcIsDir)
+            let dstExists = fm.fileExists(atPath: dest.path, isDirectory: &dstIsDir)
+            guard srcExists else { continue }
+
+            if !dstExists {
+                // Destination slot is free — move directly.
+                try? fm.moveItem(at: item, to: dest)
+            } else if srcIsDir.boolValue && dstIsDir.boolValue {
+                // Both are directories — recurse to merge subtrees.
+                mergeDirectory(fm, from: item, into: dest)
+                let remaining = try? fm.contentsOfDirectory(at: item, includingPropertiesForKeys: nil)
+                if remaining?.isEmpty == true {
+                    try? fm.removeItem(at: item)
+                }
+            }
+            // else: destination file exists and source is a file — leave in place (collision).
         }
     }
 }
