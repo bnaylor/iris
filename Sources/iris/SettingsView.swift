@@ -128,7 +128,7 @@ struct SettingsView: View {
                                 } else {
                                     Button("Download Model") {
                                         Task {
-                                            await downloader.downloadModel(name: config.vibecopModel)
+                                            await downloader.downloadModel(name: config.vibecopModel, assignResolvedNameTo: \.vibecopModel)
                                         }
                                     }
                                     Text("This will download approx. \(downloader.approximateSize(for: config.vibecopModel)) of weights to your disk.")
@@ -221,13 +221,13 @@ struct SettingsView: View {
                 }
                 
                 if config.enableAdvancedPromptInjectionProtection {
-                    Section(header: Text("Tier 2: Fast CoreML Evaluator").font(.headline)) {
-                        Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
+                    Section(header: Text("Tier 2: Fast Local Classifier").font(.headline)) {
+                        Text("Rapidly classifies text as safe or malicious on-device — CoreML (Apple Neural Engine) or ONNX Runtime (CPU).")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            
-                        TextField("CoreML .zip URL or Path", text: $config.promptGuardCoreMLModel)
-                            .help("Provide a URL to a .mlmodelc.zip to download and enable the Tier 2 CoreML evaluator.")
+
+                        TextField("Model .zip URL or Path", text: $config.promptGuardCoreMLModel)
+                            .help("Provide a URL to a .mlmodelc.zip (CoreML) or .onnx.zip (ONNX Runtime) to download and enable the Tier 2 classifier.")
                         
                         if !config.promptGuardCoreMLModel.isEmpty {
                             let coreMLFilename = config.promptGuardCoreMLModel.starts(with: "http") ? (URL(string: config.promptGuardCoreMLModel)?.lastPathComponent ?? config.promptGuardCoreMLModel) : config.promptGuardCoreMLModel
@@ -243,18 +243,18 @@ struct SettingsView: View {
                                             .font(.caption)
                                     }
                                 } else {
-                                    Button("Download CoreML Model") {
+                                    Button("Download Model") {
                                         Task {
                                             await downloader.downloadModel(name: config.promptGuardCoreMLModel)
                                         }
                                     }
-                                    Text("Downloads and unzips the CoreML model to enable Tier 2 locally.")
+                                    Text("Downloads and unzips the model to enable Tier 2 locally.")
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 }
                             } else {
                                 HStack {
-                                    Text("✅ Tier 2 CoreML model is present.")
+                                    Text("✅ Tier 2 model is present.")
                                         .font(.caption)
                                         .foregroundColor(.green)
                                         
@@ -312,7 +312,7 @@ struct SettingsView: View {
                                 } else {
                                     Button("Download Model") {
                                         Task {
-                                            await downloader.downloadModel(name: config.promptGuardModel)
+                                            await downloader.downloadModel(name: config.promptGuardModel, assignResolvedNameTo: \.promptGuardModel)
                                         }
                                     }
                                     Text("This will download approx. \(downloader.approximateSize(for: config.promptGuardModel)) of weights to your disk.")
