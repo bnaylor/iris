@@ -18,12 +18,27 @@ public final class LiveONNXModel: CoreMLModelProtocol, @unchecked Sendable {
     private let session: ORTSession
     private let tokenizer: any Tokenizer
     private let maxSequenceLength: Int
+    private let injectionIndex: Int
 
     public init(modelURL: URL, tokenizerConfigURL: URL, maxSequenceLength: Int = 512) async throws {
         self.env = try ORTEnv(loggingLevel: ORTLoggingLevel.warning)
         self.session = try ORTSession(env: env, modelPath: modelURL.path, sessionOptions: nil)
         self.tokenizer = try await AutoTokenizer.from(modelFolder: tokenizerConfigURL)
         self.maxSequenceLength = maxSequenceLength
+        
+        var foundIndex = 1
+        let configURL = tokenizerConfigURL.appendingPathComponent("config.json")
+        if let data = try? Data(contentsOf: configURL),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let id2label = json["id2label"] as? [String: String] {
+            for (key, value) in id2label {
+                let lower = value.lowercased()
+                if lower.contains("inject") || lower.contains("malicious") {
+                    if let idx = Int(key) { foundIndex = idx }
+                }
+            }
+        }
+        self.injectionIndex = foundIndex
     }
 
     public func evaluate(text: String) async throws -> Double {
@@ -58,10 +73,9 @@ public final class LiveONNXModel: CoreMLModelProtocol, @unchecked Sendable {
         let logits = data.withUnsafeBytes { raw in
             Array(raw.bindMemory(to: Float.self))
         }
-        // Binary classifier: logits shape [1, 2]; index 1 is INJECTION. Softmax to a prob.
-        guard logits.count >= 2 else { return 0.0 }
-        let logit0 = Double(logits[0])
-        let logit1 = Double(logits[1])
+        guard logits.count >= 2, injectionIndex < logits.count else { return 0.0 }
+        let logit0 = Double(logits[1 - injectionIndex])
+        let logit1 = Double(logits[injectionIndex])
         let maxLogit = max(logit0, logit1)
         let exp0 = exp(logit0 - maxLogit)
         let exp1 = exp(logit1 - maxLogit)

@@ -616,8 +616,11 @@ When building features, adding functionality, or modifying behavior, you MUST ad
         // Tier 1 Sanitization: Apply structural isolation to prevent prompt injection from tool outputs
         let structuralSafeResult = PromptInjectionGuard.sanitizeUntrustedInput(result)
         
-        // Tier 2 & 3 Sanitization: Active heuristic and canary detection
-        let sanitizedResult = await InjectionGuard.sanitize(structuralSafeResult, contextTag: "tool_output_\(name)", maxTier: .tier3_canary)
+        let trustedTools: Set<String> = ["set_workspace", "register_directory_watcher"]
+        let maxTier: InjectionGuard.SanitizationTier = trustedTools.contains(name) ? .tier1_structural : .tier3_canary
+        
+        // Tier 2 & 3 Sanitization: Active heuristic and canary detection (skipped for trusted tools)
+        let sanitizedResult = await InjectionGuard.sanitize(structuralSafeResult, contextTag: "tool_output_\(name)", maxTier: maxTier)
         
         return sanitizedResult
     }

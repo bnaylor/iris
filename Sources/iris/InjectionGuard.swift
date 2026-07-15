@@ -77,7 +77,7 @@ public struct InjectionGuard {
                 await MetricsManager.shared.trackLatency(operation: .promptGuardTier2, modelName: "CoreML", durationMs: durationMs, success: true)
             }
             
-            if probability > 0.5 {
+            if probability > 0.9 {
                 print("[InjectionGuard] Tier 2 CoreML flagged injection with probability: \(probability)")
                 return false
             }

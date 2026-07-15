@@ -87,11 +87,26 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
     private let mlModel: MLModel
     private let tokenizer: any Tokenizer
     private let sequenceLength: Int
+    private let injectionIndex: Int
     
     public init(modelURL: URL, tokenizerConfigURL: URL, sequenceLength: Int = 512) async throws {
         self.mlModel = try MLModel(contentsOf: modelURL)
         self.tokenizer = try await AutoTokenizer.from(modelFolder: tokenizerConfigURL)
         self.sequenceLength = sequenceLength
+        
+        var foundIndex = 1
+        let configURL = tokenizerConfigURL.appendingPathComponent("config.json")
+        if let data = try? Data(contentsOf: configURL),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let id2label = json["id2label"] as? [String: String] {
+            for (key, value) in id2label {
+                let lower = value.lowercased()
+                if lower.contains("inject") || lower.contains("malicious") {
+                    if let idx = Int(key) { foundIndex = idx }
+                }
+            }
+        }
+        self.injectionIndex = foundIndex
     }
     
     public func evaluate(text: String) async throws -> Double {
@@ -137,10 +152,10 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
         // DeBERTa typically outputs "logits". We need to extract the injection probability.
         // Assuming logits is a float array, where index 1 is "injection". (Depends on the HF model's id2label).
         if let logitsFeature = prediction.featureValue(for: "logits"),
-           let logitsArray = logitsFeature.multiArrayValue {
+           let logitsArray = logitsFeature.multiArrayValue, logitsArray.count >= 2, injectionIndex < logitsArray.count {
             // Apply softmax to get probability
-            let logit0 = logitsArray[0].doubleValue
-            let logit1 = logitsArray[1].doubleValue
+            let logit0 = logitsArray[1 - injectionIndex].doubleValue
+            let logit1 = logitsArray[injectionIndex].doubleValue
             let maxLogit = max(logit0, logit1)
             let exp0 = exp(logit0 - maxLogit)
             let exp1 = exp(logit1 - maxLogit)
