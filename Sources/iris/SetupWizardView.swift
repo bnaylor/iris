@@ -414,9 +414,9 @@ struct SecurityStepView: View {
                 
                 if config.enableAdvancedPromptInjectionProtection {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Tier 2: CoreML Fast Interceptor")
+                        Text("Tier 2: Fast Local Classifier")
                             .font(.headline)
-                        Text("Uses the Apple Neural Engine to rapidly classify text as safe or malicious.")
+                        Text("Rapidly classifies text as safe or malicious on-device — CoreML (Neural Engine) or ONNX Runtime (CPU).")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
@@ -428,13 +428,13 @@ struct SecurityStepView: View {
                             if downloader.isDownloading && downloader.currentDownloadName == coreMLName {
                                 ProgressView(value: downloader.progress)
                             } else {
-                                Button("Download CoreML Model (~250MB)") {
+                                Button("Download Model") {
                                     Task { await downloader.downloadModel(name: config.promptGuardCoreMLModel) }
                                 }
                             }
                         } else {
                             HStack {
-                                Text("✅ CoreML model ready.")
+                                Text("✅ Model ready.")
                                     .foregroundColor(.green)
                                     .font(.caption)
                                     

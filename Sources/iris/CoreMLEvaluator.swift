@@ -40,14 +40,26 @@ public final class CoreMLEvaluator: @unchecked Sendable {
         if FileManager.default.fileExists(atPath: fullPath.path) {
             #if canImport(Tokenizers)
             do {
-                let liveModel = try await LiveCoreMLModel(modelURL: fullPath, tokenizerConfigURL: fullPath)
-                setModel(liveModel)
+                // An ONNX bundle unzips to a directory containing `model.onnx` alongside the
+                // tokenizer files; a CoreML bundle is the `.mlmodelc` directory itself.
+                let onnxURL = fullPath.appendingPathComponent("model.onnx")
+                if FileManager.default.fileExists(atPath: onnxURL.path) {
+                    #if canImport(OnnxRuntimeBindings)
+                    let liveModel = try await LiveONNXModel(modelURL: onnxURL, tokenizerConfigURL: fullPath)
+                    setModel(liveModel)
+                    #else
+                    throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "ONNX model found but ONNX Runtime is not available in this build."])
+                    #endif
+                } else {
+                    let liveModel = try await LiveCoreMLModel(modelURL: fullPath, tokenizerConfigURL: fullPath)
+                    setModel(liveModel)
+                }
             } catch {
-                print("[CoreMLEvaluator] Failed to load CoreML model: \(error)")
+                print("[CoreMLEvaluator] Failed to load model: \(error)")
                 throw error
             }
             #else
-            print("[CoreMLEvaluator] Tokenizers framework not available. Cannot load CoreML model.")
+            print("[CoreMLEvaluator] Tokenizers framework not available. Cannot load model.")
             throw NSError(domain: "CoreMLEvaluator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Tokenizers framework not available."])
             #endif
         } else {
@@ -83,6 +95,14 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
     }
     
     public func evaluate(text: String) async throws -> Double {
+        // Empty/whitespace-only input is trivially safe. This also sidesteps a benign
+        // tokenizer divergence: swift-transformers' UnigramTokenizer (used for DeBERTa-v3
+        // via the XLMRobertaTokenizer relabel) emits a stray metaspace token for empty
+        // input where Python emits none. See DebertaV3TokenizerParityTests.
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return 0.0
+        }
+
         let tokens = tokenizer.encode(text: text)
         var inputIds = tokens.map { Int32($0) }
         var attentionMask = [Int32](repeating: 1, count: inputIds.count)

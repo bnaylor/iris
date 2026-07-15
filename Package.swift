@@ -15,7 +15,8 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
         .package(url: "https://github.com/mattt/llama.swift.git", branch: "main"),
         .package(url: "https://github.com/huggingface/swift-transformers.git", branch: "main"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main")
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main"),
+        .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", from: "1.20.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -31,7 +32,8 @@ let package = Package(
                 .product(name: "Transformers", package: "swift-transformers"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
-                .product(name: "MLXHuggingFace", package: "mlx-swift-lm")
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager")
             ],
             resources: [
                 .process("assets")
@@ -39,7 +41,8 @@ let package = Package(
         ),
         .testTarget(
             name: "irisTests",
-            dependencies: ["iris"]
+            dependencies: ["iris"],
+            exclude: ["Fixtures"]
         ),
     ],
     swiftLanguageModes: [.v6]
