@@ -47,9 +47,14 @@ public final class LiveONNXModel: CoreMLModelProtocol, @unchecked Sendable {
             return 0.0
         }
 
+        // Defensively truncate the raw text to prevent massive CPU spikes during tokenization
+        // if the input is a massive string (e.g. 10MB of scraped web HTML).
+        // 2000 characters is plenty to reach 512 tokens.
+        let safeText = String(text.prefix(2000))
+        
         // The tokenizer already inserts [CLS]/[SEP]. The ONNX graph has dynamic sequence
         // length, so we feed the real token count (capped) with no padding.
-        var inputIds = tokenizer.encode(text: text).map { Int64($0) }
+        var inputIds = tokenizer.encode(text: safeText).map { Int64($0) }
         if inputIds.count > maxSequenceLength {
             inputIds = Array(inputIds.prefix(maxSequenceLength))
         }
@@ -73,13 +78,13 @@ public final class LiveONNXModel: CoreMLModelProtocol, @unchecked Sendable {
         let logits = data.withUnsafeBytes { raw in
             Array(raw.bindMemory(to: Float.self))
         }
-        guard logits.count >= 2, injectionIndex < logits.count else { return 0.0 }
-        let logit0 = Double(logits[1 - injectionIndex])
-        let logit1 = Double(logits[injectionIndex])
-        let maxLogit = max(logit0, logit1)
-        let exp0 = exp(logit0 - maxLogit)
-        let exp1 = exp(logit1 - maxLogit)
-        return exp1 / (exp0 + exp1)
+        guard !logits.isEmpty, injectionIndex < logits.count else { return 0.0 }
+        
+        let maxLogit = Double(logits.max() ?? 0.0)
+        let exps = logits.map { exp(Double($0) - maxLogit) }
+        let sumExps = exps.reduce(0.0, +)
+        
+        return sumExps > 0 ? (exps[injectionIndex] / sumExps) : 0.0
     }
 }
 #endif

@@ -118,7 +118,12 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
             return 0.0
         }
 
-        let tokens = tokenizer.encode(text: text)
+        // Defensively truncate the raw text to prevent massive CPU spikes during tokenization
+        // if the input is a massive string (e.g. 10MB of scraped web HTML).
+        // 2000 characters is plenty to reach 512 tokens.
+        let safeText = String(text.prefix(2000))
+        
+        let tokens = tokenizer.encode(text: safeText)
         var inputIds = tokens.map { Int32($0) }
         var attentionMask = [Int32](repeating: 1, count: inputIds.count)
         
@@ -150,17 +155,27 @@ public final class LiveCoreMLModel: CoreMLModelProtocol, @unchecked Sendable {
         let prediction = try await mlModel.prediction(from: featureProvider)
         
         // DeBERTa typically outputs "logits". We need to extract the injection probability.
-        // Assuming logits is a float array, where index 1 is "injection". (Depends on the HF model's id2label).
+        // Applies a generalized N-class softmax for robustness.
         if let logitsFeature = prediction.featureValue(for: "logits"),
-           let logitsArray = logitsFeature.multiArrayValue, logitsArray.count >= 2, injectionIndex < logitsArray.count {
-            // Apply softmax to get probability
-            let logit0 = logitsArray[1 - injectionIndex].doubleValue
-            let logit1 = logitsArray[injectionIndex].doubleValue
-            let maxLogit = max(logit0, logit1)
-            let exp0 = exp(logit0 - maxLogit)
-            let exp1 = exp(logit1 - maxLogit)
-            let prob1 = exp1 / (exp0 + exp1)
-            return prob1
+           let logitsArray = logitsFeature.multiArrayValue, logitsArray.count > injectionIndex {
+            
+            var maxLogit = -Double.greatestFiniteMagnitude
+            
+            for i in 0..<logitsArray.count {
+                let val = logitsArray[i].doubleValue
+                if val > maxLogit { maxLogit = val }
+            }
+            
+            var sumExps = 0.0
+            var targetExp = 0.0
+            
+            for i in 0..<logitsArray.count {
+                let e = exp(logitsArray[i].doubleValue - maxLogit)
+                sumExps += e
+                if i == injectionIndex { targetExp = e }
+            }
+            
+            return sumExps > 0 ? (targetExp / sumExps) : 0.0
         }
         
         return 0.0
