@@ -30,5 +30,8 @@
 - [x] Add cloud models for vibecop
 - [x] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
 - [ ] Reimagine sandboxing flows.  We should allow for even the main agent's access to be sandboxed.  Per-workspace?
-
+- [ ] hide "thinking" output in a twisty
+- [ ] Concept of library registries - bot-owned, remote.  curated, read-only, okf vs diverse vs ?
+- [ ] Organize ~/.iris/ and separate bot-written files from non
+- [ ] Rationalize SYSTEM prompt; don't hardcode in source but ship as a read-only asset; enhance
 
