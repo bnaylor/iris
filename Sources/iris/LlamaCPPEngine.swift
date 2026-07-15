@@ -20,7 +20,7 @@ final class LlamaCPPEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
     func loadModel(config: AuxiliaryModelConfig) async throws {
         let modelParams = llama_model_default_params()
         
-        let path = ("~/.iris/models/" as NSString).expandingTildeInPath + "/" + config.modelPathOrName
+        let path = IrisPaths.default.modelsDir.appendingPathComponent(config.modelPathOrName).path
         guard let loadedModel = llama_model_load_from_file(path, modelParams) else {
             throw LlamaError.modelLoadFailed
         }

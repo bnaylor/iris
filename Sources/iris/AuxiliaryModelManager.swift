@@ -11,10 +11,9 @@ final class AuxiliaryModelManager: @unchecked Sendable {
     private let registryPath: String
     
     init() {
-        let configDir = ("~/.iris" as NSString).expandingTildeInPath
-        self.modelsDir = "\(configDir)/models"
+        self.modelsDir = IrisPaths.default.modelsDir.path
         self.registryPath = "\(modelsDir)/models.json"
-        
+
         if !FileManager.default.fileExists(atPath: modelsDir) {
             try? FileManager.default.createDirectory(atPath: modelsDir, withIntermediateDirectories: true)
         }

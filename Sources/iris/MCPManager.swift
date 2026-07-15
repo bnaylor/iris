@@ -21,7 +21,7 @@ actor MCPManager {
     
     private var servers: [String: ActiveServer] = [:]
     private var configPath: String {
-        return ("~/.iris/mcp_servers.json" as NSString).expandingTildeInPath
+        return IrisPaths.default.mcpServersJSON.path
     }
     
     init() {}

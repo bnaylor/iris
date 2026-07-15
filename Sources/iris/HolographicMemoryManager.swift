@@ -178,12 +178,8 @@ final class HolographicMemoryManager: @unchecked Sendable {
             dbQueue = try DatabaseQueue(configuration: configuration)
             try migrator.migrate(dbQueue!)
         } else {
-            let configDir = ("~/.iris" as NSString).expandingTildeInPath
-            if !FileManager.default.fileExists(atPath: configDir) {
-                try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
-            }
-            
-            let dbPath = "\(configDir)/holographic_memory.sqlite"
+            try? IrisPaths.default.ensureDirectories()
+            let dbPath = IrisPaths.default.holographicDB.path
             dbPool = try DatabasePool(path: dbPath, configuration: configuration)
             dbQueue = nil
             try migrator.migrate(dbPool!)

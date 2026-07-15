@@ -41,7 +41,7 @@ struct HookManager {
     var configPathOverride: String?
     
     private var configPath: String {
-        configPathOverride ?? ("~/.iris/settings.json" as NSString).expandingTildeInPath
+        configPathOverride ?? IrisPaths.default.settingsJSON.path
     }
     
     private var config: HookConfig? {

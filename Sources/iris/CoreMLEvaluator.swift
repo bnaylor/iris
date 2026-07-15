@@ -34,7 +34,7 @@ public final class CoreMLEvaluator: @unchecked Sendable {
             modelDirName = String(modelDirName.dropLast(4))
         }
         
-        let basePath = ("~/.iris/models/" as NSString).expandingTildeInPath
+        let basePath = IrisPaths.default.modelsDir.path
         let fullPath = URL(fileURLWithPath: basePath).appendingPathComponent(modelDirName)
         
         if FileManager.default.fileExists(atPath: fullPath.path) {

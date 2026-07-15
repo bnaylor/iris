@@ -6,7 +6,7 @@ import Tokenizers
 public func testTokenizerLoad() async {
     #if canImport(Tokenizers)
     do {
-        let url = URL(fileURLWithPath: ("/Users/bnaylor/.iris/models/distilbert-prompt-injection.mlmodelc" as NSString).expandingTildeInPath)
+        let url = IrisPaths.default.modelsDir.appendingPathComponent("distilbert-prompt-injection.mlmodelc")
         let _ = try await AutoTokenizer.from(modelFolder: url)
         print("Tokenizer Success")
     } catch {

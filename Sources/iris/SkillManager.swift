@@ -3,10 +3,8 @@ import Foundation
 struct SkillManager {
     static let shared = SkillManager()
     
-    let configDir = ("~/.iris" as NSString).expandingTildeInPath
-    
     func loadSOUL() async -> String {
-        let path = "\(configDir)/prompts/SOUL.md"
+        let path = IrisPaths.default.soulMd.path
         if let content = try? String(contentsOfFile: path, encoding: .utf8) {
             let structuralSafe = PromptInjectionGuard.sanitizeUntrustedInput(content)
             return await InjectionGuard.sanitize(structuralSafe, contextTag: "soul_prompt", maxTier: .tier3_canary)
@@ -15,7 +13,7 @@ struct SkillManager {
     }
     
     func discoverSkills() async -> String {
-        let skillsDir = "\(configDir)/skills"
+        let skillsDir = IrisPaths.default.skillsDir.path
         let fileManager = FileManager.default
         var skillsSummary = "# Available Skills\n\n"
         
@@ -58,6 +56,6 @@ struct SkillManager {
             }
         }
         
-        return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.iris/skills/\(folderName)/SKILL.md\n"
+        return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.iris/memory/skills/\(folderName)/SKILL.md\n"
     }
 }

@@ -35,7 +35,7 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     
     func isModelDownloaded(name: String) -> Bool {
         let filename = name.starts(with: "http") ? (URL(string: name)?.lastPathComponent ?? name) : name
-        let path = ("~/.iris/models/" as NSString).expandingTildeInPath + "/" + filename
+        let path = IrisPaths.default.modelsDir.path + "/" + filename
         return FileManager.default.fileExists(atPath: path)
     }
     
@@ -77,11 +77,11 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         self.error = nil
         self.currentDownloadName = filename
         
-        let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
+        let dirPath = IrisPaths.default.modelsDir.path
         if !FileManager.default.fileExists(atPath: dirPath) {
             try? FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
-        
+
         let configuration = URLSessionConfiguration.default
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         
@@ -93,7 +93,7 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let filename = downloadTask.taskDescription else { return }
-        let dirPath = ("~/.iris/models/" as NSString).expandingTildeInPath
+        let dirPath = IrisPaths.default.modelsDir.path
         let destination = URL(fileURLWithPath: dirPath).appendingPathComponent(filename)
         
         do {

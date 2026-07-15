@@ -11,12 +11,8 @@ struct PermissionManager: Sendable {
     private let globalPermissionsURL: URL
     
     private init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let configDir = home.appendingPathComponent(".iris")
-        if !FileManager.default.fileExists(atPath: configDir.path) {
-            try? FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
-        }
-        globalPermissionsURL = configDir.appendingPathComponent("permissions.json")
+        try? IrisPaths.default.ensureDirectories()
+        globalPermissionsURL = IrisPaths.default.permissionsJSON
     }
     
     private func projectPermissionsURL(for workspace: String) -> URL {
