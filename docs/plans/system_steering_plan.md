@@ -21,7 +21,7 @@
 
 ## File Structure
 
-- Create: `assets/SYSTEM.md` — the shipped steering content (authoritative directives).
+- Create: `Sources/iris/assets/SYSTEM.md` — the shipped steering content (authoritative directives). SwiftPM's `.process("assets")` resolves under the target source dir, so the bundled copy lives here (next to `iris-icon.png`), not the repo-root `assets/`.
 - Create: `Sources/iris/SystemSteering.swift` — loader (`shipped()`) + embedded `fallback`.
 - Create: `Tests/irisTests/SystemSteeringTests.swift` — loader + fallback tests.
 - Modify: `Sources/iris/iris.swift` (`ensureSystemPrompt()`, ~lines 28-46) — remove the three hardcoded `let`s, inject `SystemSteering.shipped()`.
@@ -31,7 +31,7 @@
 ## Task 1: SystemSteering loader + shipped SYSTEM.md asset
 
 **Files:**
-- Create: `assets/SYSTEM.md`
+- Create: `Sources/iris/assets/SYSTEM.md`
 - Create: `Sources/iris/SystemSteering.swift`
 - Test: `Tests/irisTests/SystemSteeringTests.swift`
 
@@ -39,7 +39,7 @@
 - Consumes: nothing (leaf).
 - Produces: `enum SystemSteering { static func shipped() -> String; static let fallback: String }` — consumed by Task 2.
 
-- [ ] **Step 1: Create the shipped asset `assets/SYSTEM.md`**
+- [ ] **Step 1: Create the shipped asset `Sources/iris/assets/SYSTEM.md`**
 
 ```markdown
 # System Directives

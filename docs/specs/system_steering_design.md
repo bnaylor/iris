@@ -41,8 +41,10 @@ steering a real home so it can be iterated without recompiling.
 
 ### Where it lives and how it loads
 
-- `SYSTEM.md` ships as a bundle resource in `assets/`, carried by the existing
-  `.process("assets")` rule in `Package.swift` (same path as `iris-icon.png`).
+- `SYSTEM.md` ships as a bundle resource carried by the existing `.process("assets")` rule in
+  `Package.swift`. Because SwiftPM resolves that rule relative to the target's source directory,
+  the bundled file lives at **`Sources/iris/assets/SYSTEM.md`** (alongside the bundled
+  `iris-icon.png`) — not the repo-root `assets/`, which holds only README/doc imagery.
 - New loader `Sources/iris/SystemSteering.swift`:
 
   ```swift

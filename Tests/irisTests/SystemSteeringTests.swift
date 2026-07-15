@@ -21,4 +21,15 @@ struct SystemSteeringTests {
         #expect(SystemSteering.fallback.contains("untrusted_context"))
         #expect(SystemSteering.fallback.contains("authorization"))
     }
+
+    @Test("fallback has no leading indentation from the multi-line literal")
+    func testFallbackHasNoLeadingIndentation() {
+        // The `"""` literal is indented to sit inside the enum; Swift strips the indentation
+        // that matches the closing delimiter, so the emitted string must start flush-left
+        // (no stray 4-space indent that would read as a code block in the prompt).
+        #expect(SystemSteering.fallback.hasPrefix("# System Directives"))
+        for line in SystemSteering.fallback.split(separator: "\n", omittingEmptySubsequences: false) {
+            #expect(!line.hasPrefix(" "), "fallback line unexpectedly indented: \(line)")
+        }
+    }
 }
