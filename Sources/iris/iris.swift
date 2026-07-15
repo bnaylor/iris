@@ -258,7 +258,29 @@ actor IrisEngine {
                 required: ["content"]
             )
         ))
-        
+        toolsList.append(FunctionDeclaration(
+            name: "update_soul",
+            description: "Overwrite your core identity file (SOUL.md). Use this to durably evolve your persona, values, and standing directives. Keep it coherent and concise.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "content": Schema(type: "STRING", description: "The new complete text content for SOUL.md")
+                ],
+                required: ["content"]
+            )
+        ))
+        toolsList.append(FunctionDeclaration(
+            name: "update_memory",
+            description: "Overwrite your mid-term memory file (memory.md). Use this to consolidate durable facts, project context, and recurring workflows.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "content": Schema(type: "STRING", description: "The new complete text content for memory.md")
+                ],
+                required: ["content"]
+            )
+        ))
+
         let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList)
         if case .block(let reason) = toolSelectionDecision {
             await pushToUI(role: .system, text: "Hook blocked tool selection: \(reason)", conversationId: conversationId)
@@ -519,6 +541,13 @@ actor IrisEngine {
         } else if functionCall.name == "update_user_profile", let content = functionCall.args["content"]?.stringValue {
             MemoryManager.shared.updateUserProfile(content: content)
             result = "User profile updated."
+        } else if functionCall.name == "update_soul", let content = functionCall.args["content"]?.stringValue {
+            MemoryManager.shared.updateSoul(content: content)
+            systemPrompt = nil   // invalidate cache so the new SOUL loads next turn
+            result = "Soul updated. It will take effect on the next turn."
+        } else if functionCall.name == "update_memory", let content = functionCall.args["content"]?.stringValue {
+            MemoryManager.shared.updateMemory(content: content)
+            result = "Memory updated."
         } else if functionCall.name == "reflect" {
             result = "Reflection logged. Proceed with your next action."
         } else if functionCall.name == "invoke_subagent", 

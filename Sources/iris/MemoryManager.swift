@@ -29,7 +29,16 @@ class MemoryManager: @unchecked Sendable {
     func updateMemory(content: String) {
         try? content.write(toFile: memoryPath, atomically: true, encoding: .utf8)
     }
-    
+
+    func getSoul() -> String {
+        (try? String(contentsOf: paths.soulMd, encoding: .utf8)) ?? ""
+    }
+
+    func updateSoul(content: String) {
+        try? paths.ensureDirectories()
+        try? content.write(to: paths.soulMd, atomically: true, encoding: .utf8)
+    }
+
     func getUserProfile() -> String {
         if let content = try? String(contentsOfFile: userProfilePath, encoding: .utf8) {
             return content
