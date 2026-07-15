@@ -27,6 +27,14 @@ To catch these, Iris uses a small classifier (e.g., DeBERTa-v3-small) converted 
 - **Mechanism:** Evaluates tool outputs asynchronously via `swift-transformers` and the CoreML framework on the Apple Neural Engine (ANE).
 - **Outcome:** If the classifier scores an injection probability > 0.5, the text is quarantined before it reaches the primary model's context.
 
+> **Ordering invariant (critical):** the Tier 2/Tier 3 classifiers must evaluate the
+> **normalized but unwrapped** content — *never* the `<untrusted_context>`-wrapped string.
+> A prompt-injection classifier reads the XML control scaffolding itself as an injection and
+> scores essentially all benign tool output at ~0.9999, blocking everything (the "Guardrail
+> Diagnostics" incident). Concretely: `PromptInjectionGuard.sanitizeUntrustedInput` only
+> normalizes and returns unwrapped text; `InjectionGuard.sanitize` classifies that clean text
+> and applies the single `<untrusted_context source="…">` wrapper **after** the tiers pass.
+
 ---
 
 ## Tier 3: Behavioral Canary Probe (Implemented)

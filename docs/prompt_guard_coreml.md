@@ -160,7 +160,9 @@ Implementation:
   directory contains `model.onnx` loads via `LiveONNXModel`; otherwise it falls back to
   the existing `.mlmodelc` / `LiveCoreMLModel` path. The call sites are unchanged.
 - `scripts/compile_prompt_guard.py --onnx` produces the bundle (`<model>.onnx.zip`
-  containing `model.onnx` + the relabeled tokenizer).
+  containing `model.onnx`, the relabeled tokenizer, and `config.json` — the last so the
+  loader can read `id2label` and locate the INJECTION class dynamically instead of assuming
+  index 1).
 - `Tests/irisTests/DebertaV3OnnxEvaluatorTests.swift` — an opt-in end-to-end test
   (set `IRIS_ONNX_TEST_BUNDLE` to the unzipped bundle dir) that verified on-device that
   benign tool output stays below 0.9 while real injections score above it.

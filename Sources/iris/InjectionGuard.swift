@@ -11,55 +11,81 @@ public struct InjectionGuard {
     /// Sanitizes untrusted input through a multi-tier defense pipeline.
     /// - Parameters:
     ///   - rawInput: The untrusted payload (e.g. from web search or external file).
-    ///   - contextTag: The XML tag to wrap the clean content in (default: "untrusted_content").
+    ///   - contextTag: A provenance label for the content (e.g. `tool_output_run_command`).
+    ///     It is emitted as a `source="..."` attribute on the wrapper — it is **not** used as
+    ///     the element name. All content is wrapped in `<untrusted_context>` so the system
+    ///     prompt's SECURITY NOTICE (which keys on that tag) applies uniformly.
     ///   - maxTier: The maximum sanitization tier to evaluate against.
     /// - Returns: A safely XML-wrapped string ready for LLM consumption.
-    public static func sanitize(_ rawInput: String, contextTag: String = "untrusted_content", maxTier: SanitizationTier = .tier1_structural) async -> String {
+    ///
+    /// Ordering note: the Tier 2/Tier 3 classifiers evaluate `clean` — the normalized but
+    /// **unwrapped** content. Feeding them the `<untrusted_context>` wrapper makes the
+    /// injection classifier flag the scaffolding itself (~0.9999) and block all benign tool
+    /// output; wrapping happens only after classification. See the "Guardrail Diagnostics"
+    /// regression in docs/prompt_guard_coreml.md.
+    public static func sanitize(_ rawInput: String, contextTag: String = "", maxTier: SanitizationTier = .tier1_structural) async -> String {
+        let source = sanitizeSourceLabel(contextTag)
+
         // Tier 1: Strict Structural Isolation & Text Normalization
-        let clean = executeTier1(rawInput, contextTag: contextTag)
-        
+        let clean = executeTier1(rawInput)
+
         if maxTier == .tier1_structural {
-            return "<\(contextTag)>\n\(clean)\n</\(contextTag)>"
+            return wrap(clean, source: source)
         }
-        
-        // Tier 2: Local Token-Classification (CoreML)
+
+        // Tier 2: Local Token-Classification (CoreML/ONNX) — evaluates the unwrapped content.
         let isTier2Safe = await executeTier2CoreML(clean)
         if !isTier2Safe {
-            return "<\(contextTag)>[CONTENT BLOCKED BY TIER 2 INJECTION GUARD]</\(contextTag)>"
+            return wrapBlocked("[CONTENT BLOCKED BY TIER 2 INJECTION GUARD]", source: source)
         }
-        
+
         if maxTier == .tier2_coreML {
-            return "<\(contextTag)>\n\(clean)\n</\(contextTag)>"
+            return wrap(clean, source: source)
         }
-        
-        // Tier 3: Behavioral Canary Probe
+
+        // Tier 3: Behavioral Canary Probe — also evaluates the unwrapped content.
         let isTier3Safe = await executeTier3Canary(clean)
         if !isTier3Safe {
-            return "<\(contextTag)>[CONTENT BLOCKED BY TIER 3 CANARY GUARD]</\(contextTag)>"
+            return wrapBlocked("[CONTENT BLOCKED BY TIER 3 CANARY GUARD]", source: source)
         }
-        
-        return "<\(contextTag)>\n\(clean)\n</\(contextTag)>"
+
+        return wrap(clean, source: source)
     }
-    
-    private static func executeTier1(_ input: String, contextTag: String) -> String {
+
+    private static func executeTier1(_ input: String) -> String {
         var clean = input
-        
+
         // 1. Strip common LLM role delimiters that attempt to hijack the conversation
         let malRolePatterns = ["system:", "assistant:", "user:", "---", "###"]
         for pattern in malRolePatterns {
             clean = clean.replacingOccurrences(of: pattern, with: "", options: [.caseInsensitive])
         }
-        
-        // 2. Escape any malicious closing tags an attacker injected to break out of context
-        // If the context tag is "search_context", we must escape </search_context>
-        let closingTag = "</\(contextTag)>"
-        clean = clean.replacingOccurrences(of: closingTag, with: "[escaped_tag_\(contextTag)]", options: [.caseInsensitive])
-        
-        // 3. (Optional but recommended) Normalize tricky characters/homoglyphs here if needed
-        // Swift string manipulation handles most unicode safely, but specific normalization can be applied:
-        // clean = clean.precomposedStringWithCanonicalMapping
-        
+
+        // 2. Escape any breakout closing tag an attacker injected to escape the wrapper we
+        // are about to apply. The wrapper is always <untrusted_context>, so that is the only
+        // closing tag we need to neutralize.
+        clean = clean.replacingOccurrences(of: "</untrusted_context>", with: "[escaped_tag]", options: [.caseInsensitive])
+
         return clean
+    }
+
+    /// The opening wrapper tag, carrying optional provenance as a `source` attribute.
+    private static func openingTag(source: String) -> String {
+        source.isEmpty ? "<untrusted_context>" : "<untrusted_context source=\"\(source)\">"
+    }
+
+    private static func wrap(_ content: String, source: String) -> String {
+        "\(openingTag(source: source))\n\(content)\n</untrusted_context>"
+    }
+
+    private static func wrapBlocked(_ marker: String, source: String) -> String {
+        "\(openingTag(source: source))\(marker)</untrusted_context>"
+    }
+
+    /// The provenance label is set in code, but for MCP tools it derives from a server-supplied
+    /// tool name, so strip anything that could break out of the attribute or the tag.
+    private static func sanitizeSourceLabel(_ raw: String) -> String {
+        String(raw.filter { $0 != "\"" && $0 != "<" && $0 != ">" && !$0.isNewline })
     }
     
     private static func executeTier2CoreML(_ input: String) async -> Bool {

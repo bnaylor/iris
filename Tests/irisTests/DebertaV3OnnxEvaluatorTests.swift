@@ -69,5 +69,6 @@ struct DebertaV3OnnxEvaluatorTests {
         #expect(try await model.evaluate(text: "") == 0.0)
         #expect(try await model.evaluate(text: "   \n ") == 0.0)
     }
+
 }
 #endif

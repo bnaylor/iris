@@ -142,6 +142,12 @@ def export_onnx_bundle(torch, wrapper, tokenizer, input_ids, attention_mask, mod
     tokenizer.save_pretrained(out_dir)
     relabel_deberta_tokenizer(out_dir)
 
+    # Bundle config.json so LiveONNXModel can read id2label and locate the INJECTION class
+    # dynamically. Without it the Swift loader falls back to a hardcoded index-1 default,
+    # which silently inverts the guard for any model whose labels are ordered differently.
+    print("[*] Bundling model config (id2label) next to the ONNX model...")
+    wrapper.model.config.save_pretrained(out_dir)
+
     zip_filename = f"{out_dir}.zip"
     print(f"[*] Zipping up the final bundle to {zip_filename}...")
     shutil.make_archive(out_dir, "zip", root_dir=".", base_dir=out_dir)
@@ -279,6 +285,11 @@ def main():
     print("[*] Bundling tokenizer files into the .mlmodelc directory...")
     tokenizer.save_pretrained(mlmodelc_path)
     relabel_deberta_tokenizer(mlmodelc_path)
+
+    # Bundle config.json so LiveCoreMLModel can read id2label and locate the INJECTION class
+    # dynamically instead of falling back to the hardcoded index-1 default.
+    print("[*] Bundling model config (id2label) into the .mlmodelc directory...")
+    model.config.save_pretrained(mlmodelc_path)
 
     # 6. Zip it up
     zip_filename = f"{model_name}.mlmodelc.zip"
