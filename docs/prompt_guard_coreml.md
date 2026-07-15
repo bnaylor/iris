@@ -199,14 +199,6 @@ The download and runtime plumbing is format-agnostic and already supports ONNX b
 - The Settings and Setup Wizard Tier 2 panes were relabeled from "CoreML"-specific copy to
   neutral "Fast Local Classifier" wording that covers both CoreML and ONNX.
 
-Still open (not done here):
-
-- **The default model URL** in `ConfigManager` still points at the old
-  `distilbert-prompt-injection.mlmodelc.zip` (the over-blocking fmops model). It should be
-  repointed at a hosted DeBERTa-v3 `.onnx.zip` once one is uploaded.
-- `ModelDownloader.downloadModel` assigns `vibecopModel` on any URL download, which is
-  wrong when the URL is the Tier 2 guard model — a pre-existing latent bug, unrelated to
-  ONNX but worth fixing while in here.
 
 ### Why not MLX
 
@@ -286,19 +278,11 @@ with no op surgery. The alternatives that were considered and set aside:
 
 ## Regardless of model
 
-These improvements matter no matter which model (if any) Tier 2 ends up using:
+The following robustness improvements have been implemented for Tier 2 evaluation, which matter no matter which model (if any) is ultimately used:
 
-- **The `prob > 0.5` block threshold is too low.** Even the best model scores benign JSON
-  at 0.85. A threshold around 0.9 is more defensible; a hard block is very costly when
-  wrong.
-- **Don't run Tier 2 over trusted side-effect tool output.** The `set_workspace` incident
-  showed a tool's side-effect executing while its output was silently swallowed, leaving
-  the agent with confusing partial behavior. Blocking should be structured and visible to
-  the agent, not a silent `[CONTENT BLOCKED]` substitution — and ideally skipped for
-  trusted tools entirely.
-- **`CoreMLEvaluator` should read `id2label` from the bundled `config.json`** instead of
-  hardcoding "index 1 = injection", so a future model with reversed labels doesn't
-  silently invert the guard. (Index 1 happens to be correct for fmops and deberta-v3-v2.)
+- **A high block threshold (`prob > 0.9`).** Even the best model scores benign JSON at 0.85. A threshold of 0.9 provides headroom above the highest-scoring benign inputs; a hard block is very costly when wrong.
+- **Skipping Tier 2 for trusted side-effect tool output.** The `set_workspace` incident showed a tool's side-effect executing while its output was silently swallowed, leaving the agent with confusing partial behavior. Trusted tools now completely bypass Tier 2 sanitization.
+- **Dynamic `id2label` parsing.** `CoreMLEvaluator` reads `id2label` from the bundled `config.json` instead of hardcoding "index 1 = injection", so a future model with reversed labels doesn't silently invert the guard.
 
 ## Historical note: Meta Prompt-Guard-86M
 
