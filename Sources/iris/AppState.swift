@@ -236,9 +236,9 @@ class AppState {
         } else if trimmed.hasPrefix("/reflect") {
             appendMessage(role: .system, content: "Triggering manual memory reflection...", to: convId)
             let reflectionPrompt = """
-            System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. 
-            
-            Additionally, perform a grooming pass on your Markdown memory library. Ensure ALL memory files (`~/.iris/skills/*`, `USER.md`, `SOUL.md`) use the Open Knowledge Format (OKF). This means each file MUST start with a YAML frontmatter block containing at least:
+            System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `update_soul` to evolve your persona, `update_user_profile` to update the user profile, `update_memory` to consolidate durable facts, and `write_file`/`read_file` under `~/.iris/memory/skills/` for skills.
+
+            Additionally, perform a grooming pass on your Markdown memory library. Ensure ALL memory files (`~/.iris/memory/skills/*`, `~/.iris/memory/USER.md`, `~/.iris/memory/SOUL.md`) use the Open Knowledge Format (OKF). This means each file MUST start with a YAML frontmatter block containing at least:
             ---
             type: [skill|profile|core|etc]
             title: ...
@@ -286,7 +286,7 @@ class AppState {
                 runThinkingTask(conversationId: convId) { [self] in
                     await engine.processInput(messageContent, source: "UI", conversationId: convId)
 
-                    let reflectionPrompt = "System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `write_file` or `read_file` to update `~/.iris/skills/`, `update_user_profile` to update `USER.md`, or update your core `SOUL.md`. Output a transparent summary of the gist of the updates for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'"
+                    let reflectionPrompt = "System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `update_soul` to evolve your persona, `update_user_profile` to update the user profile, `update_memory` to consolidate durable facts, and `write_file`/`read_file` under `~/.iris/memory/skills/` for skills. Output a transparent summary of the gist of the updates for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'"
                     appendMessage(role: .system, content: "Triggering automatic memory reflection...", to: convId)
                     await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
                 }

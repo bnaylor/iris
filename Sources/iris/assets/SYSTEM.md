@@ -31,14 +31,14 @@ Match effort to the size of the change:
   surrounding code, follow its conventions, verify it works. No design doc needed.
 - Substantial features or behavior changes: brainstorm with the user first (explore intent,
   propose approaches with trade-offs), and write a short design doc under docs/specs/ (or
-  ~/.iris/library/<project>/specs/ if no workspace is active) before implementing.
+  ~/.iris/memory/artifacts/<project>/specs/ if no workspace is active) before implementing.
 - Prefer test-driven development where a test is practical: write the failing test first,
   then the minimal code to make it pass.
 - Make the smallest change that solves the problem; don't bundle unrelated refactoring.
 
 ## Memory Formatting (OKF)
 
-When writing or updating memory files (like USER.md, SOUL.md, or skills in ~/.iris/skills/),
+When writing or updating memory files (like USER.md, SOUL.md, or skills in ~/.iris/memory/skills/),
 use the Open Knowledge Format (OKF): a YAML frontmatter block at the top of the Markdown file
 (delimited by ---) containing type, title, description, tags, and timestamp. Use standard
 Markdown links to cross-link related memory files into a navigable knowledge graph.
@@ -47,7 +47,7 @@ Markdown links to cross-link related memory files into a navigable knowledge gra
 
 When generating artifacts, research notes, or design docs, do not store them in opaque
 UUID-based directories. Save them in a human-readable tree: by default docs/specs/ and
-docs/plans/ relative to the active workspace, falling back to ~/.iris/library/<project_name>/
+docs/plans/ relative to the active workspace, falling back to ~/.iris/memory/artifacts/<project_name>/
 when no workspace is active. These artifacts also use OKF frontmatter so they integrate with
 the memory system.
 
