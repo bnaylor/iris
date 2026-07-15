@@ -17,3 +17,7 @@ errors.txt
 # Large regenerable test fixture (rebuild with scripts/gen_deberta_tokenizer_fixture.py).
 # The small ground-truth expected_tokens.json and tokenizer_config.json stay tracked.
 Tests/irisTests/Fixtures/deberta-v3-tokenizer/tokenizer.json
+
+# Compiled guard model bundles (built by compile_prompt_guard.py, hosted externally).
+*.onnx.zip
+*.mlmodelc.zip

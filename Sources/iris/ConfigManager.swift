@@ -284,8 +284,10 @@ class ConfigManager: @unchecked Sendable {
         let savedPromptModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_MODEL") ?? ""
         self.promptGuardModel = savedPromptModel.isEmpty ? "Qwen3.5-2B-Q4_K_M.gguf" : savedPromptModel
         
+        // Default to the accurate DeBERTa-v3 ONNX guard. The old distilbert CoreML default
+        // over-blocked ordinary tool output; see docs/prompt_guard_coreml.md.
         let savedCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
-        self.promptGuardCoreMLModel = savedCoreMLModel.isEmpty ? "https://luthen.scromp.net/iris/distilbert-prompt-injection.mlmodelc.zip" : savedCoreMLModel
+        self.promptGuardCoreMLModel = savedCoreMLModel.isEmpty ? "https://luthen.scromp.net/iris/deberta-v3-base-prompt-injection-v2.onnx.zip" : savedCoreMLModel
     }
     
     var isConfigured: Bool {

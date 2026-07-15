@@ -128,7 +128,7 @@ struct SettingsView: View {
                                 } else {
                                     Button("Download Model") {
                                         Task {
-                                            await downloader.downloadModel(name: config.vibecopModel)
+                                            await downloader.downloadModel(name: config.vibecopModel, assignResolvedNameTo: \.vibecopModel)
                                         }
                                     }
                                     Text("This will download approx. \(downloader.approximateSize(for: config.vibecopModel)) of weights to your disk.")
@@ -312,7 +312,7 @@ struct SettingsView: View {
                                 } else {
                                     Button("Download Model") {
                                         Task {
-                                            await downloader.downloadModel(name: config.promptGuardModel)
+                                            await downloader.downloadModel(name: config.promptGuardModel, assignResolvedNameTo: \.promptGuardModel)
                                         }
                                     }
                                     Text("This will download approx. \(downloader.approximateSize(for: config.promptGuardModel)) of weights to your disk.")

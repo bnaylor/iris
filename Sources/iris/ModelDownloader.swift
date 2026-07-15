@@ -39,26 +39,38 @@ class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         return FileManager.default.fileExists(atPath: path)
     }
     
-    func downloadModel(name: String) async {
+    /// Downloads (and unzips, if a `.zip`) a model into `~/.iris/models/`.
+    ///
+    /// When the caller passed a URL, the config field holding it usually needs to be
+    /// rewritten to the resolved local filename so loaders can find it — but *which* field
+    /// depends on the caller (the vibecop model, the Tier 3 canary, etc.), so the caller
+    /// supplies it via `assignResolvedNameTo`. The Tier 2 guard passes `nil` because
+    /// `CoreMLEvaluator` resolves the filename from the URL itself and the field should
+    /// keep the URL for re-downloads.
+    func downloadModel(name: String, assignResolvedNameTo keyPath: ReferenceWritableKeyPath<ConfigManager, String>? = nil) async {
         guard !isDownloading else { return }
-        
+
         let isUrl = name.starts(with: "http")
         let urlString = knownModels[name] ?? (isUrl ? name : nil)
-        
+
         guard let finalUrlString = urlString, let url = URL(string: finalUrlString), url.scheme != nil else {
             self.error = "Unknown model name. Please provide a full https:// URL to a .gguf file."
             return
         }
-        
+
         let filename = isUrl ? url.lastPathComponent : name
-        
-        guard !isModelDownloaded(name: filename) else {
-            if isUrl { ConfigManager.shared.vibecopModel = filename }
-            return 
+
+        func assignResolvedName() {
+            if isUrl, let keyPath { ConfigManager.shared[keyPath: keyPath] = filename }
         }
-        
+
+        guard !isModelDownloaded(name: filename) else {
+            assignResolvedName()
+            return
+        }
+
         // Update the UI immediately so it shows the filename instead of the URL
-        if isUrl { ConfigManager.shared.vibecopModel = filename }
+        assignResolvedName()
         
         self.isDownloading = true
         self.progress = 0.0

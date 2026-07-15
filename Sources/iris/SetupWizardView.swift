@@ -315,7 +315,7 @@ struct VibecopStepView: View {
                                 ProgressView(value: downloader.progress)
                             } else {
                                 Button("Download Model") {
-                                    Task { await downloader.downloadModel(name: config.vibecopModel) }
+                                    Task { await downloader.downloadModel(name: config.vibecopModel, assignResolvedNameTo: \.vibecopModel) }
                                 }
                             }
                         } else {
@@ -497,7 +497,7 @@ struct SecurityStepView: View {
                                     ProgressView(value: downloader.progress)
                                 } else {
                                     Button("Download Model") {
-                                        Task { await downloader.downloadModel(name: config.promptGuardModel) }
+                                        Task { await downloader.downloadModel(name: config.promptGuardModel, assignResolvedNameTo: \.promptGuardModel) }
                                     }
                                 }
                             } else {
