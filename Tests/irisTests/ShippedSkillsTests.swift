@@ -12,32 +12,31 @@ struct ShippedSkillsTests {
     }
     private func read(_ url: URL) -> String? { try? String(contentsOf: url, encoding: .utf8) }
 
-    @Test("seeds the library skill and README when absent")
-    func testSeedsWhenAbsent() {
+    @Test("seedIfNeeded seeds all shipped defaults from the bundle when absent")
+    func testSeedsAllWhenAbsent() {
         let p = tempPaths(); defer { try? FileManager.default.removeItem(at: p.root) }
-        ShippedSkills.seed(into: p, librarySkill: "SKILL BODY", libraryReadme: "README BODY")
-        #expect(read(p.skillsDir.appendingPathComponent("library/SKILL.md")) == "SKILL BODY")
-        #expect(read(p.libraryDir.appendingPathComponent("README.md")) == "README BODY")
+        ShippedSkills.seedIfNeeded(p)
+        #expect(read(p.skillsDir.appendingPathComponent("library/SKILL.md"))?.contains("Library Management") == true)
+        #expect(read(p.libraryDir.appendingPathComponent("README.md"))?.contains("Iris Library") == true)
+        #expect(read(p.skillsDir.appendingPathComponent("external-libraries/SKILL.md"))?.contains("External Libraries") == true)
+        #expect(read(p.libraryDir.appendingPathComponent("EXTERNAL_LIBRARIES.md"))?.contains("read-only → read-write → curated-by-iris → convert-to-okf") == true)
     }
 
-    @Test("does not overwrite existing (bot-edited) files")
+    @Test("seedIfNeeded does not overwrite an existing (bot-edited) file")
     func testIdempotentNonDestructive() {
         let p = tempPaths(); defer { try? FileManager.default.removeItem(at: p.root) }
         try? p.ensureDirectories()
-        let skillDir = p.skillsDir.appendingPathComponent("library")
-        try? FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
-        try? "MY EDITS".write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-        try? "MY README".write(to: p.libraryDir.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-
-        ShippedSkills.seed(into: p, librarySkill: "SHIPPED", libraryReadme: "SHIPPED README")
-
-        #expect(read(skillDir.appendingPathComponent("SKILL.md")) == "MY EDITS")
-        #expect(read(p.libraryDir.appendingPathComponent("README.md")) == "MY README")
+        let reg = p.libraryDir.appendingPathComponent("EXTERNAL_LIBRARIES.md")
+        try? "MY REGISTRY".write(to: reg, atomically: true, encoding: .utf8)
+        ShippedSkills.seedIfNeeded(p)
+        #expect(read(reg) == "MY REGISTRY")
     }
 
-    @Test("bundled assets load and are non-empty")
+    @Test("all four bundled assets load and are non-empty")
     func testBundledAssetsLoad() {
         #expect(ShippedSkills.bundledText("library-SKILL").contains("Library Management"))
         #expect(ShippedSkills.bundledText("library-README").contains("Iris Library"))
+        #expect(ShippedSkills.bundledText("external-libraries-SKILL").contains("External Libraries"))
+        #expect(ShippedSkills.bundledText("external-libraries-REGISTRY").contains("Traits"))
     }
 }
