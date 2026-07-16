@@ -43,9 +43,15 @@ struct SkillManager {
     private func parseFrontmatter(from content: String, folderName: String) -> String {
         let lines = content.components(separatedBy: .newlines)
         var isFrontmatter = false
-        var name = folderName
+        // Display-name precedence: explicit `name:` > OKF `title:` > folder name.
+        var explicitName: String?
+        var title: String?
         var description = "No description provided."
-        
+
+        func value(_ line: String, _ key: String) -> String {
+            String(line.dropFirst(key.count)).trimmingCharacters(in: .whitespaces)
+        }
+
         for line in lines {
             if line == "---" {
                 if isFrontmatter { break }
@@ -54,13 +60,16 @@ struct SkillManager {
             }
             if isFrontmatter {
                 if line.starts(with: "name:") {
-                    name = line.replacingOccurrences(of: "name:", with: "").trimmingCharacters(in: .whitespaces)
+                    explicitName = value(line, "name:")
+                } else if line.starts(with: "title:") {
+                    title = value(line, "title:")
                 } else if line.starts(with: "description:") {
-                    description = line.replacingOccurrences(of: "description:", with: "").trimmingCharacters(in: .whitespaces)
+                    description = value(line, "description:")
                 }
             }
         }
-        
+
+        let name = explicitName ?? title ?? folderName
         return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.iris/memory/skills/\(folderName)/SKILL.md\n"
     }
 }

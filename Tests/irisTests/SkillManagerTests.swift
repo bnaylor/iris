@@ -38,6 +38,8 @@ struct SkillManagerTests {
         let summary = await SkillManager.shared.discoverSkills(paths: p)
         #expect(summary.contains("Maintain your permanent OKF library."))
         #expect(!summary.contains("No description provided"))
+        // OKF uses `title:` (not `name:`); discovery should display it rather than the folder.
+        #expect(summary.contains("## Skill: Library Management"))
     }
 
     // Regression: SOUL is the persona; it must be returned raw, not wrapped in
