@@ -661,6 +661,7 @@ struct IrisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     init() {
         IrisMigrator.migrate(.default)
+        ShippedSkills.seedIfNeeded(.default)
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
         
