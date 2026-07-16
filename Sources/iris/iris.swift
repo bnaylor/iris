@@ -625,9 +625,20 @@ actor IrisEngine {
             result = newResult
         }
         
+        // First-party trust: reading a file under ~/.iris/memory/ returns Iris's OWN content
+        // (SOUL, USER, memory.md, skills, artifacts, library) — not untrusted external data.
+        // Return it raw, bypassing the guard, so the same `---`-stripping / <untrusted_context>
+        // wrapping that mangles first-party content on read-back does not apply. Everything else
+        // (other paths, other tools, web results) stays guarded below.
+        if name == "read_file",
+           let path = execArgs["path"]?.stringValue,
+           IrisPaths.default.isUnderMemory(path) {
+            return result
+        }
+
         // Tier 1 Sanitization: Apply structural isolation to prevent prompt injection from tool outputs
         let structuralSafeResult = PromptInjectionGuard.sanitizeUntrustedInput(result)
-        
+
         let trustedTools: Set<String> = ["set_workspace", "register_directory_watcher"]
         let maxTier: InjectionGuard.SanitizationTier = trustedTools.contains(name) ? .tier1_structural : .tier3_canary
         

@@ -35,6 +35,18 @@ struct IrisPaths: Sendable {
     // models/ (resolved path unchanged from the old layout)
     var modelsDir: URL { root.appendingPathComponent("models") }
 
+    /// True if `rawPath` resolves to a location inside `memoryDir` — used to treat reads of
+    /// first-party memory content (SOUL, USER, skills, artifacts, library, …) as trusted.
+    /// Tilde-expands and standardizes the path (resolving `..`) first, so a traversal like
+    /// `memory/../models/x` does NOT count as inside memory. A trailing separator on the
+    /// prefix check prevents a sibling like `memory-evil` from matching.
+    func isUnderMemory(_ rawPath: String) -> Bool {
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let resolved = URL(fileURLWithPath: expanded).standardizedFileURL.path
+        let mem = memoryDir.standardizedFileURL.path
+        return resolved == mem || resolved.hasPrefix(mem + "/")
+    }
+
     /// Create the bucket directories if absent. Called by the migrator and by managers that
     /// need their directory to exist before writing.
     func ensureDirectories() throws {
