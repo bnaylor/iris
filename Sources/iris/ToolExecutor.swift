@@ -144,6 +144,18 @@ struct ToolExecutor {
                 if let errorStr = String(data: errorData, encoding: .utf8), !errorStr.isEmpty {
                     result += "\nStderr: " + errorStr
                 }
+
+                // When sandboxing is on and the `container` runtime failed to start the command
+                // (not provisioned: services down or no VM kernel), it emits opaque errors like
+                // "unauthorized request". Rewrite those to an actionable message so the model and
+                // user aren't left guessing (which previously led to confabulated "auth wall"
+                // explanations).
+                if ConfigManager.shared.enableSandboxing, proc.terminationStatus != 0,
+                   let hint = Self.sandboxSetupHint(for: result) {
+                    continuation.resume(returning: hint)
+                    return
+                }
+
                 continuation.resume(returning: result.isEmpty ? "Success" : result)
             }
             
@@ -155,6 +167,33 @@ struct ToolExecutor {
         }
     }
     
+    /// Maps a failed sandboxed `container run` output to an actionable setup message, or nil if
+    /// the output does not look like a container-runtime-not-ready error. The matched phrases are
+    /// emitted by Apple's `container` CLI when its services aren't started or no VM kernel is
+    /// installed — not by ordinary command output.
+    static func sandboxSetupHint(for output: String) -> String? {
+        let lower = output.lowercased()
+        let notReadySignatures = [
+            "unauthorized request",
+            "plugins are unavailable",
+            "no default kernel",
+            "container system start",
+            "failed to read user input",
+        ]
+        guard notReadySignatures.contains(where: { lower.contains($0) }) else { return nil }
+        return """
+        Error: the sandbox container runtime is installed but not ready. This usually means its \
+        background services aren't started or the default VM kernel isn't installed.
+
+        To fix, run in a terminal and accept the default kernel install when prompted:
+            container system start
+
+        Or disable sandboxing in Iris Settings to run commands directly on the host.
+
+        (original runtime error: \(output.trimmingCharacters(in: .whitespacesAndNewlines)))
+        """
+    }
+
     private func readFile(_ path: String) async -> String {
         let expandedPath = (path as NSString).expandingTildeInPath
         return await Task.detached {
