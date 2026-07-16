@@ -41,4 +41,10 @@
 - [ ] some eye candy to give iris a distinct look.  maybe some indigo flair?
 - [ ] explanatory text before silently going off and running a bunch of tools
 - [ ] enable sandboxing also does 'container system start' and says 'y' to download kernel.
+- [ ] enhance superpowers-emulation to include roman's extra steps; hone it to be dynamic
+  - [ ] include deterministic gate generation
+  - [ ] enhance multi-bot (and/or multi-sub-agent) review/collab protocol
+    - [ ] need an impartial pass/fail evaluator that compares against agreed start criteria; no goal drift
+    - [ ] when blockers and changes are discovered by the process, engage re-evaluation loop
+    - [ ] export this protocol to /shared/agents to make it common
 
