@@ -30,8 +30,15 @@
 - [x] Add cloud models for vibecop
 - [x] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
 - [ ] Reimagine sandboxing flows.  We should allow for even the main agent's access to be sandboxed.  Per-workspace?
+    - [ ] Sandbox perf: `run_command` uses `container run --rm` per command (~0.85s fresh-container overhead each, measured; ~8-9s per 10 commands — bad for coding sessions). Reuse one long-lived container per workspace/session and `container exec` into it to drop per-command cost toward the unsandboxed range. Needs container lifecycle/cleanup + cwd/mount handling.
 - [ ] hide "thinking" output in a twisty
 - [ ] Concept of library registries - bot-owned, remote.  curated, read-only, okf vs diverse vs ?
-- [ ] Organize ~/.iris/ and separate bot-written files from non
+- [x] Organize ~/.iris/ and separate bot-written files from non
 - [ ] Rationalize SYSTEM prompt; don't hardcode in source but ship as a read-only asset; enhance
+- [ ] /skills that isn't an LLM prompt :)
+- [ ] /-command auto-completer
+- [ ] more /-commands
+- [ ] some eye candy to give iris a distinct look.  maybe some indigo flair?
+- [ ] explanatory text before silently going off and running a bunch of tools
+- [ ] enable sandboxing also does 'container system start' and says 'y' to download kernel.
 
