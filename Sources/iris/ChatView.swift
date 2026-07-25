@@ -169,20 +169,33 @@ struct ChatView: View {
                         }
                         .background(Color(NSColor.textBackgroundColor))
                         .onChange(of: conv.messages.count) { _, _ in
-                            // Add a slight delay to ensure UI has rendered the new message before scrolling
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                withAnimation {
-                                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                                }
+                            selectedMessageIDs.removeAll()
+                            DispatchQueue.main.async {
+                                proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                            }
+                        }
+                        .onChange(of: conv.messages.last?.content) { _, _ in
+                            DispatchQueue.main.async {
+                                proxy.scrollTo("bottomAnchor", anchor: .bottom)
                             }
                         }
                         .onChange(of: state.isThinking) { _, isThinking in
                             if isThinking {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    withAnimation {
-                                        proxy.scrollTo("thinkingIndicator", anchor: .bottom)
-                                    }
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("thinkingIndicator", anchor: .bottom)
                                 }
+                            }
+                        }
+                        .onChange(of: state.activeConversationIndex) { _, _ in
+                            selectedMessageIDs.removeAll()
+                            DispatchQueue.main.async {
+                                proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                            }
+                        }
+                        .onAppear {
+                            selectedMessageIDs.removeAll()
+                            DispatchQueue.main.async {
+                                proxy.scrollTo("bottomAnchor", anchor: .bottom)
                             }
                         }
                     }
@@ -431,6 +444,7 @@ struct ChatView: View {
     }
     
     private func submit() {
+        selectedMessageIDs.removeAll()
         state.sendMessage(inputText)
         inputText = ""
     }
