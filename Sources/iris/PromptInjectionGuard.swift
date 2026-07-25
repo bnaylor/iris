@@ -13,35 +13,37 @@ struct PromptInjectionGuard {
     /// flags essentially all benign tool output (see docs/prompt_guard_coreml.md and the
     /// "Guardrail Diagnostics" regression).
     static func sanitizeUntrustedInput(_ rawInput: String) -> String {
-        var clean = rawInput
+        measureSync(.injectionGuard) {
+            var clean = rawInput
 
-        // 1. Homoglyph & Encoding Normalization
-        // Normalize to prevent attackers from using invisible characters or weird encodings to bypass filters.
-        // We use NFKC to normalize compatibility characters.
-        clean = clean.precomposedStringWithCompatibilityMapping
+            // 1. Homoglyph & Encoding Normalization
+            // Normalize to prevent attackers from using invisible characters or weird encodings to bypass filters.
+            // We use NFKC to normalize compatibility characters.
+            clean = clean.precomposedStringWithCompatibilityMapping
 
-        // Remove control characters (except common whitespace like newlines/tabs)
-        let controlChars = CharacterSet.controlCharacters.subtracting(CharacterSet.whitespacesAndNewlines)
-        clean = clean.components(separatedBy: controlChars).joined()
+            // Remove control characters (except common whitespace like newlines/tabs)
+            let controlChars = CharacterSet.controlCharacters.subtracting(CharacterSet.whitespacesAndNewlines)
+            clean = clean.components(separatedBy: controlChars).joined()
 
-        // 2. Strip common LLM role delimiters that attempt to hijack the conversation
-        let malRolePatterns = [
-            "system:",
-            "assistant:",
-            "user:",
-            "model:",
-            "---",
-            "###",
-            "<|im_start|>",
-            "<|im_end|>",
-            "Instruction:",
-            "System Prompt:"
-        ]
+            // 2. Strip common LLM role delimiters that attempt to hijack the conversation
+            let malRolePatterns = [
+                "system:",
+                "assistant:",
+                "user:",
+                "model:",
+                "---",
+                "###",
+                "<|im_start|>",
+                "<|im_end|>",
+                "Instruction:",
+                "System Prompt:"
+            ]
 
-        for pattern in malRolePatterns {
-            clean = clean.replacingOccurrences(of: pattern, with: "", options: [.caseInsensitive])
+            for pattern in malRolePatterns {
+                clean = clean.replacingOccurrences(of: pattern, with: "", options: [.caseInsensitive])
+            }
+
+            return clean
         }
-
-        return clean
     }
 }

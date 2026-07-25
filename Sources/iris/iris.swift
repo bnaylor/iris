@@ -23,12 +23,14 @@ actor IrisEngine {
     @discardableResult
     private func ensureSystemPrompt() async -> Content {
         if let existing = systemPrompt { return existing }
-        let soul = await manager.loadSOUL()
-        let skills = await manager.discoverSkills()
-        let steering = SystemSteering.shipped()
-        let prompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)\n\n\(steering)", functionCall: nil, functionResponse: nil)])
-        systemPrompt = prompt
-        return prompt
+        return await measure(.contextAssembly) {
+            let soul = await manager.loadSOUL()
+            let skills = await manager.discoverSkills()
+            let steering = SystemSteering.shipped()
+            let prompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)\n\n\(steering)", functionCall: nil, functionResponse: nil)])
+            systemPrompt = prompt
+            return prompt
+        }
     }
     
     func setSystemPrompt(text: String) {
@@ -81,7 +83,12 @@ actor IrisEngine {
         // overlapping turns can't leave it stuck (centralized in AppState's reference count).
         let stateForThinking = state
         await MainActor.run { stateForThinking?.beginThinking() }
-        await processInputBody(input, source: source, conversationId: conversationId)
+        let turnID = PerformanceProfiler.shared.beginTurn(label: input, source: source)
+        let turnStart = CFAbsoluteTimeGetCurrent()
+        await PerformanceProfiler.$currentTurnID.withValue(turnID) {
+            await processInputBody(input, source: source, conversationId: conversationId)
+        }
+        PerformanceProfiler.shared.endTurn(turnID, totalMs: (CFAbsoluteTimeGetCurrent() - turnStart) * 1000.0)
         await MainActor.run { stateForThinking?.endThinking() }
     }
 
@@ -385,32 +392,34 @@ actor IrisEngine {
                 if !toolCalls.isEmpty {
                     hasFunctionCall = true
                     
-                    let results = await withTaskGroup(of: (Int, String).self) { group in
-                        for (index, call) in toolCalls.enumerated() {
-                            group.addTask {
-                                let toolCallDict: [String: Any] = [
-                                    "name": call.name,
-                                    "args": call.args.mapValues { $0.anyValue }
-                                ]
-                                if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
-                                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                                    await self.pushToUI(role: .system, text: "[TOOL_CALL]\n\(jsonString)", conversationId: conversationId)
-                                } else {
-                                    await self.pushToUI(role: .system, text: "Running tool: \(call.name)", conversationId: conversationId)
+                    let results = await measure(.toolExecution) {
+                        await withTaskGroup(of: (Int, String).self) { group in
+                            for (index, call) in toolCalls.enumerated() {
+                                group.addTask {
+                                    let toolCallDict: [String: Any] = [
+                                        "name": call.name,
+                                        "args": call.args.mapValues { $0.anyValue }
+                                    ]
+                                    if let jsonData = try? JSONSerialization.data(withJSONObject: toolCallDict, options: .prettyPrinted),
+                                       let jsonString = String(data: jsonData, encoding: .utf8) {
+                                        await self.pushToUI(role: .system, text: "[TOOL_CALL]\n\(jsonString)", conversationId: conversationId)
+                                    } else {
+                                        await self.pushToUI(role: .system, text: "Running tool: \(call.name)", conversationId: conversationId)
+                                    }
+
+                                    let result = await self.executeFunctionCall(call, conversationId: conversationId, workspacePath: workspacePath)
+                                    return (index, result)
                                 }
-
-                                let result = await self.executeFunctionCall(call, conversationId: conversationId, workspacePath: workspacePath)
-                                return (index, result)
                             }
-                        }
 
-                        // Collect results keyed by their original index so we can restore order
-                        // deterministically even when multiple calls share the same name/args.
-                        var collection: [Int: String] = [:]
-                        for await (index, result) in group {
-                            collection[index] = result
+                            // Collect results keyed by their original index so we can restore order
+                            // deterministically even when multiple calls share the same name/args.
+                            var collection: [Int: String] = [:]
+                            for await (index, result) in group {
+                                collection[index] = result
+                            }
+                            return collection
                         }
-                        return collection
                     }
 
                     var responseParts: [Part] = []

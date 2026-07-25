@@ -24,6 +24,12 @@ public struct InjectionGuard {
     /// output; wrapping happens only after classification. See the "Guardrail Diagnostics"
     /// regression in docs/prompt_guard_coreml.md.
     public static func sanitize(_ rawInput: String, contextTag: String = "", maxTier: SanitizationTier = .tier1_structural) async -> String {
+        let __turnID = PerformanceProfiler.currentTurnID
+        let __start = CFAbsoluteTimeGetCurrent()
+        defer {
+            PerformanceProfiler.shared.record(turnID: __turnID, category: .injectionGuard,
+                                              durationMs: (CFAbsoluteTimeGetCurrent() - __start) * 1000.0)
+        }
         let source = sanitizeSourceLabel(contextTag)
 
         // Tier 1: Strict Structural Isolation & Text Normalization
