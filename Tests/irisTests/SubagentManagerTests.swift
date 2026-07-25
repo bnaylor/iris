@@ -263,4 +263,10 @@ final class SubagentManagerTests: XCTestCase {
         XCTAssertEqual(summary, "Finished with unknown effort.")
         XCTAssertEqual(usedModel, "claude-3-5-sonnet")
     }
+
+    func testRolePromptIncludesVMConfigAuthority() {
+        let prompt = SubagentManager.shared.generateRolePrompt(role: "engineer")
+        XCTAssertTrue(prompt.contains("fully configurable sandboxed micro-VM"))
+        XCTAssertTrue(prompt.contains("full root permissions"))
+    }
 }

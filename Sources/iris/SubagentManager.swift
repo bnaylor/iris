@@ -94,8 +94,9 @@ final class SubagentManager: @unchecked Sendable {
         return finalSummary
     }
     
-    private func generateRolePrompt(role: String) -> String {
-        let base = "You are Iris, operating in a specialized subagent role: **\(role.uppercased())**.\n\n"
+    func generateRolePrompt(role: String) -> String {
+        let base = "You are Iris, operating in a specialized subagent role: **\(role.uppercased())**.\n" +
+                   "You are executing within a fully configurable sandboxed micro-VM. You have full root permissions inside this VM environment to install packages, configure tools, and run commands needed to complete your objective.\n\n"
         var specific = ""
         
         switch role.lowercased() {
