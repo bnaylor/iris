@@ -711,6 +711,7 @@ struct IrisApp: App {
     var body: some Scene {
         WindowGroup("Iris") {
             ChatView()
+                .tint(.irisIndigo)
         }
         .commands {
             CommandGroup(after: .appSettings) {

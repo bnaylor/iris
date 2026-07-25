@@ -131,6 +131,11 @@ struct ChatView: View {
                         }
                         .listStyle(.plain)
                         .defaultScrollAnchor(.bottom)
+                        .overlay {
+                            if conv.messages.isEmpty {
+                                IrisWelcomeView()
+                            }
+                        }
                         .onCopyCommand {
                             var selectedMessages: [ChatMessage] = []
                             for item in groupedMessages(for: conv) {
@@ -192,8 +197,8 @@ struct ChatView: View {
                         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApproval != nil)
                     }
                     
-                    Divider()
-                    
+                    SpectrumLine(active: state.isThinking)
+
                     HStack {
                         TextField("Message Iris...", text: $inputText)
                             .textFieldStyle(.plain)
@@ -210,7 +215,7 @@ struct ChatView: View {
                         
                         Button(action: submit) {
                             Image(systemName: "paperplane.fill")
-                                .foregroundColor(inputText.isEmpty ? .secondary : .accentColor)
+                                .foregroundColor(inputText.isEmpty ? .secondary : .irisIndigo)
                         }
                         .buttonStyle(.plain)
                         .disabled(inputText.isEmpty)
@@ -463,7 +468,7 @@ struct MessageView: View {
                         .padding(10)
                         .background(
                             LinearGradient(
-                                gradient: Gradient(colors: [Color.accentColor.opacity(0.5), Color.accentColor]),
+                                gradient: Gradient(colors: [Color.irisIndigo.opacity(0.55), Color.irisIndigo]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -471,7 +476,7 @@ struct MessageView: View {
                         .foregroundColor(textColor)
                         .cornerRadius(12)
                         .cornerRadius(0, corners: [.bottomRight])
-                        .shadow(color: Color.accentColor.opacity(0.2), radius: 3, x: 0, y: 2)
+                        .shadow(color: Color.irisIndigo.opacity(0.25), radius: 3, x: 0, y: 2)
                 } else {
                     Markdown(message.content)
                         .textSelection(.enabled)
@@ -749,22 +754,24 @@ struct TypingIndicator: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle()
+                .fill(Color.irisIndigo)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.0), value: scale)
             Circle()
+                .fill(Color.irisBlue)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.2), value: scale)
             Circle()
+                .fill(Color.irisTeal)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .animation(.easeInOut(duration: 0.6).repeatForever().delay(0.4), value: scale)
         }
-        .foregroundColor(.accentColor)
         .onAppear {
             scale = 1.0
             opacity = 1.0

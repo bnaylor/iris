@@ -38,7 +38,7 @@
 - [ ] /skills that isn't an LLM prompt :)
 - [ ] /-command auto-completer
 - [ ] more /-commands
-- [ ] some eye candy to give iris a distinct look.  maybe some indigo flair?
+- [x] some eye candy to give iris a distinct look.  maybe some indigo flair?
 - [x] explanatory text before silently going off and running a bunch of tools
 - [ ] enable sandboxing also does 'container system start' and says 'y' to download kernel.
 - [ ] enhance superpowers-emulation to include roman's extra steps; hone it to be dynamic
