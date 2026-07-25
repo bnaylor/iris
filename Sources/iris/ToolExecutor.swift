@@ -75,11 +75,11 @@ struct ToolExecutor {
         return tools
     }
     
-    func execute(name: String, args: [String: JSONValue], cwd: String? = nil, conversationId: UUID? = nil) async -> String {
+    func execute(name: String, args: [String: JSONValue], cwd: String? = nil, conversationId: UUID? = nil, useSandbox: Bool = false) async -> String {
         switch name {
         case "run_command":
             guard let command = args["command"]?.stringValue else { return "Error: Missing command" }
-            return await runCommand(command, cwd: cwd, conversationId: conversationId)
+            return await runCommand(command, cwd: cwd, conversationId: conversationId, useSandbox: useSandbox)
         case "read_file":
             guard let path = args["path"]?.stringValue else { return "Error: Missing path" }
             return await readFile(path)
@@ -105,10 +105,10 @@ struct ToolExecutor {
         }
     }
     
-    private func runCommand(_ command: String, cwd: String?, conversationId: UUID? = nil) async -> String {
-        if ConfigManager.shared.enableSandboxing, let conversationId {
+    private func runCommand(_ command: String, cwd: String?, conversationId: UUID? = nil, useSandbox: Bool = false) async -> String {
+        if useSandbox, let conversationId {
             guard SandboxingManager.shared.isContainerInstalled else {
-                return "Error: Sandboxing is enabled but the container runtime is not installed. Run the /sandbox command to install it, or disable sandboxing in settings."
+                return "Error: sandboxing is on but the container runtime isn't installed. Open Iris Settings → Sandboxing to install it, or turn sandboxing off."
             }
             let expandedCwd = cwd.map { ($0 as NSString).expandingTildeInPath }
             return await SandboxSessionManager.shared.run(command: command, conversationId: conversationId, workspace: expandedCwd)
@@ -117,9 +117,9 @@ struct ToolExecutor {
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
-            if ConfigManager.shared.enableSandboxing {
+            if useSandbox {
                 guard SandboxingManager.shared.isContainerInstalled else {
-                    continuation.resume(returning: "Error: Sandboxing is enabled but the container runtime is not installed. Run the /sandbox command to install it, or disable sandboxing in settings.")
+                    continuation.resume(returning: "Error: sandboxing is on but the container runtime isn't installed. Open Iris Settings → Sandboxing to install it, or turn sandboxing off.")
                     return
                 }
                 process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
@@ -157,7 +157,7 @@ struct ToolExecutor {
                 // "unauthorized request". Rewrite those to an actionable message so the model and
                 // user aren't left guessing (which previously led to confabulated "auth wall"
                 // explanations).
-                if ConfigManager.shared.enableSandboxing, proc.terminationStatus != 0,
+                if useSandbox, proc.terminationStatus != 0,
                    let hint = Self.sandboxSetupHint(for: result) {
                     continuation.resume(returning: hint)
                     return
