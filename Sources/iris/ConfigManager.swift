@@ -145,6 +145,10 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(sandboxIdleTimeoutMinutes, forKey: "SANDBOX_IDLE_TIMEOUT_MINUTES") }
     }
 
+    var mainAgentSandboxDefault: SandboxPref {
+        didSet { UserDefaults.standard.set(mainAgentSandboxDefault.rawValue, forKey: "MAIN_AGENT_SANDBOX_DEFAULT") }
+    }
+
     var enableVibecop: Bool {
         didSet { UserDefaults.standard.set(enableVibecop, forKey: "ENABLE_VIBECOP") }
     }
@@ -270,6 +274,18 @@ class ConfigManager: @unchecked Sendable {
         self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
         let savedIdle = UserDefaults.standard.integer(forKey: "SANDBOX_IDLE_TIMEOUT_MINUTES")
         self.sandboxIdleTimeoutMinutes = savedIdle == 0 ? 30 : savedIdle
+
+        if UserDefaults.standard.object(forKey: "MAIN_AGENT_SANDBOX_DEFAULT") == nil {
+            // First run with this key. Preserve the experience of users who already run
+            // sandboxed (enableSandboxing on today == sandboxed main agent); fresh installs
+            // default to host (the dual-layer model).
+            let seeded: SandboxPref = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING") ? .sandboxed : .host
+            self.mainAgentSandboxDefault = seeded
+            UserDefaults.standard.set(seeded.rawValue, forKey: "MAIN_AGENT_SANDBOX_DEFAULT")
+        } else {
+            let raw = UserDefaults.standard.string(forKey: "MAIN_AGENT_SANDBOX_DEFAULT") ?? "host"
+            self.mainAgentSandboxDefault = SandboxPref(rawValue: raw) ?? .host
+        }
 
         self.enableVibecop = UserDefaults.standard.bool(forKey: "ENABLE_VIBECOP")
         let savedEngine = UserDefaults.standard.string(forKey: "VIBECOP_ENGINE") ?? ""
