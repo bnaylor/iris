@@ -8,6 +8,10 @@ struct SettingsView: View {
     @State private var downloader = ModelDownloader.shared
     @State private var showingDownloadError = false
     
+    @State private var availableUpdate: ReleaseInfo?
+    @State private var isCheckingForUpdates = false
+    @State private var updateCheckStatusMessage: String?
+    
     @State private var vibecopTestStatus: String?
     @State private var tier2TestStatus: String?
     @State private var tier3TestStatus: String?
@@ -484,6 +488,66 @@ struct SettingsView: View {
             .tabItem {
                 Label("Advanced", systemImage: "lock.shield")
             }
+            
+            // MARK: - Updates Tab
+            Form {
+                Section(header: Text("Application Updates").font(.headline)) {
+                    HStack {
+                        Text("Installed Version:")
+                        Spacer()
+                        Text("v\(Constants.appVersion)")
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    if let update = availableUpdate {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    .foregroundColor(.irisIndigo)
+                                Text("New Version Available: \(update.tagName)")
+                                    .font(.headline)
+                            }
+                            
+                            if !update.body.isEmpty {
+                                Text(update.body)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(4)
+                            }
+                            
+                            Button("Download Update (\(update.tagName))") {
+                                UpdateManager.shared.openReleasePage(url: update.htmlUrl)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
+                    HStack {
+                        Button(action: { checkForUpdates() }) {
+                            if isCheckingForUpdates {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Text("Check for Updates")
+                            }
+                        }
+                        .disabled(isCheckingForUpdates)
+                        
+                        if let msg = updateCheckStatusMessage {
+                            Spacer()
+                            Text(msg)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .padding(20)
+            .tabItem {
+                Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+            }
         }
         .frame(minWidth: 600, minHeight: 600)
         .onChange(of: downloader.error) { _, newValue in
@@ -498,4 +562,24 @@ struct SettingsView: View {
         }
     }
     
+    private func checkForUpdates() {
+        isCheckingForUpdates = true
+        updateCheckStatusMessage = "Checking for updates..."
+        Task {
+            let result = await UpdateManager.shared.checkForUpdates()
+            await MainActor.run {
+                self.isCheckingForUpdates = false
+                switch result {
+                case .updateAvailable(let release):
+                    self.availableUpdate = release
+                    self.updateCheckStatusMessage = "Update available: \(release.tagName)"
+                case .upToDate:
+                    self.availableUpdate = nil
+                    self.updateCheckStatusMessage = "Iris is up to date (v\(Constants.appVersion))."
+                case .error(let msg):
+                    self.updateCheckStatusMessage = "Failed to check for updates: \(msg)"
+                }
+            }
+        }
+    }
 }

@@ -92,6 +92,9 @@ class AppState {
     private(set) var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
     var pendingApproval: ToolApprovalRequest?
+    var availableUpdate: ReleaseInfo?
+    var isCheckingForUpdates = false
+    var updateCheckStatusMessage: String?
     var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
 
     /// Reference count of in-flight "thinking" work. `isThinking` is derived from this.
@@ -472,6 +475,27 @@ class AppState {
         let cont = pending.continuation
         pendingApproval = nil
         cont.resume(returning: approved)
+    }
+    
+    func checkForUpdates(explicit: Bool = false) {
+        isCheckingForUpdates = true
+        updateCheckStatusMessage = "Checking for updates..."
+        Task {
+            let result = await UpdateManager.shared.checkForUpdates()
+            await MainActor.run {
+                self.isCheckingForUpdates = false
+                switch result {
+                case .updateAvailable(let release):
+                    self.availableUpdate = release
+                    self.updateCheckStatusMessage = "Update available: \(release.tagName)"
+                case .upToDate:
+                    self.availableUpdate = nil
+                    self.updateCheckStatusMessage = explicit ? "Iris is up to date (v\(Constants.appVersion))." : nil
+                case .error(let msg):
+                    self.updateCheckStatusMessage = explicit ? "Failed to check for updates: \(msg)" : nil
+                }
+            }
+        }
     }
     
     private var saveTask: Task<Void, Never>? = nil
