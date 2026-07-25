@@ -87,6 +87,14 @@ To build:
 swift build
 ```
 
+### Production Packaging & Auto-Updates
+
+Iris includes a built-in release packaging script and GitHub Release auto-updater:
+
+- **Build Production Release**: Run `./scripts/build_release.sh [version_tag]` to compile a signed `Iris.app` bundle, generate `Iris-vX.Y.Z-macOS.zip`, and compute SHA256 checksums.
+- **Publish to GitHub**: Pass `--publish` to automatically publish the zip bundle to GitHub Releases via `gh release create`.
+- **Auto-Updates**: Iris automatically checks GitHub Releases for new updates. Users can manually check for updates via the **Updates** tab in Settings.
+
 ### Model Context Protocol (MCP)
 
 Iris natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). 
