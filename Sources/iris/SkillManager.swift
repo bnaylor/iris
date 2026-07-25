@@ -17,30 +17,52 @@ struct SkillManager {
         return "You are Iris, a native macOS agent running on the local machine."
     }
 
-    func discoverSkills(paths: IrisPaths = .default) async -> String {
+    /// A registered skill, parsed from its SKILL.md frontmatter. The body is never read.
+    struct SkillInfo: Sendable {
+        let name: String
+        let description: String
+        let folderName: String
+    }
+
+    /// Deterministic list of registered skills (sorted by display name). Shared by the system
+    /// prompt (`discoverSkills`) and the `/skills` command so both see the same source of truth.
+    func listSkills(paths: IrisPaths = .default) async -> [SkillInfo] {
         let skillsDir = paths.skillsDir.path
         let fileManager = FileManager.default
-        var skillsSummary = "# Available Skills\n\n"
 
         guard let items = try? fileManager.contentsOfDirectory(atPath: skillsDir) else {
-            return skillsSummary + "No skills found."
+            return []
         }
 
+        var skills: [SkillInfo] = []
         for item in items {
             let skillPath = "\(skillsDir)/\(item)/SKILL.md"
-            if fileManager.fileExists(atPath: skillPath) {
-                if let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    // Only the frontmatter (name/description/path) is surfaced here — never the
-                    // skill body — and it is parsed from the raw file.
-                    skillsSummary += parseFrontmatter(from: content, folderName: item) + "\n"
-                }
+            guard fileManager.fileExists(atPath: skillPath),
+                  let content = try? String(contentsOfFile: skillPath, encoding: .utf8) else {
+                continue
             }
+            // Only the frontmatter (name/description) is surfaced here — never the skill body.
+            skills.append(parseFrontmatter(from: content, folderName: item))
         }
 
+        return skills.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func discoverSkills(paths: IrisPaths = .default) async -> String {
+        let skills = await listSkills(paths: paths)
+        guard !skills.isEmpty else {
+            return "# Available Skills\n\nNo skills found."
+        }
+
+        var skillsSummary = "# Available Skills\n\n"
+        for skill in skills {
+            skillsSummary += "## Skill: \(skill.name)\n**Description:** \(skill.description)\n"
+            skillsSummary += "**Path:** ~/.iris/memory/skills/\(skill.folderName)/SKILL.md\n\n"
+        }
         return skillsSummary
     }
-    
-    private func parseFrontmatter(from content: String, folderName: String) -> String {
+
+    private func parseFrontmatter(from content: String, folderName: String) -> SkillInfo {
         let lines = content.components(separatedBy: .newlines)
         var isFrontmatter = false
         // Display-name precedence: explicit `name:` > OKF `title:` > folder name.
@@ -70,6 +92,6 @@ struct SkillManager {
         }
 
         let name = explicitName ?? title ?? folderName
-        return "## Skill: \(name)\n**Description:** \(description)\n**Path:** ~/.iris/memory/skills/\(folderName)/SKILL.md\n"
+        return SkillInfo(name: name, description: description, folderName: folderName)
     }
 }

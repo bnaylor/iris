@@ -243,6 +243,26 @@ class AppState {
             cancelTasks(for: convId)
             appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
             return
+        } else if trimmed == "/skills" {
+            // Handled deterministically in-app — never sent to the model, which would otherwise
+            // improvise its own summary.
+            Task { [weak self] in
+                let skills = await SkillManager.shared.listSkills()
+                guard let self else { return }
+                // System messages render as plain monospaced text (not Markdown), so format as
+                // an aligned plain-text list rather than using Markdown syntax.
+                let body: String
+                if skills.isEmpty {
+                    body = "No skills are currently registered."
+                } else {
+                    let list = skills
+                        .map { "• \($0.name) — \($0.description)" }
+                        .joined(separator: "\n")
+                    body = "Registered skills (\(skills.count))\n\n\(list)"
+                }
+                self.appendMessage(role: .system, content: body, to: convId)
+            }
+            return
         } else if trimmed.hasPrefix("/reflect") {
             appendMessage(role: .system, content: "Triggering manual memory reflection...", to: convId)
             let reflectionPrompt = """
