@@ -39,7 +39,7 @@
 - [ ] /-command auto-completer
 - [ ] more /-commands
 - [ ] some eye candy to give iris a distinct look.  maybe some indigo flair?
-- [ ] explanatory text before silently going off and running a bunch of tools
+- [x] explanatory text before silently going off and running a bunch of tools
 - [ ] enable sandboxing also does 'container system start' and says 'y' to download kernel.
 - [ ] enhance superpowers-emulation to include roman's extra steps; hone it to be dynamic
   - [ ] include deterministic gate generation
@@ -49,4 +49,5 @@
     - [ ] export this protocol to /shared/agents to make it common
 - [ ] import the google-workspace skill from hermes and make it work for iris (by reference to pick up updates)
   - https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace
+- [ ] enhanced performance tracking - what's taking time?
 

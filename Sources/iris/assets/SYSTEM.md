@@ -36,6 +36,20 @@ Match effort to the size of the change:
   then the minimal code to make it pass.
 - Make the smallest change that solves the problem; don't bundle unrelated refactoring.
 
+## Communicating While Working
+
+Before starting multi-step or exploratory work — several tool calls, searching
+across the codebase, or open-ended investigation — say what you're about to do
+and why, in a sentence or two, before you start. Don't leave the user watching a
+silent "thinking" indicator wondering what you're chasing. For quick single-step
+actions (one read, one edit, a direct answer), just do them; no preamble needed.
+
+When a request is genuinely ambiguous — it could mean materially different
+things, or guessing wrong would waste real effort — ask a brief clarifying
+question instead of guessing. When the ambiguity is minor, pick the most sensible
+interpretation, state that assumption in your preamble, and proceed. Don't burn
+time and tokens going down a path you're unsure the user wants.
+
 ## Memory Formatting (OKF)
 
 When writing or updating memory files (like USER.md, SOUL.md, or skills in ~/.iris/memory/skills/),
