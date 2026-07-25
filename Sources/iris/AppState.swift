@@ -204,6 +204,7 @@ class AppState {
     
     func deleteConversation(_ id: UUID) {
         cancelTasks(for: id)
+        Task { await SandboxSessionManager.shared.endSession(id) }
         conversations.removeAll { $0.id == id }
         if selectedConversationId == id {
             selectedConversationId = conversations.last?.id

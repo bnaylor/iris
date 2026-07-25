@@ -75,11 +75,11 @@ struct ToolExecutor {
         return tools
     }
     
-    func execute(name: String, args: [String: JSONValue], cwd: String? = nil) async -> String {
+    func execute(name: String, args: [String: JSONValue], cwd: String? = nil, conversationId: UUID? = nil) async -> String {
         switch name {
         case "run_command":
             guard let command = args["command"]?.stringValue else { return "Error: Missing command" }
-            return await runCommand(command, cwd: cwd)
+            return await runCommand(command, cwd: cwd, conversationId: conversationId)
         case "read_file":
             guard let path = args["path"]?.stringValue else { return "Error: Missing path" }
             return await readFile(path)
@@ -105,7 +105,14 @@ struct ToolExecutor {
         }
     }
     
-    private func runCommand(_ command: String, cwd: String?) async -> String {
+    private func runCommand(_ command: String, cwd: String?, conversationId: UUID? = nil) async -> String {
+        if ConfigManager.shared.enableSandboxing, let conversationId {
+            guard SandboxingManager.shared.isContainerInstalled else {
+                return "Error: Sandboxing is enabled but the container runtime is not installed. Run the /sandbox command to install it, or disable sandboxing in settings."
+            }
+            let expandedCwd = cwd.map { ($0 as NSString).expandingTildeInPath }
+            return await SandboxSessionManager.shared.run(command: command, conversationId: conversationId, workspace: expandedCwd)
+        }
         return await withCheckedContinuation { continuation in
             let process = Process()
             let outputPipe = Pipe()

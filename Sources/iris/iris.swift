@@ -595,19 +595,19 @@ actor IrisEngine {
             if needsApproval {
                 let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
                 if approved {
-                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId)
                 } else {
                     result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
                 }
             } else {
-                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath)
+                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId)
             }
         }
         
         return result
     }
     
-    private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?) async -> String {
+    private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?, conversationId: UUID?) async -> String {
         var execArgs: [String: JSONValue] = args
         
         let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs)
@@ -625,7 +625,7 @@ actor IrisEngine {
             }
         }
         
-        var result = await executor.execute(name: name, args: execArgs, cwd: cwd)
+        var result = await executor.execute(name: name, args: execArgs, cwd: cwd, conversationId: conversationId)
         
         let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result)
         if case .block(let reason) = afterDecision {
@@ -682,6 +682,14 @@ struct IrisApp: App {
     init() {
         IrisMigrator.migrate(.default)
         ShippedSkills.seedIfNeeded(.default)
+        Task {
+            await SandboxSessionManager.shared.reapOrphans()
+            while true {
+                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000) // every 5 min
+                let minutes = await MainActor.run { ConfigManager.shared.sandboxIdleTimeoutMinutes }
+                await SandboxSessionManager.shared.reapIdle(olderThan: TimeInterval(minutes * 60))
+            }
+        }
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
         
