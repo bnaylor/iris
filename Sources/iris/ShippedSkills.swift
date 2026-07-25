@@ -19,6 +19,8 @@ enum ShippedSkills {
                      target: paths.skillsDir.appendingPathComponent("external-libraries/SKILL.md")),
             SeedItem(content: bundledText("external-libraries-REGISTRY"),
                      target: paths.libraryDir.appendingPathComponent("EXTERNAL_LIBRARIES.md")),
+            SeedItem(content: bundledText("sandbox-usage-SKILL"),
+                     target: paths.skillsDir.appendingPathComponent("sandbox-usage/SKILL.md")),
         ], ensuring: paths)
     }
 
