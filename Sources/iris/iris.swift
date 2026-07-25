@@ -83,22 +83,25 @@ actor IrisEngine {
         repromptTasks[conversationId] = nil
     }
 
-    /// Resolves whether a run_command for this conversation should be sandboxed, emitting the
-    /// no-runtime fallback notice once per conversation. Non-run_command tools return false.
-    private func resolveUseSandbox(toolName: String, conversationId: UUID, workspacePath: String?) async -> Bool {
-        guard toolName == "run_command" else { return false }
+    /// The principal-based sandbox decision for this conversation (no side effects). Shared by
+    /// run_command routing and command-hook routing so both honor the same dual-layer policy.
+    private func sandboxDecision(conversationId: UUID, workspacePath: String?) async -> SandboxDecision {
         let localState = state
         let perConv = await MainActor.run {
             localState?.conversations.first(where: { $0.id == conversationId })?.mainAgentSandbox
         }
-        let decision = SandboxPolicy.resolve(
+        return SandboxPolicy.resolve(
             masterEnabled: ConfigManager.shared.enableSandboxing,
             principal: principal,
             perConversation: perConv,
             perWorkspace: SandboxPolicy.perWorkspaceOverride(workspace: workspacePath),
             globalDefault: ConfigManager.shared.mainAgentSandboxDefault,
             runtimeAvailable: SandboxingManager.shared.isContainerInstalled)
+    }
 
+    private func resolveUseSandbox(toolName: String, conversationId: UUID, workspacePath: String?) async -> Bool {
+        guard toolName == "run_command" else { return false }
+        let decision = await sandboxDecision(conversationId: conversationId, workspacePath: workspacePath)
         switch decision {
         case .sandboxed:
             return true
@@ -111,6 +114,16 @@ actor IrisEngine {
             }
             return false
         }
+    }
+
+    /// Whether command hooks fired during this conversation's turn should run sandboxed. Follows
+    /// the agent's sandbox policy (subagents always sandboxed; main agent per its resolution),
+    /// independent of any specific tool. No warn side effect — run_command already surfaces it.
+    private func hooksUseSandbox(conversationId: UUID, workspacePath: String?) async -> Bool {
+        if case .sandboxed = await sandboxDecision(conversationId: conversationId, workspacePath: workspacePath) {
+            return true
+        }
+        return false
     }
 
     func processInput(_ input: String, source: String, conversationId: UUID) async {
@@ -131,9 +144,15 @@ actor IrisEngine {
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
 
         let localState = state
-        
+
+        // Resolve once per turn where command hooks should run (main agent per policy; subagents
+        // always sandboxed). Threaded into every hook fire below — never stored on the shared
+        // HookManager, since main/subagent turns fire hooks concurrently.
+        let hookWorkspace = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.workspacePath }
+        let hooksSandbox = await hooksUseSandbox(conversationId: conversationId, workspacePath: hookWorkspace)
+
         // BeforeAgent Hook
-        let beforeAgentDecision = await HookManager.shared.fireBeforeAgent(input: text)
+        let beforeAgentDecision = await HookManager.shared.fireBeforeAgent(input: text, useSandbox: hooksSandbox)
         var finalText = text
         if case .block(let reason) = beforeAgentDecision {
             await pushToUI(role: .system, text: "Hook blocked turn: \(reason)", conversationId: conversationId)
@@ -323,7 +342,7 @@ actor IrisEngine {
             )
         ))
 
-        let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList)
+        let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList, useSandbox: hooksSandbox)
         if case .block(let reason) = toolSelectionDecision {
             await pushToUI(role: .system, text: "Hook blocked tool selection: \(reason)", conversationId: conversationId)
             return
@@ -333,7 +352,7 @@ actor IrisEngine {
             }
         }
         
-        let preCompressDecision = await HookManager.shared.firePreCompress(history: history)
+        let preCompressDecision = await HookManager.shared.firePreCompress(history: history, useSandbox: hooksSandbox)
         if case .block(let reason) = preCompressDecision {
             await pushToUI(role: .system, text: "Hook PreCompress blocked execution: \(reason)", conversationId: conversationId)
             return
@@ -352,7 +371,7 @@ actor IrisEngine {
             // (e.g. the conversation was deleted or the goal was stopped mid-turn).
             if Task.isCancelled { break }
             do {
-                let beforeModelDecision = await HookManager.shared.fireBeforeModel(request: request)
+                let beforeModelDecision = await HookManager.shared.fireBeforeModel(request: request, useSandbox: hooksSandbox)
                 if case .block(let reason) = beforeModelDecision {
                     await pushToUI(role: .system, text: "Hook BeforeModel blocked execution: \(reason)", conversationId: conversationId)
                     break
@@ -373,7 +392,7 @@ actor IrisEngine {
                     localState?.updateSubagentStatus(id: conversationId, status: "Executing...")
                 }
                 
-                let afterModelDecision = await HookManager.shared.fireAfterModel(response: response)
+                let afterModelDecision = await HookManager.shared.fireAfterModel(response: response, useSandbox: hooksSandbox)
                 if case .block(let reason) = afterModelDecision {
                     await pushToUI(role: .system, text: "Hook AfterModel blocked execution: \(reason)", conversationId: conversationId)
                     break
@@ -410,7 +429,7 @@ actor IrisEngine {
                     if let responseText = part.text {
                         await pushToUI(role: .agent, text: responseText, conversationId: conversationId)
                         
-                        let afterAgentDecision = await HookManager.shared.fireAfterAgent(output: responseText)
+                        let afterAgentDecision = await HookManager.shared.fireAfterAgent(output: responseText, useSandbox: hooksSandbox)
                         if case .block(let reason) = afterAgentDecision {
                             await pushToUI(role: .system, text: "Hook AfterAgent blocked execution: \(reason)", conversationId: conversationId)
                         }
@@ -482,7 +501,7 @@ actor IrisEngine {
                     turnFinished = true
                 }
             } catch {
-                await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription)
+                await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription, useSandbox: hooksSandbox)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
                 await MainActor.run { 
@@ -646,8 +665,12 @@ actor IrisEngine {
     
     private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?, conversationId: UUID?, useSandbox: Bool) async -> String {
         var execArgs: [String: JSONValue] = args
-        
-        let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs)
+
+        // Command hooks run in the agent's environment (per principal policy), independent of this
+        // specific tool's own host/sandbox routing.
+        let hooksSandbox = conversationId == nil ? false : await hooksUseSandbox(conversationId: conversationId!, workspacePath: cwd)
+
+        let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs, useSandbox: hooksSandbox)
         if case .block(let reason) = beforeDecision {
             return "System Hook blocked execution: \(reason)"
         }
@@ -664,7 +687,7 @@ actor IrisEngine {
         
         var result = await executor.execute(name: name, args: execArgs, cwd: cwd, conversationId: conversationId, useSandbox: useSandbox)
         
-        let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result)
+        let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result, useSandbox: hooksSandbox)
         if case .block(let reason) = afterDecision {
             return "System Hook blocked result: \(reason)"
         } else if case .proceed(let modifiedData) = afterDecision, let data = modifiedData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let newResult = json["result"] as? String {

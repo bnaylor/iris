@@ -49,56 +49,61 @@ struct HookManager {
         return try? JSONDecoder().decode(HookConfig.self, from: data)
     }
     
-    func fireBeforeTool(toolName: String, args: [String: JSONValue]) async -> HookDecision {
-        return await fireEvent(eventName: "BeforeTool", targetMatcher: toolName, payload: try? JSONEncoder().encode(args))
+    // `useSandbox` is the caller's principal-based sandbox decision for command hooks: the main
+    // agent forwards its resolved host-vs-sandboxed policy; subagents forward `true`. It is
+    // threaded per-call (never stored) because the shared singleton fires hooks for concurrent
+    // main/subagent turns. Defaults to `false` (host) for callers without a principal context
+    // (e.g. SessionStart at conversation creation).
+    func fireBeforeTool(toolName: String, args: [String: JSONValue], useSandbox: Bool = false) async -> HookDecision {
+        return await fireEvent(eventName: "BeforeTool", targetMatcher: toolName, payload: try? JSONEncoder().encode(args), useSandbox: useSandbox)
     }
-    
-    func fireAfterTool(toolName: String, result: String) async -> HookDecision {
+
+    func fireAfterTool(toolName: String, result: String, useSandbox: Bool = false) async -> HookDecision {
         let payload = ["result": result]
-        return await fireEvent(eventName: "AfterTool", targetMatcher: toolName, payload: try? JSONSerialization.data(withJSONObject: payload))
+        return await fireEvent(eventName: "AfterTool", targetMatcher: toolName, payload: try? JSONSerialization.data(withJSONObject: payload), useSandbox: useSandbox)
     }
-    
-    func fireBeforeAgent(input: String) async -> HookDecision {
+
+    func fireBeforeAgent(input: String, useSandbox: Bool = false) async -> HookDecision {
         let payload = ["input": input]
-        return await fireEvent(eventName: "BeforeAgent", targetMatcher: "BeforeAgent", payload: try? JSONSerialization.data(withJSONObject: payload))
+        return await fireEvent(eventName: "BeforeAgent", targetMatcher: "BeforeAgent", payload: try? JSONSerialization.data(withJSONObject: payload), useSandbox: useSandbox)
     }
-    
-    func fireBeforeModel(request: GeminiRequest) async -> HookDecision {
-        return await fireEvent(eventName: "BeforeModel", targetMatcher: "BeforeModel", payload: try? JSONEncoder().encode(request))
+
+    func fireBeforeModel(request: GeminiRequest, useSandbox: Bool = false) async -> HookDecision {
+        return await fireEvent(eventName: "BeforeModel", targetMatcher: "BeforeModel", payload: try? JSONEncoder().encode(request), useSandbox: useSandbox)
     }
-    
-    func fireAfterModel(response: GeminiResponse) async -> HookDecision {
-        return await fireEvent(eventName: "AfterModel", targetMatcher: "AfterModel", payload: try? JSONEncoder().encode(response))
+
+    func fireAfterModel(response: GeminiResponse, useSandbox: Bool = false) async -> HookDecision {
+        return await fireEvent(eventName: "AfterModel", targetMatcher: "AfterModel", payload: try? JSONEncoder().encode(response), useSandbox: useSandbox)
     }
-    
-    func fireBeforeToolSelection(tools: [FunctionDeclaration]) async -> HookDecision {
+
+    func fireBeforeToolSelection(tools: [FunctionDeclaration], useSandbox: Bool = false) async -> HookDecision {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .useDefaultKeys
-        return await fireEvent(eventName: "BeforeToolSelection", targetMatcher: "BeforeToolSelection", payload: try? encoder.encode(tools))
+        return await fireEvent(eventName: "BeforeToolSelection", targetMatcher: "BeforeToolSelection", payload: try? encoder.encode(tools), useSandbox: useSandbox)
     }
-    
-    func firePreCompress(history: [Content]) async -> HookDecision {
+
+    func firePreCompress(history: [Content], useSandbox: Bool = false) async -> HookDecision {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .useDefaultKeys
-        return await fireEvent(eventName: "PreCompress", targetMatcher: "PreCompress", payload: try? encoder.encode(history))
+        return await fireEvent(eventName: "PreCompress", targetMatcher: "PreCompress", payload: try? encoder.encode(history), useSandbox: useSandbox)
     }
-    
-    func fireNotification(title: String, body: String) async {
+
+    func fireNotification(title: String, body: String, useSandbox: Bool = false) async {
         let payload = ["title": title, "body": body]
-        _ = await fireEvent(eventName: "Notification", targetMatcher: "Notification", payload: try? JSONSerialization.data(withJSONObject: payload))
+        _ = await fireEvent(eventName: "Notification", targetMatcher: "Notification", payload: try? JSONSerialization.data(withJSONObject: payload), useSandbox: useSandbox)
     }
-    
-    func fireSessionStart(conversationId: UUID) async -> HookDecision {
+
+    func fireSessionStart(conversationId: UUID, useSandbox: Bool = false) async -> HookDecision {
         let payload = ["conversationId": conversationId.uuidString]
-        return await fireEvent(eventName: "SessionStart", targetMatcher: "SessionStart", payload: try? JSONSerialization.data(withJSONObject: payload))
+        return await fireEvent(eventName: "SessionStart", targetMatcher: "SessionStart", payload: try? JSONSerialization.data(withJSONObject: payload), useSandbox: useSandbox)
     }
-    
-    func fireAfterAgent(output: String) async -> HookDecision {
+
+    func fireAfterAgent(output: String, useSandbox: Bool = false) async -> HookDecision {
         let payload = ["output": output]
-        return await fireEvent(eventName: "AfterAgent", targetMatcher: "AfterAgent", payload: try? JSONSerialization.data(withJSONObject: payload))
+        return await fireEvent(eventName: "AfterAgent", targetMatcher: "AfterAgent", payload: try? JSONSerialization.data(withJSONObject: payload), useSandbox: useSandbox)
     }
-    
-    private func fireEvent(eventName: String, targetMatcher: String, payload: Data?) async -> HookDecision {
+
+    private func fireEvent(eventName: String, targetMatcher: String, payload: Data?, useSandbox: Bool = false) async -> HookDecision {
         guard let config = config, let eventHooks = config.hooks[eventName] else {
             return .proceed(modifiedData: nil) // No hooks registered — not counted
         }
@@ -121,7 +126,7 @@ struct HookManager {
             for hook in eventConfig.hooks {
                 if hook.type != "command" { continue }
                 
-                let decision = await executeCommandHook(hook: hook, payload: currentData)
+                let decision = await executeCommandHook(hook: hook, payload: currentData, useSandbox: useSandbox)
                 switch decision {
                 case .block:
                     return decision // Immediate hard block
@@ -139,14 +144,14 @@ struct HookManager {
         return .proceed(modifiedData: currentData)
     }
     
-    private func executeCommandHook(hook: HookDefinition, payload: Data?) async -> HookDecision {
+    private func executeCommandHook(hook: HookDefinition, payload: Data?, useSandbox: Bool = false) async -> HookDecision {
         return await withCheckedContinuation { continuation in
             let process = Process()
             let inputPipe = Pipe()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
-            
-            if ConfigManager.shared.enableSandboxing {
+
+            if useSandbox {
                 guard SandboxingManager.shared.isContainerInstalled else {
                     continuation.resume(returning: .block(reason: "Sandboxing enabled but container missing for hook execution."))
                     return
