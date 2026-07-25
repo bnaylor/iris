@@ -13,6 +13,8 @@ final class MockRuntime: ContainerRuntime, @unchecked Sendable {
     var failNextExec = false                     // throw once, then succeed
 
     func createDetached(name: String, image: String, mount: String?, workdir: String) async throws {
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms: let all concurrent callers park here before any completes
         lock.withLock { created.append(name) }
     }
     func exec(name: String, workdir: String, command: String) async throws -> (stdout: String, stderr: String, exitCode: Int32) {

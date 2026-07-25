@@ -1,8 +1,9 @@
 import Foundation
 
 /// Owns one long-lived container per conversation. Commands run via `container exec`; disk state
-/// persists within a session. An `actor` so concurrent tool calls serialize and lazy creation
-/// happens exactly once.
+/// persists within a session. An `actor` so concurrent tool calls serialize; an in-flight create
+/// barrier keyed by conversationId ensures lazy creation happens exactly once even under actor
+/// re-entrancy across the suspending `createDetached`.
 actor SandboxSessionManager {
     static let namePrefix = "iris-"
 
@@ -14,6 +15,9 @@ actor SandboxSessionManager {
     /// Conversations whose container was lost (idle-reaped or died mid-session). The next `run`
     /// recreates and prefixes a reset notice, distinguishing an unexpected reset from a cold start.
     private var lostSessions: Set<UUID> = []
+    /// In-flight create tasks keyed by conversationId. Concurrent first-commands await the same
+    /// task instead of each spawning their own container.
+    private var creating: [UUID: Task<Void, Error>] = [:]
 
     static let shared = SandboxSessionManager(runtime: CLIContainerRuntime(),
                                               image: { ConfigManager.shared.sandboxImage })
@@ -35,7 +39,6 @@ actor SandboxSessionManager {
 
     func run(command: String, conversationId id: UUID, workspace: String?) async -> String {
         let wasLost = lostSessions.contains(id)
-        var created = false
 
         // Recreate if the workspace changed (agent-initiated — not a "loss").
         if let s = sessions[id], s.mountedWorkspace != workspace {
@@ -43,8 +46,11 @@ actor SandboxSessionManager {
             sessions[id] = nil
         }
 
-        if sessions[id] == nil {
-            do { try await create(id, workspace: workspace); created = true }
+        // Capture whether this call is responsible for (re)creating the session BEFORE
+        // awaiting, so the reset notice fires correctly even when multiple callers race.
+        let created = (sessions[id] == nil)
+        if created {
+            do { try await ensureSession(id, workspace: workspace) }
             catch { return creationError(error) }
         }
 
@@ -59,12 +65,12 @@ actor SandboxSessionManager {
             await runtime.remove(name: name(for: id))
             sessions[id] = nil
             do {
-                try await create(id, workspace: workspace)
+                try await ensureSession(id, workspace: workspace)
                 let r = try await runtime.exec(name: name(for: id), workdir: workdir, command: command)
                 sessions[id]?.lastUsed = Date()
                 return decorate(format(r), notice: true, for: id)
             } catch {
-                return "Error executing sandboxed command: \(error)"
+                return creationError(error)
             }
         }
     }
@@ -93,6 +99,20 @@ actor SandboxSessionManager {
     }
 
     // MARK: - Helpers
+
+    /// Ensures a container exists for `id`, coalescing concurrent first-commands onto a single
+    /// create so actor re-entrancy across the suspending `createDetached` can't spawn duplicates.
+    private func ensureSession(_ id: UUID, workspace: String?) async throws {
+        if sessions[id] != nil { return }
+        if let inflight = creating[id] {
+            try await inflight.value
+            return
+        }
+        let task = Task<Void, Error> { [self] in try await create(id, workspace: workspace) }
+        creating[id] = task
+        defer { creating[id] = nil }
+        try await task.value
+    }
 
     private func create(_ id: UUID, workspace: String?) async throws {
         let mount = workspace.map { "\($0):\($0)" }
