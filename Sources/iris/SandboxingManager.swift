@@ -51,7 +51,7 @@ final class SandboxingManager: @unchecked Sendable {
                 
                 // We use AppleScript to prompt for privileges to install the PKG
                 let scriptSource = """
-                do shell script "installer -pkg /tmp/container-installer.pkg -target / && /usr/local/bin/container system start" with administrator privileges
+                do shell script "installer -pkg /tmp/container-installer.pkg -target / && echo 'y' | /usr/local/bin/container system start" with administrator privileges
                 """
                 
                 var error: NSDictionary?
@@ -69,6 +69,41 @@ final class SandboxingManager: @unchecked Sendable {
                 }
             } catch {
                 await completion(false, error.localizedDescription)
+            }
+        }
+    }
+    
+    /// Starts the container system daemon and automatically approves kernel image download ("y").
+    @discardableResult
+    func startContainerSystem() async -> (success: Bool, message: String?) {
+        guard isContainerInstalled else {
+            return (false, "Apple container runtime is not installed at /usr/local/bin/container.")
+        }
+        
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/bin/sh")
+                process.arguments = ["-c", "echo 'y' | /usr/local/bin/container system start"]
+                
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = pipe
+                
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8) ?? ""
+                    
+                    if process.terminationStatus == 0 {
+                        continuation.resume(returning: (true, nil))
+                    } else {
+                        continuation.resume(returning: (false, output.isEmpty ? "container system start exited with status \(process.terminationStatus)" : output))
+                    }
+                } catch {
+                    continuation.resume(returning: (false, error.localizedDescription))
+                }
             }
         }
     }

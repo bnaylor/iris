@@ -434,18 +434,33 @@ struct SettingsView: View {
                 Section(header: Text("Sandboxing").font(.headline)) {
                     Toggle("Enable sandboxing for subagents", isOn: $config.enableSandboxing)
                         .onChange(of: config.enableSandboxing) { _, newValue in
-                            if newValue && !SandboxingManager.shared.isContainerInstalled {
-                                // Turn it back off until installed
-                                config.enableSandboxing = false
-                                isInstallingContainer = true
-                                installError = nil
-                                
-                                SandboxingManager.shared.installContainer { success, error in
-                                    isInstallingContainer = false
-                                    if success {
-                                        config.enableSandboxing = true
-                                    } else {
-                                        installError = error
+                            if newValue {
+                                if !SandboxingManager.shared.isContainerInstalled {
+                                    // Turn it back off until installed
+                                    config.enableSandboxing = false
+                                    isInstallingContainer = true
+                                    installError = nil
+                                    
+                                    SandboxingManager.shared.installContainer { success, error in
+                                        isInstallingContainer = false
+                                        if success {
+                                            config.enableSandboxing = true
+                                        } else {
+                                            installError = error
+                                        }
+                                    }
+                                } else {
+                                    // Container runtime is installed; ensure background services and kernel image are ready
+                                    isInstallingContainer = true
+                                    installError = nil
+                                    Task {
+                                        let result = await SandboxingManager.shared.startContainerSystem()
+                                        await MainActor.run {
+                                            isInstallingContainer = false
+                                            if !result.success {
+                                                installError = result.message
+                                            }
+                                        }
                                     }
                                 }
                             }

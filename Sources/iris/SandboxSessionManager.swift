@@ -114,8 +114,22 @@ actor SandboxSessionManager {
 
     private func create(_ id: UUID, workspace: String?) async throws {
         let mount = workspace.map { "\($0):\($0)" }
-        try await runtime.createDetached(name: name(for: id), image: image(),
-                                         mount: mount, workdir: workspace ?? "/")
+        do {
+            try await runtime.createDetached(name: name(for: id), image: image(),
+                                             mount: mount, workdir: workspace ?? "/")
+        } catch {
+            if case ContainerRuntimeError.createFailed(let msg) = error,
+               ToolExecutor.sandboxSetupHint(for: msg) != nil {
+                let startResult = await SandboxingManager.shared.startContainerSystem()
+                if startResult.success {
+                    try await runtime.createDetached(name: name(for: id), image: image(),
+                                                     mount: mount, workdir: workspace ?? "/")
+                    sessions[id] = Session(name: name(for: id), mountedWorkspace: workspace, lastUsed: Date())
+                    return
+                }
+            }
+            throw error
+        }
         sessions[id] = Session(name: name(for: id), mountedWorkspace: workspace, lastUsed: Date())
     }
 
