@@ -134,6 +134,7 @@ struct ChatView: View {
                         .overlay {
                             if conv.messages.isEmpty {
                                 IrisWelcomeView()
+                                    .id(conv.id)
                             }
                         }
                         .onCopyCommand {
