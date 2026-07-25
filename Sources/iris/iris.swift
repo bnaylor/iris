@@ -682,6 +682,14 @@ struct IrisApp: App {
     init() {
         IrisMigrator.migrate(.default)
         ShippedSkills.seedIfNeeded(.default)
+        Task {
+            await SandboxSessionManager.shared.reapOrphans()
+            while true {
+                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000) // every 5 min
+                let minutes = await MainActor.run { ConfigManager.shared.sandboxIdleTimeoutMinutes }
+                await SandboxSessionManager.shared.reapIdle(olderThan: TimeInterval(minutes * 60))
+            }
+        }
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
         
