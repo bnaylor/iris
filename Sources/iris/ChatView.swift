@@ -103,11 +103,20 @@ struct ChatView: View {
                             }
                             
                             if state.isThinking {
-                                HStack {
+                                HStack(spacing: 8) {
                                     TypingIndicator()
                                     Text("Iris is thinking...")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
+
+                                    Button(action: { state.interruptActiveConversation() }) {
+                                        Label("Stop", systemImage: "stop.circle.fill")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(.secondary)
+                                    .keyboardShortcut(.cancelAction)
+                                    .help("Interrupt Iris (Esc)")
                                 }
                                 .padding(.leading, 12)
                                 .padding(.top, 4)

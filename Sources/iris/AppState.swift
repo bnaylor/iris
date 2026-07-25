@@ -149,6 +149,16 @@ class AppState {
         let engine = self.engine
         Task { await engine?.cancelReprompt(for: conversationId) }
     }
+
+    /// User-initiated interrupt of in-flight work for the active conversation. Bound to the
+    /// Esc key / Stop button in the UI. Inert when nothing is running. Cancellation lands at
+    /// the engine's next turn boundary (see `IrisEngine.processInput`), which then clears the
+    /// thinking indicator via the tracked task's completion.
+    func interruptActiveConversation() {
+        guard let convId = selectedConversationId, isThinking else { return }
+        cancelTasks(for: convId)
+        appendMessage(role: .system, content: "Interrupted.", to: convId)
+    }
     
     func createNewConversation(id: UUID = UUID()) {
         let newConv = Conversation(id: id, title: "New Conversation")
