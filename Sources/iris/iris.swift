@@ -234,11 +234,11 @@ actor IrisEngine {
         
         toolsList.append(FunctionDeclaration(
             name: "goal_complete",
-            description: "Mark the active goal as completely finished and exit the autonomous loop.",
+            description: "Mark the active goal as completely finished and exit the autonomous loop. Always provide a summary of your findings and conclusions in the 'summary' argument so it is presented to the user.",
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "summary": Schema(type: "STRING", description: "A summary of what was accomplished.")
+                    "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion.")
                 ],
                 required: ["summary"]
             )
@@ -580,6 +580,7 @@ actor IrisEngine {
                 localState?.clearGoal(for: conversationId) 
                 localState?.onSubagentComplete[conversationId]?(summary)
             }
+            await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             result = "Goal marked as complete. Summary: \(summary)"
         } else {
             var needsApproval = false
@@ -657,7 +658,7 @@ actor IrisEngine {
         return sanitizedResult
     }
     
-    private func pushToUI(role: ChatRole, text: String, conversationId: UUID) async {
+    func pushToUI(role: ChatRole, text: String, conversationId: UUID) async {
         let localState = state
         await MainActor.run {
             localState?.appendMessage(role: role, content: text, to: conversationId)
