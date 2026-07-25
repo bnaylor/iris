@@ -49,5 +49,5 @@
     - [ ] export this protocol to /shared/agents to make it common
 - [ ] import the google-workspace skill from hermes and make it work for iris (by reference to pick up updates)
   - https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace
-- [ ] enhanced performance tracking - what's taking time?
+- [x] enhanced performance tracking - what's taking time?
 
