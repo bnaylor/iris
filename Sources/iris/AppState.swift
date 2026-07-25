@@ -242,15 +242,24 @@ class AppState {
                 emitCommandOutput("No workspace is linked to this conversation. Link one first (right-click → Link to Workspace…).", format: .markdown, to: convId)
                 return
             }
+            let success: Bool
             switch value {
-            case "host": SandboxPolicy.setWorkspaceOverride(.host, for: ws)
-            case "sandboxed": SandboxPolicy.setWorkspaceOverride(.sandboxed, for: ws)
-            case "clear": SandboxPolicy.setWorkspaceOverride(nil, for: ws)
+            case "host": success = SandboxPolicy.setWorkspaceOverride(.host, for: ws)
+            case "sandboxed": success = SandboxPolicy.setWorkspaceOverride(.sandboxed, for: ws)
+            case "clear": success = SandboxPolicy.setWorkspaceOverride(nil, for: ws)
             default:
                 emitCommandOutput("Usage: `/sandbox workspace host|sandboxed|clear`", format: .markdown, to: convId)
                 return
             }
-            emitCommandOutput("Per-workspace main-agent sandbox set to **\(value)** for `\(ws)`.", format: .markdown, to: convId)
+            guard success else {
+                emitCommandOutput("Failed to write the per-workspace sandbox setting to `\(ws)` (check permissions).", format: .markdown, to: convId)
+                return
+            }
+            if value == "clear" {
+                emitCommandOutput("Cleared the per-workspace main-agent sandbox override for `\(ws)`.", format: .markdown, to: convId)
+            } else {
+                emitCommandOutput("Per-workspace main-agent sandbox set to **\(value)** for `\(ws)`.", format: .markdown, to: convId)
+            }
             return
         }
 

@@ -65,16 +65,21 @@ public enum SandboxPolicy {
         return cfg.mainAgent
     }
 
-    public static func setWorkspaceOverride(_ pref: SandboxPref?, for workspace: String) {
+    @discardableResult
+    public static func setWorkspaceOverride(_ pref: SandboxPref?, for workspace: String) -> Bool {
         let fileURL = url(for: workspace)
         guard let pref else {
+            // clear: success if the file is gone afterward (removing an absent file is still "cleared")
             try? FileManager.default.removeItem(at: fileURL)
-            return
+            return !FileManager.default.fileExists(atPath: fileURL.path)
         }
-        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(WorkspaceConfig(mainAgent: pref)) {
-            try? data.write(to: fileURL)
+        do {
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(WorkspaceConfig(mainAgent: pref))
+            try data.write(to: fileURL)
+            return true
+        } catch {
+            return false
         }
     }
 }
