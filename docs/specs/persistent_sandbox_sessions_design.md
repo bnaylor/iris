@@ -65,6 +65,10 @@ actor SandboxSessionManager {
 
     struct Session { let name: String; var mountedWorkspace: String?; var lastUsed: Date }
     private var sessions: [UUID: Session] = [:]
+    /// Conversations whose live container was lost (idle-reaped or died mid-session). The next
+    /// `run` for such a conversation recreates the container AND prefixes a reset notice, then
+    /// clears the flag. Distinguishes an unexpected reset from a first-ever cold creation.
+    private var lostSessions: Set<UUID> = []
 
     /// Ensures a session exists for `conversationId` mounted at `workspace`, then execs the
     /// command. Recreates the container if the workspace changed. Returns combined output.
@@ -132,10 +136,32 @@ resource use for the expected case of many long-lived conversations.
 
 - **Runtime not installed/ready:** reuse the existing `ToolExecutor.sandboxSetupHint(for:)`
   mapping so the model/user get an actionable message rather than an opaque CLI error.
-- **Container missing/stopped at exec time** (e.g. reaped, or died): `exec` throws; `run`
-  removes the stale session entry, recreates the container once, and retries the exec. A second
-  failure returns the error.
+- **Container missing/stopped at exec time** (e.g. reaped, or died): `exec` throws; `run` marks
+  the conversation in `lostSessions`, removes the stale session entry, recreates the container
+  once, and retries the exec. A second failure returns the error.
 - **Creation failure:** surfaced as an actionable error string (not a crash).
+
+### Session-reset notice (so a reap is never silent)
+
+A reclaimed session must not surprise the agent with commands that "suddenly" fail. We do **not**
+inject a message into an idle conversation (that would spuriously start a turn). Instead the loss
+is surfaced **in-band on the next command**:
+
+- When the idle reaper (or a mid-session self-heal) removes a conversation's container, the
+  conversation id is added to `lostSessions`.
+- The next `run` for that conversation creates a fresh container and, seeing the `lostSessions`
+  flag, **prefixes the command output** with a one-line notice, then clears the flag:
+
+  ```
+  [sandbox] This session's container was reclaimed after being idle; previously installed
+  packages and temp files were cleared (your workspace files on disk are untouched). Re-run any
+  setup (installs/builds) before relying on them.
+  ```
+
+- A **first-ever** cold creation for a conversation sets no flag and emits no notice — nothing
+  was lost. Only an *unexpected* reset is announced.
+- The `sandbox-usage` skill documents this notice so the agent recognizes it and re-establishes
+  setup rather than treating it as noise.
 
 ## Semantics (v1 non-goals, stated plainly)
 
@@ -167,7 +193,9 @@ exec-per-command model.
   - Prefer few combined commands over many tiny ones (each exec has small overhead, but chaining
     is still cheaper and clearer).
   - An idle session may be reclaimed after inactivity, resetting in-container disk state (but
-    never the host workspace); re-establish setup if a session went cold.
+    never the host workspace). You will see a `[sandbox] ... reclaimed after being idle ...`
+    notice prefixed to the next command's output when this happens — treat it as a signal to
+    re-run installs/builds before relying on them.
 
 ## Configuration
 
@@ -185,6 +213,8 @@ exec-per-command model.
   - `reapOrphans` removes every `iris-`-prefixed name the runtime reports.
   - `reapIdle` removes only sessions past the threshold; a subsequent `run` recreates.
   - Exec throwing once triggers a single recreate+retry; throwing twice returns the error.
+  - After `reapIdle`/self-heal removes a session, the next `run` output is prefixed with the
+    `[sandbox] ... reclaimed ...` notice; a first-ever `run` for a new conversation is not.
 - **Manual/integration:** with the real runtime, measure per-command overhead before/after
   (target: warm `exec` well under the ~0.85s cold-boot cost) and confirm disk state persists
   across commands in one conversation.
