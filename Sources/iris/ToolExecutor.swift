@@ -110,7 +110,8 @@ struct ToolExecutor {
             guard SandboxingManager.shared.isContainerInstalled else {
                 return "Error: Sandboxing is enabled but the container runtime is not installed. Run the /sandbox command to install it, or disable sandboxing in settings."
             }
-            return await SandboxSessionManager.shared.run(command: command, conversationId: conversationId, workspace: cwd)
+            let expandedCwd = cwd.map { ($0 as NSString).expandingTildeInPath }
+            return await SandboxSessionManager.shared.run(command: command, conversationId: conversationId, workspace: expandedCwd)
         }
         return await withCheckedContinuation { continuation in
             let process = Process()

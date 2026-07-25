@@ -76,14 +76,12 @@ actor SandboxSessionManager {
     }
 
     func endSession(_ id: UUID) async {
+        // If a delete arrives while this conversation's very first `create` is still in flight
+        // (no session entry yet), that just-created container won't be torn down here. It's an
+        // orphan, but it's swept by `reapOrphans()` on next launch via the `iris-` prefix.
         if let s = sessions[id] { await runtime.remove(name: s.name) }
         sessions[id] = nil
         lostSessions.remove(id)
-    }
-
-    func endAll() async {
-        for (_, s) in sessions { await runtime.remove(name: s.name) }
-        sessions.removeAll()
     }
 
     func reapOrphans() async {

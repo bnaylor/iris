@@ -77,9 +77,6 @@ actor SandboxSessionManager {
     /// Tear down one conversation's container (called on conversation delete).
     func endSession(_ conversationId: UUID) async
 
-    /// Tear down all sessions (app termination).
-    func endAll() async
-
     /// On launch: remove any orphaned `iris-` containers from a prior run.
     func reapOrphans() async
 
@@ -116,10 +113,11 @@ the `iris-` prefix is the reaping key).
 - **Teardown triggers:**
   - Conversation deleted: `AppState.deleteConversation` (already calls `cancelTasks`) also calls
     `endSession(id)`.
-  - App quit: `AppDelegate.applicationWillTerminate` calls `endAll()` (best-effort).
   - Startup reap: at launch (after migration/seeding), `reapOrphans()` lists `iris-`-prefixed
-    containers and removes them — cleans up anything a crash left behind. (Sessions do not
-    survive a restart; a conversation reopened after relaunch creates a fresh container.)
+    containers and removes them — the authoritative cross-run cleanup. `applicationWillTerminate`
+    does `_exit(0)` (a hard synchronous exit), so async teardown cannot run there; `reapOrphans()`
+    on the next launch handles containers left behind by a quit or crash. (Sessions do not survive
+    a restart; a conversation reopened after relaunch creates a fresh container.)
 
 ### Idle reaper
 
