@@ -50,4 +50,6 @@
 - [ ] import the google-workspace skill from hermes and make it work for iris (by reference to pick up updates)
   - https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace
 - [x] enhanced performance tracking - what's taking time?
+- [ ] autoupdate
+- [ ] real packaging for non-developers, signed binary
 
