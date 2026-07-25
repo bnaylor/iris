@@ -140,7 +140,11 @@ class ConfigManager: @unchecked Sendable {
     var sandboxImage: String {
         didSet { UserDefaults.standard.set(sandboxImage, forKey: "SANDBOX_IMAGE") }
     }
-    
+
+    var sandboxIdleTimeoutMinutes: Int {
+        didSet { UserDefaults.standard.set(sandboxIdleTimeoutMinutes, forKey: "SANDBOX_IDLE_TIMEOUT_MINUTES") }
+    }
+
     var enableVibecop: Bool {
         didSet { UserDefaults.standard.set(enableVibecop, forKey: "ENABLE_VIBECOP") }
     }
@@ -264,7 +268,9 @@ class ConfigManager: @unchecked Sendable {
         self.googleTokenExpiry = UserDefaults.standard.double(forKey: "GOOGLE_TOKEN_EXPIRY")
         self.enableSandboxing = UserDefaults.standard.bool(forKey: "ENABLE_SANDBOXING")
         self.sandboxImage = UserDefaults.standard.string(forKey: "SANDBOX_IMAGE") ?? "ubuntu:latest"
-        
+        let savedIdle = UserDefaults.standard.integer(forKey: "SANDBOX_IDLE_TIMEOUT_MINUTES")
+        self.sandboxIdleTimeoutMinutes = savedIdle == 0 ? 30 : savedIdle
+
         self.enableVibecop = UserDefaults.standard.bool(forKey: "ENABLE_VIBECOP")
         let savedEngine = UserDefaults.standard.string(forKey: "VIBECOP_ENGINE") ?? ""
         self.vibecopEngine = savedEngine.isEmpty ? "llama_cpp" : savedEngine
