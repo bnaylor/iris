@@ -100,9 +100,15 @@ struct HookManager {
     
     private func fireEvent(eventName: String, targetMatcher: String, payload: Data?) async -> HookDecision {
         guard let config = config, let eventHooks = config.hooks[eventName] else {
-            return .proceed(modifiedData: nil) // No hooks registered
+            return .proceed(modifiedData: nil) // No hooks registered — not counted
         }
-        
+        let __turnID = PerformanceProfiler.currentTurnID
+        let __start = CFAbsoluteTimeGetCurrent()
+        defer {
+            PerformanceProfiler.shared.record(turnID: __turnID, category: .hooks,
+                                              durationMs: (CFAbsoluteTimeGetCurrent() - __start) * 1000.0)
+        }
+
         var currentData = payload
         
         for eventConfig in eventHooks {

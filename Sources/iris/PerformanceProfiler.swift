@@ -139,8 +139,12 @@ public final class PerformanceProfiler: ObservableObject, @unchecked Sendable {
 }
 
 /// Time an async subsystem span and attribute it to the current turn.
+/// Inherits the caller's actor isolation (`#isolation`) so the work closure can safely touch
+/// actor-isolated state without crossing an isolation boundary.
 @discardableResult
-public func measure<T>(_ category: PerfCategory, _ work: () async throws -> T) async rethrows -> T {
+public func measure<T>(_ category: PerfCategory,
+                       isolation: isolated (any Actor)? = #isolation,
+                       _ work: () async throws -> T) async rethrows -> T {
     let turnID = PerformanceProfiler.currentTurnID
     let start = CFAbsoluteTimeGetCurrent()
     do {
