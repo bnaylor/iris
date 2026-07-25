@@ -447,12 +447,13 @@ struct MessageView: View {
                     }
                     .font(.caption.bold())
                     .foregroundColor(.secondary)
-                } else {
+                } else if message.role != .command {
+                    // .command output is deliberately unlabeled (not attributed to Iris).
                     Text(message.role == .user ? "You" : "Iris")
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
                 }
-                
+
                 if message.role == .system {
                     SystemMessageContent(text: message.content)
                         .textSelection(.enabled)
@@ -487,15 +488,15 @@ struct MessageView: View {
     private var backgroundColor: Color {
         switch message.role {
         case .user: return Color.accentColor
-        case .agent: return Color(NSColor.controlBackgroundColor)
+        case .agent, .command: return Color(NSColor.controlBackgroundColor)
         case .system: return Color(NSColor.windowBackgroundColor).opacity(0.8)
         }
     }
-    
+
     private var textColor: Color {
         switch message.role {
         case .user: return .white
-        case .agent, .system: return .primary
+        case .agent, .system, .command: return .primary
         }
     }
     

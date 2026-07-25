@@ -5,6 +5,8 @@ enum ChatRole: String, Codable {
     case user
     case agent
     case system
+    /// Deterministic slash-command output rendered as Markdown, not attributed to Iris.
+    case command
 }
 
 struct ChatMessage: Identifiable, Codable {
@@ -249,18 +251,16 @@ class AppState {
             Task { [weak self] in
                 let skills = await SkillManager.shared.listSkills()
                 guard let self else { return }
-                // System messages render as plain monospaced text (not Markdown), so format as
-                // an aligned plain-text list rather than using Markdown syntax.
                 let body: String
                 if skills.isEmpty {
                     body = "No skills are currently registered."
                 } else {
                     let list = skills
-                        .map { "• \($0.name) — \($0.description)" }
+                        .map { "- **\($0.name)** — \($0.description)" }
                         .joined(separator: "\n")
-                    body = "Registered skills (\(skills.count))\n\n\(list)"
+                    body = "**Registered skills (\(skills.count))**\n\n\(list)"
                 }
-                self.appendMessage(role: .system, content: body, to: convId)
+                self.emitCommandOutput(body, format: .markdown, to: convId)
             }
             return
         } else if trimmed.hasPrefix("/reflect") {
@@ -340,6 +340,23 @@ class AppState {
         }
     }
     
+    /// How a slash command's direct output is rendered. All command output is display-only —
+    /// it is never added to the LLM `history` the agent sees on later turns.
+    enum CommandOutputFormat {
+        /// Monospaced "System Event" styling (plain text, no Markdown).
+        case system
+        /// Rendered Markdown, not attributed to Iris.
+        case markdown
+    }
+
+    /// Emit deterministic slash-command output into the conversation for display only.
+    /// This is the sugar slash-command handlers use instead of reaching for `appendMessage`
+    /// directly, so each command just declares how its output should look.
+    func emitCommandOutput(_ text: String, format: CommandOutputFormat, to conversationId: UUID) {
+        let role: ChatRole = format == .markdown ? .command : .system
+        appendMessage(role: role, content: text, to: conversationId)
+    }
+
     func appendMessage(role: ChatRole, content: String, to conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].messages.append(ChatMessage(role: role, content: content))
