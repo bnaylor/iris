@@ -79,9 +79,19 @@ echo "Checksum: ${BUILD_DIR}/${ZIP_NAME}.sha256"
 if [ "${PUBLISH_FLAG}" = "--publish" ] || [ "${PUBLISH}" = "1" ]; then
     if command -v gh >/dev/null 2>&1; then
         echo "Publishing release ${VERSION} to GitHub..."
+        NOTES_ARG=()
+        if [ -n "${RELEASE_NOTES}" ]; then
+            NOTES_ARG=(--notes "${RELEASE_NOTES}")
+        elif [ -f "RELEASE_NOTES.md" ]; then
+            NOTES_ARG=(--notes-file "RELEASE_NOTES.md")
+        elif [ -f "docs/RELEASE_NOTES.md" ]; then
+            NOTES_ARG=(--notes-file "docs/RELEASE_NOTES.md")
+        else
+            NOTES_ARG=(--generate-notes)
+        fi
+
         gh release create "${VERSION}" "${BUILD_DIR}/${ZIP_NAME}" "${BUILD_DIR}/${ZIP_NAME}.sha256" \
-            --title "Iris ${VERSION}" \
-            --notes "Production release ${VERSION} for macOS."
+            --title "Iris ${VERSION}" "${NOTES_ARG[@]}"
     else
         echo "Warning: gh CLI not installed. Skipping automatic GitHub release creation."
     fi
