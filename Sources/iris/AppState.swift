@@ -231,6 +231,52 @@ class AppState {
         return decision == .sandboxed
     }
 
+    private func handleSandboxCommand(_ trimmed: String, convId: UUID) {
+        guard let conv = conversations.first(where: { $0.id == convId }) else { return }
+        let args = trimmed.dropFirst("/sandbox".count).trimmingCharacters(in: .whitespaces)
+
+        // Sub-command: /sandbox workspace <host|sandboxed|clear>
+        if args.hasPrefix("workspace") {
+            let value = args.dropFirst("workspace".count).trimmingCharacters(in: .whitespaces).lowercased()
+            guard let ws = conv.workspacePath else {
+                emitCommandOutput("No workspace is linked to this conversation. Link one first (right-click → Link to Workspace…).", format: .markdown, to: convId)
+                return
+            }
+            switch value {
+            case "host": SandboxPolicy.setWorkspaceOverride(.host, for: ws)
+            case "sandboxed": SandboxPolicy.setWorkspaceOverride(.sandboxed, for: ws)
+            case "clear": SandboxPolicy.setWorkspaceOverride(nil, for: ws)
+            default:
+                emitCommandOutput("Usage: `/sandbox workspace host|sandboxed|clear`", format: .markdown, to: convId)
+                return
+            }
+            emitCommandOutput("Per-workspace main-agent sandbox set to **\(value)** for `\(ws)`.", format: .markdown, to: convId)
+            return
+        }
+
+        // No arg (or anything else): report status.
+        let master = ConfigManager.shared.enableSandboxing
+        let runtime = SandboxingManager.shared.isContainerInstalled
+        let effective = effectiveMainSandboxed(conv)
+        let source: String
+        if conv.mainAgentSandbox != nil { source = "this conversation" }
+        else if SandboxPolicy.perWorkspaceOverride(workspace: conv.workspacePath) != nil { source = "workspace `.iris/sandbox.json`" }
+        else { source = "global default" }
+
+        let body = """
+        **Sandbox policy**
+
+        - Feature master switch: **\(master ? "on" : "off")**
+        - Container runtime installed: **\(runtime ? "yes" : "no")**
+        - Main agent (this conversation): **\(effective ? "sandboxed" : "host")** — from \(source)
+        - Global default: **\(ConfigManager.shared.mainAgentSandboxDefault.rawValue)**
+        - Subagents: **always sandboxed** when the master switch is on and a runtime is present
+
+        Set a per-workspace default with `/sandbox workspace host|sandboxed|clear`.
+        """
+        emitCommandOutput(body, format: .markdown, to: convId)
+    }
+
     func deleteConversation(_ id: UUID) {
         cancelTasks(for: id)
         Task { await SandboxSessionManager.shared.endSession(id) }
@@ -292,6 +338,9 @@ class AppState {
                 }
                 self.emitCommandOutput(body, format: .markdown, to: convId)
             }
+            return
+        } else if trimmed == "/sandbox" || trimmed.hasPrefix("/sandbox ") {
+            handleSandboxCommand(trimmed, convId: convId)
             return
         } else if trimmed.hasPrefix("/reflect") {
             appendMessage(role: .system, content: "Triggering manual memory reflection...", to: convId)
