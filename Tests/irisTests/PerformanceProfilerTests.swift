@@ -118,3 +118,31 @@ struct PerformanceProfilerLifecycleTests {
         #expect(profiler.activeProfileForTesting(id)?.categories[.vibecop]?.ms == 7)
     }
 }
+
+@Suite("PerformanceProfiler measure helpers")
+struct PerformanceProfilerMeasureTests {
+
+    @Test("measure records elapsed time to the current turn on shared profiler")
+    func measureRecords() async {
+        let id = PerformanceProfiler.shared.beginTurn(label: "measure", source: "UI")
+        await PerformanceProfiler.$currentTurnID.withValue(id) {
+            _ = await measure(.primaryLLM) {
+                try? await Task.sleep(nanoseconds: 20_000_000) // ~20ms
+            }
+        }
+        let ms = PerformanceProfiler.shared.activeProfileForTesting(id)?.categories[.primaryLLM]?.ms ?? 0
+        #expect(ms >= 10) // generous lower bound to avoid flakiness
+        PerformanceProfiler.shared.endTurn(id, totalMs: ms)
+    }
+
+    @Test("measureSync records and returns the value")
+    func measureSyncReturns() {
+        let id = PerformanceProfiler.shared.beginTurn(label: "sync", source: "UI")
+        let out: Int = PerformanceProfiler.$currentTurnID.withValue(id) {
+            measureSync(.injectionGuard) { 21 + 21 }
+        }
+        #expect(out == 42)
+        #expect((PerformanceProfiler.shared.activeProfileForTesting(id)?.categories[.injectionGuard]?.count ?? 0) == 1)
+        PerformanceProfiler.shared.endTurn(id, totalMs: 0)
+    }
+}

@@ -137,3 +137,32 @@ public final class PerformanceProfiler: ObservableObject, @unchecked Sendable {
     }
     #endif
 }
+
+/// Time an async subsystem span and attribute it to the current turn.
+@discardableResult
+public func measure<T>(_ category: PerfCategory, _ work: () async throws -> T) async rethrows -> T {
+    let turnID = PerformanceProfiler.currentTurnID
+    let start = CFAbsoluteTimeGetCurrent()
+    do {
+        let result = try await work()
+        PerformanceProfiler.shared.record(turnID: turnID, category: category,
+                                          durationMs: (CFAbsoluteTimeGetCurrent() - start) * 1000.0)
+        return result
+    } catch {
+        PerformanceProfiler.shared.record(turnID: turnID, category: category,
+                                          durationMs: (CFAbsoluteTimeGetCurrent() - start) * 1000.0)
+        throw error
+    }
+}
+
+/// Time a synchronous subsystem span and attribute it to the current turn.
+@discardableResult
+public func measureSync<T>(_ category: PerfCategory, _ work: () throws -> T) rethrows -> T {
+    let turnID = PerformanceProfiler.currentTurnID
+    let start = CFAbsoluteTimeGetCurrent()
+    defer {
+        PerformanceProfiler.shared.record(turnID: turnID, category: category,
+                                          durationMs: (CFAbsoluteTimeGetCurrent() - start) * 1000.0)
+    }
+    return try work()
+}
