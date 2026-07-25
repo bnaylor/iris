@@ -32,9 +32,9 @@
 - [ ] Reimagine sandboxing flows.  We should allow for even the main agent's access to be sandboxed.  Per-workspace?
     - [ ] Sandbox perf: `run_command` uses `container run --rm` per command (~0.85s fresh-container overhead each, measured; ~8-9s per 10 commands — bad for coding sessions). Reuse one long-lived container per workspace/session and `container exec` into it to drop per-command cost toward the unsandboxed range. Needs container lifecycle/cleanup + cwd/mount handling.
 - [ ] hide "thinking" output in a twisty
-- [ ] Concept of library registries - bot-owned, remote.  curated, read-only, okf vs diverse vs ?
+- [x] Concept of library registries - bot-owned, remote.  curated, read-only, okf vs diverse vs ?
 - [x] Organize ~/.iris/ and separate bot-written files from non
-- [ ] Rationalize SYSTEM prompt; don't hardcode in source but ship as a read-only asset; enhance
+- [x] Rationalize SYSTEM prompt; don't hardcode in source but ship as a read-only asset; enhance
 - [ ] /skills that isn't an LLM prompt :)
 - [ ] /-command auto-completer
 - [ ] more /-commands
@@ -47,4 +47,6 @@
     - [ ] need an impartial pass/fail evaluator that compares against agreed start criteria; no goal drift
     - [ ] when blockers and changes are discovered by the process, engage re-evaluation loop
     - [ ] export this protocol to /shared/agents to make it common
+- [ ] import the google-workspace skill from hermes and make it work for iris (by reference to pick up updates)
+  - https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace
 
