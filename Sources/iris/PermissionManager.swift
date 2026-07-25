@@ -20,6 +20,11 @@ struct PermissionManager: Sendable {
     }
     
     func isAllowed(toolName: String, details: String, workspace: String?) -> Bool {
+        // Automatically allow access to agent's own ~/.iris directory
+        if (toolName == "read_file" || toolName == "write_file") && IrisPaths.default.isUnderIrisDir(details) {
+            return true
+        }
+
         let rule = PermissionRule(toolName: toolName, details: details)
         
         // Check global

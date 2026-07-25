@@ -47,6 +47,15 @@ struct IrisPaths: Sendable {
         return resolved == mem || resolved.hasPrefix(mem + "/")
     }
 
+    /// True if `rawPath` resolves to a location inside `root` (`~/.iris`).
+    /// Tilde-expands and standardizes the path (resolving `..`) first.
+    func isUnderIrisDir(_ rawPath: String) -> Bool {
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let resolved = URL(fileURLWithPath: expanded).standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        return resolved == rootPath || resolved.hasPrefix(rootPath + "/")
+    }
+
     /// Create the bucket directories if absent. Called by the migrator and by managers that
     /// need their directory to exist before writing.
     func ensureDirectories() throws {

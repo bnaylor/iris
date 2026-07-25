@@ -43,6 +43,22 @@ struct IrisPathsTests {
         #expect(!p.isUnderMemory("note.md"))
     }
 
+    @Test("isUnderIrisDir: true for paths inside root, false for escapes/outside")
+    func testIsUnderIrisDir() {
+        let p = IrisPaths(root: URL(fileURLWithPath: "/tmp/iris-x"))
+        #expect(p.isUnderIrisDir("/tmp/iris-x/memory/library/note.md"))
+        #expect(p.isUnderIrisDir("/tmp/iris-x/config/settings.json"))
+        #expect(p.isUnderIrisDir("/tmp/iris-x/models/m.gguf"))
+        #expect(p.isUnderIrisDir("/tmp/iris-x"))
+        // traversal that escapes root
+        #expect(!p.isUnderIrisDir("/tmp/iris-x/../etc/passwd"))
+        // outside root
+        #expect(!p.isUnderIrisDir("/tmp/other/file"))
+        // sibling with shared prefix
+        #expect(!p.isUnderIrisDir("/tmp/iris-x-evil/file"))
+    }
+
+
     @Test("ensureDirectories creates the bucket directories")
     func testEnsureDirectoriesCreatesBuckets() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
