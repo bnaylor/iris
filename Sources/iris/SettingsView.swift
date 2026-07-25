@@ -450,6 +450,12 @@ struct SettingsView: View {
                     if config.enableSandboxing {
                         TextField("Sandbox Image", text: $config.sandboxImage)
                             .help("The Docker/OCI image to use for sandboxed commands (e.g., ubuntu:latest)")
+                        Stepper("Sandbox idle timeout: \(config.sandboxIdleTimeoutMinutes) min",
+                                value: Binding(
+                                    get: { config.sandboxIdleTimeoutMinutes },
+                                    set: { config.sandboxIdleTimeoutMinutes = max(1, $0) }),
+                                in: 1...240)
+                            .help("How long a sandbox container can sit idle before being reclaimed (1–240 minutes).")
                     }
                     
                     if isInstallingContainer {
