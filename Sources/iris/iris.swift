@@ -81,7 +81,12 @@ actor IrisEngine {
         // overlapping turns can't leave it stuck (centralized in AppState's reference count).
         let stateForThinking = state
         await MainActor.run { stateForThinking?.beginThinking() }
-        await processInputBody(input, source: source, conversationId: conversationId)
+        let turnID = PerformanceProfiler.shared.beginTurn(label: input, source: source)
+        let turnStart = CFAbsoluteTimeGetCurrent()
+        await PerformanceProfiler.$currentTurnID.withValue(turnID) {
+            await processInputBody(input, source: source, conversationId: conversationId)
+        }
+        PerformanceProfiler.shared.endTurn(turnID, totalMs: (CFAbsoluteTimeGetCurrent() - turnStart) * 1000.0)
         await MainActor.run { stateForThinking?.endThinking() }
     }
 
