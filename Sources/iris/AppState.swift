@@ -31,7 +31,9 @@ struct Conversation: Identifiable, Codable, Hashable {
     var activeGoal: String?
     var messageCountSinceReflection: Int = 0
     var goalIterationCount: Int = 0
-    
+    var mainAgentSandbox: SandboxPref? = nil
+    var isSubagent: Bool = false
+
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0) {
         self.id = id
         self.title = title
@@ -44,7 +46,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
     
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent
     }
     
     init(from decoder: Decoder) throws {
@@ -57,6 +59,8 @@ struct Conversation: Identifiable, Codable, Hashable {
         tokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .tokenUsage) ?? TokenUsage()
         activeGoal = try container.decodeIfPresent(String.self, forKey: .activeGoal)
         messageCountSinceReflection = try container.decodeIfPresent(Int.self, forKey: .messageCountSinceReflection) ?? 0
+        mainAgentSandbox = try container.decodeIfPresent(SandboxPref.self, forKey: .mainAgentSandbox)
+        isSubagent = try container.decodeIfPresent(Bool.self, forKey: .isSubagent) ?? false
     }
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
@@ -165,12 +169,13 @@ class AppState {
         appendMessage(role: .system, content: "Interrupted.", to: convId)
     }
     
-    func createNewConversation(id: UUID = UUID()) {
-        let newConv = Conversation(id: id, title: "New Conversation")
+    func createNewConversation(id: UUID = UUID(), isSubagent: Bool = false) {
+        var newConv = Conversation(id: id, title: "New Conversation")
+        newConv.isSubagent = isSubagent
         conversations.append(newConv)
         selectedConversationId = newConv.id
         saveConversations()
-        
+
         Task {
             _ = await HookManager.shared.fireSessionStart(conversationId: newConv.id)
         }
@@ -204,7 +209,28 @@ class AppState {
             saveConversations()
         }
     }
-    
+
+    func setMainAgentSandbox(for conversationId: UUID, pref: SandboxPref?) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            conversations[idx].mainAgentSandbox = pref
+            saveConversations()
+        }
+    }
+
+    /// The resolved main-agent sandbox state for a conversation, used by the sidebar toggle's
+    /// checkmark. Subagent conversations are not user-togglable, so this is only meaningful for
+    /// main conversations.
+    func effectiveMainSandboxed(_ conv: Conversation) -> Bool {
+        let decision = SandboxPolicy.resolve(
+            masterEnabled: ConfigManager.shared.enableSandboxing,
+            principal: .main,
+            perConversation: conv.mainAgentSandbox,
+            perWorkspace: SandboxPolicy.perWorkspaceOverride(workspace: conv.workspacePath),
+            globalDefault: ConfigManager.shared.mainAgentSandboxDefault,
+            runtimeAvailable: SandboxingManager.shared.isContainerInstalled)
+        return decision == .sandboxed
+    }
+
     func deleteConversation(_ id: UUID) {
         cancelTasks(for: id)
         Task { await SandboxSessionManager.shared.endSession(id) }
