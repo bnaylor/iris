@@ -20,6 +20,7 @@ struct ShippedSkillsTests {
         #expect(read(p.libraryDir.appendingPathComponent("README.md"))?.contains("Iris Library") == true)
         #expect(read(p.skillsDir.appendingPathComponent("external-libraries/SKILL.md"))?.contains("External Libraries") == true)
         #expect(read(p.libraryDir.appendingPathComponent("EXTERNAL_LIBRARIES.md"))?.contains("read-only → read-write → curated-by-iris → convert-to-okf") == true)
+        #expect(read(p.skillsDir.appendingPathComponent("google-workspace/SKILL.md"))?.contains("Google Workspace") == true)
     }
 
     @Test("seedIfNeeded does not overwrite an existing (bot-edited) file")
@@ -32,11 +33,12 @@ struct ShippedSkillsTests {
         #expect(read(reg) == "MY REGISTRY")
     }
 
-    @Test("all four bundled assets load and are non-empty")
+    @Test("all bundled assets load and are non-empty")
     func testBundledAssetsLoad() {
         #expect(ShippedSkills.bundledText("library-SKILL").contains("Library Management"))
         #expect(ShippedSkills.bundledText("library-README").contains("Iris Library"))
         #expect(ShippedSkills.bundledText("external-libraries-SKILL").contains("External Libraries"))
         #expect(ShippedSkills.bundledText("external-libraries-REGISTRY").contains("Traits"))
+        #expect(ShippedSkills.bundledText("google-workspace-SKILL").contains("Google Workspace"))
     }
 }
