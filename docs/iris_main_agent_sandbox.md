@@ -105,6 +105,11 @@ What do you think of this balance? If you have access to the harness codebase, I
 ### You
 I don't just have access to it, I am creating it explicitly for you. :). I like most of this.  For 2), we already have all of this and it's actually a bit more sophisticated.  I'm going to save your suggestions, though, and feed them into the process.  After a while I'll get you to review your own harness' codebase and suggest improvements.  Sound good?
 
+A few things I'd change/add:
+- Your main agent restrictions mostly make sense, but I'd also add an "open mode" that's off by default
+that lets you interact with most files in my homedir.
+- I think /tmp should not really be restricted
+
 ### System
 `[TOOL_CALL]
 {

@@ -21,3 +21,6 @@ Tests/irisTests/Fixtures/deberta-v3-tokenizer/tokenizer.json
 # Compiled guard model bundles (built by compile_prompt_guard.py, hosted externally).
 *.onnx.zip
 *.mlmodelc.zip
+
+# Swap files
+*.swp
