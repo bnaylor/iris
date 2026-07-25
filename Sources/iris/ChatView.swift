@@ -211,6 +211,14 @@ struct ChatView: View {
                         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApproval != nil)
                     }
                     
+                    let matchingCommands = SlashCommandItem.matches(for: inputText)
+                    if !matchingCommands.isEmpty {
+                        SlashCommandAutoCompleteView(commands: matchingCommands) { selected in
+                            inputText = selected.command + (selected.command.contains(" ") ? "" : " ")
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    
                     SpectrumLine(active: state.isThinking)
 
                     HStack {
@@ -793,4 +801,61 @@ struct TypingIndicator: View {
         }
     }
 }
+
+struct SlashCommandAutoCompleteView: View {
+    let commands: [SlashCommandItem]
+    let onSelect: (SlashCommandItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "terminal.fill")
+                    .foregroundColor(.irisIndigo)
+                    .font(.caption)
+                Text("SLASH COMMANDS")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(commands) { item in
+                    Button(action: { onSelect(item) }) {
+                        HStack {
+                            Text(item.usage)
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.semibold)
+                                .foregroundColor(.irisIndigo)
+                            
+                            Spacer()
+                            
+                            Text(item.description)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.primary.opacity(0.04))
+                    .cornerRadius(6)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        }
+        .background(.thinMaterial)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .padding(.horizontal)
+        .padding(.bottom, 4)
+    }
+}
+
 
