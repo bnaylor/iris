@@ -39,6 +39,13 @@ struct ChatView: View {
                                 Button("Link to Workspace...") {
                                     linkWorkspace(to: conv.id)
                                 }
+                                if !conv.isSubagent {
+                                    Toggle("Sandbox main agent", isOn: Binding(
+                                        get: { state.effectiveMainSandboxed(conv) },
+                                        set: { state.setMainAgentSandbox(for: conv.id, pref: $0 ? .sandboxed : .host) }
+                                    ))
+                                    .disabled(!ConfigManager.shared.enableSandboxing)
+                                }
                                 Button("Export to Markdown...") {
                                     exportConversation(id: conv.id)
                                 }

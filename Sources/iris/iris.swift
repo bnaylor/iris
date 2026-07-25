@@ -6,17 +6,22 @@ actor IrisEngine {
     let client = LLMClient()
     let executor = ToolExecutor.shared
     let manager = SkillManager.shared
-    
+
     var systemPrompt: Content!
     var modelTier: ModelTier
-    
-    // We need to keep a weak reference to the state or pass it in. 
+    let principal: Principal
+
+    /// Conversations already shown the "no sandbox runtime" fallback notice (deduped).
+    private var warnedNoRuntime: Set<UUID> = []
+
+    // We need to keep a weak reference to the state or pass it in.
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
     
-    init(state: AppState, tier: ModelTier = .medium) {
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main) {
         self.state = state
         self.modelTier = tier
+        self.principal = principal
         systemPrompt = nil
     }
     
@@ -76,6 +81,36 @@ actor IrisEngine {
     func cancelReprompt(for conversationId: UUID) {
         repromptTasks[conversationId]?.cancel()
         repromptTasks[conversationId] = nil
+    }
+
+    /// Resolves whether a run_command for this conversation should be sandboxed, emitting the
+    /// no-runtime fallback notice once per conversation. Non-run_command tools return false.
+    private func resolveUseSandbox(toolName: String, conversationId: UUID, workspacePath: String?) async -> Bool {
+        guard toolName == "run_command" else { return false }
+        let localState = state
+        let perConv = await MainActor.run {
+            localState?.conversations.first(where: { $0.id == conversationId })?.mainAgentSandbox
+        }
+        let decision = SandboxPolicy.resolve(
+            masterEnabled: ConfigManager.shared.enableSandboxing,
+            principal: principal,
+            perConversation: perConv,
+            perWorkspace: SandboxPolicy.perWorkspaceOverride(workspace: workspacePath),
+            globalDefault: ConfigManager.shared.mainAgentSandboxDefault,
+            runtimeAvailable: SandboxingManager.shared.isContainerInstalled)
+
+        switch decision {
+        case .sandboxed:
+            return true
+        case .host(let warn):
+            if warn, !warnedNoRuntime.contains(conversationId) {
+                warnedNoRuntime.insert(conversationId)
+                await pushToUI(role: .system,
+                               text: "[sandbox] No container runtime available — running on the host WITHOUT isolation. Install it in Iris Settings → Sandboxing to enable sandboxing.",
+                               conversationId: conversationId)
+            }
+            return false
+        }
     }
 
     func processInput(_ input: String, source: String, conversationId: UUID) async {
@@ -593,22 +628,23 @@ actor IrisEngine {
                 details = path
             }
             
+            let useSandbox = await resolveUseSandbox(toolName: functionCall.name, conversationId: conversationId, workspacePath: workspacePath)
             if needsApproval {
                 let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
                 if approved {
-                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId)
+                    result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
                 } else {
                     result = "User denied permission to execute this tool. You must ask the user for clarification or suggest an alternative."
                 }
             } else {
-                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId)
+                result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
             }
         }
         
         return result
     }
     
-    private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?, conversationId: UUID?) async -> String {
+    private func executeToolWithHooks(name: String, args: [String: JSONValue], cwd: String?, conversationId: UUID?, useSandbox: Bool) async -> String {
         var execArgs: [String: JSONValue] = args
         
         let beforeDecision = await HookManager.shared.fireBeforeTool(toolName: name, args: execArgs)
@@ -626,7 +662,7 @@ actor IrisEngine {
             }
         }
         
-        var result = await executor.execute(name: name, args: execArgs, cwd: cwd, conversationId: conversationId)
+        var result = await executor.execute(name: name, args: execArgs, cwd: cwd, conversationId: conversationId, useSandbox: useSandbox)
         
         let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result)
         if case .block(let reason) = afterDecision {

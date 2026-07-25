@@ -432,7 +432,7 @@ struct SettingsView: View {
             // MARK: - Advanced Tab
             Form {
                 Section(header: Text("Sandboxing").font(.headline)) {
-                    Toggle("Enable sandboxing for subagents", isOn: $config.enableSandboxing)
+                    Toggle("Enable sandboxing", isOn: $config.enableSandboxing)
                         .onChange(of: config.enableSandboxing) { _, newValue in
                             if newValue {
                                 if !SandboxingManager.shared.isContainerInstalled {
@@ -467,6 +467,11 @@ struct SettingsView: View {
                         }
                     
                     if config.enableSandboxing {
+                        Picker("Main agent (default)", selection: $config.mainAgentSandboxDefault) {
+                            Text("Host").tag(SandboxPref.host)
+                            Text("Sandboxed").tag(SandboxPref.sandboxed)
+                        }
+                        .help("Where the main agent runs by default. Subagents are always sandboxed. Override per workspace via /sandbox, or per conversation via the sidebar right-click menu.")
                         TextField("Sandbox Image", text: $config.sandboxImage)
                             .help("The Docker/OCI image to use for sandboxed commands (e.g., ubuntu:latest)")
                         Stepper("Sandbox idle timeout: \(config.sandboxIdleTimeoutMinutes) min",

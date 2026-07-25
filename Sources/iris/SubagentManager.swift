@@ -25,7 +25,7 @@ final class SubagentManager: @unchecked Sendable {
         // 1. Create a new conversation for the subagent
         let subagentId = UUID()
         await MainActor.run {
-            appState.createNewConversation(id: subagentId)
+            appState.createNewConversation(id: subagentId, isSubagent: true)
             appState.updateConversationTitle(id: subagentId, title: "Subagent: \(role)")
             appState.registerSubagent(id: subagentId, role: role)
         }
@@ -38,7 +38,7 @@ final class SubagentManager: @unchecked Sendable {
         }
         
         // 2. Instantiate a fresh IrisEngine linked to this conversation
-        let engine = IrisEngine(state: appState, tier: tier)
+        let engine = IrisEngine(state: appState, tier: tier, principal: .subagent)
         
         // 3. Craft the role-specific prompt
         let customPromptText = generateRolePrompt(role: role)
