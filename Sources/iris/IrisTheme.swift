@@ -24,46 +24,42 @@ enum IrisAsset {
 
 // MARK: - Spectrum hairline
 
-/// Integrates a 0..<1 drift phase over elapsed time. Integrating the *rate* (rather than
-/// mapping absolute time to phase) keeps the drift continuous when the speed changes between
-/// idle and thinking — no jump. Held in `@State` as a reference type so per-frame mutation
-/// doesn't count as view-state change (the `TimelineView` already drives redraws).
-private final class DriftPhase {
-    var value: CGFloat = 0
-    private var last: Date?
-
-    func advance(to date: Date, cyclesPerSecond: CGFloat) {
-        defer { last = date }
-        guard let last else { return }
-        let dt = CGFloat(date.timeIntervalSince(last))
-        value = (value + dt * cyclesPerSecond).truncatingRemainder(dividingBy: 1)
-    }
-}
-
 /// A thin cool-spectrum accent line that gently drifts. It always drifts slowly; while Iris is
 /// working (`active`) the drift speeds up, so the line quietly "comes alive" and settles back
 /// down when she's done.
+///
+/// The 0..<1 `phase` is accumulated per frame in `.onChange(of:)` (a legit post-update side
+/// effect that drives the redraw). Integrating the *rate* — rather than mapping absolute time
+/// to phase — keeps the drift continuous when the speed changes between idle and thinking, so
+/// there's no jump.
 struct SpectrumLine: View {
     var active: Bool
-    @State private var drift = DriftPhase()
+    @State private var phase: CGFloat = 0
+    @State private var last: Date?
 
     // Symmetric so the doubled bar loops seamlessly (first == last) and stays in the cool zone.
     private let colors: [Color] = [.irisIndigo, .irisBlue, .irisAzure, .irisTeal, .irisAzure, .irisBlue, .irisIndigo]
 
     var body: some View {
         TimelineView(.animation) { timeline in
-            let _ = drift.advance(to: timeline.date, cyclesPerSecond: active ? 1.0 / 3.0 : 1.0 / 8.0)
             GeometryReader { geo in
                 let w = geo.size.width
                 HStack(spacing: 0) {
                     bar(width: w)
                     bar(width: w)
                 }
-                .offset(x: -drift.value * w)
+                .offset(x: -phase * w)
             }
             .frame(height: 2)
             .clipShape(Capsule())
             .opacity(0.7)
+            .onChange(of: timeline.date) { _, now in
+                let rate: CGFloat = active ? 1.0 / 3.0 : 1.0 / 8.0
+                if let last {
+                    phase = (phase + CGFloat(now.timeIntervalSince(last)) * rate).truncatingRemainder(dividingBy: 1)
+                }
+                last = now
+            }
         }
         .frame(height: 2)
     }
