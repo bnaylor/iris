@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// A subsystem bucket a slice of command-execution time is attributed to.
 /// "Other" is not a case here — it is derived in the view as the remainder.
@@ -65,4 +66,74 @@ public struct CommandProfile: Identifiable, Sendable {
         let topLevel = ms(.primaryLLM) + ms(.toolExecution) + ms(.hooks) + ms(.contextAssembly)
         return max(0, totalMs - topLevel)
     }
+}
+
+public final class PerformanceProfiler: ObservableObject, @unchecked Sendable {
+    public static let shared = PerformanceProfiler()
+    public static let maxRecent = 20
+
+    /// Bound at the top of a turn (`IrisEngine.processInput`). Inherited by child tasks
+    /// (e.g. parallel tool calls), so spans attribute to the right command automatically.
+    @TaskLocal public static var currentTurnID: UUID?
+
+    /// Observed by the diagnostics UI. Only mutated on the main thread.
+    @Published public private(set) var recentCommands: [CommandProfile] = []
+
+    private let lock = NSLock()
+    private var active: [UUID: CommandProfile] = [:]
+
+    public init() {}
+
+    public func beginTurn(label: String, source: String) -> UUID {
+        let id = UUID()
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let short = trimmed.count > 40 ? String(trimmed.prefix(40)) + "…" : trimmed
+        let profile = CommandProfile(id: id, label: short.isEmpty ? "(empty)" : short,
+                                     source: source, startedAt: Date())
+        lock.lock()
+        active[id] = profile
+        lock.unlock()
+        return id
+    }
+
+    public func record(turnID: UUID?, category: PerfCategory, durationMs: Double) {
+        guard let turnID else { return }
+        lock.lock()
+        active[turnID]?.add(category, durationMs: durationMs)
+        lock.unlock()
+    }
+
+    public func endTurn(_ id: UUID, totalMs: Double) {
+        lock.lock()
+        var profile = active.removeValue(forKey: id)
+        lock.unlock()
+        guard profile != nil else { return }
+        profile!.totalMs = totalMs
+        let finished = profile!
+        // @Published mutation must happen on the main thread.
+        if Thread.isMainThread {
+            appendRecent(finished)
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.appendRecent(finished) }
+        }
+    }
+
+    private func appendRecent(_ profile: CommandProfile) {
+        recentCommands.append(profile)
+        if recentCommands.count > Self.maxRecent {
+            recentCommands.removeFirst(recentCommands.count - Self.maxRecent)
+        }
+    }
+
+    // MARK: - Test hooks
+    #if DEBUG
+    func activeProfileForTesting(_ id: UUID) -> CommandProfile? {
+        lock.lock(); defer { lock.unlock() }
+        return active[id]
+    }
+    var activeCountForTesting: Int {
+        lock.lock(); defer { lock.unlock() }
+        return active.count
+    }
+    #endif
 }

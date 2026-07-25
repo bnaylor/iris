@@ -49,3 +49,72 @@ struct PerformanceProfilerValueTypeTests {
         #expect(!PerfCategory.primaryLLM.isGuardSubMeasure)
     }
 }
+
+@Suite("PerformanceProfiler lifecycle")
+struct PerformanceProfilerLifecycleTests {
+
+    @Test("record attributes to the active turn")
+    func recordAttributes() {
+        let profiler = PerformanceProfiler()
+        let id = profiler.beginTurn(label: "hello world", source: "UI")
+        profiler.record(turnID: id, category: .primaryLLM, durationMs: 42)
+        profiler.record(turnID: id, category: .primaryLLM, durationMs: 8)
+
+        #expect(profiler.activeProfileForTesting(id)?.categories[.primaryLLM]?.ms == 50)
+    }
+
+    @Test("record with nil turn id is a no-op")
+    func recordNilNoop() {
+        let profiler = PerformanceProfiler()
+        profiler.record(turnID: nil, category: .primaryLLM, durationMs: 42) // must not crash
+        #expect(profiler.activeCountForTesting == 0)
+    }
+
+    @Test("endTurn moves the profile into recentCommands with its total")
+    func endTurnFinalizes() async {
+        let profiler = PerformanceProfiler()
+        let id = profiler.beginTurn(label: "hello", source: "UI")
+        profiler.record(turnID: id, category: .toolExecution, durationMs: 10)
+        profiler.endTurn(id, totalMs: 100)
+
+        // recentCommands is updated on the main thread; give it a tick.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        await MainActor.run {
+            #expect(profiler.recentCommands.count == 1)
+            #expect(profiler.recentCommands.first?.totalMs == 100)
+            #expect(profiler.recentCommands.first?.label == "hello")
+        }
+        #expect(profiler.activeCountForTesting == 0)
+    }
+
+    @Test("ring buffer keeps only the most recent maxRecent profiles")
+    func ringBufferEvicts() async {
+        let profiler = PerformanceProfiler()
+        for i in 0..<(PerformanceProfiler.maxRecent + 5) {
+            let id = profiler.beginTurn(label: "cmd \(i)", source: "UI")
+            profiler.endTurn(id, totalMs: Double(i))
+        }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        await MainActor.run {
+            #expect(profiler.recentCommands.count == PerformanceProfiler.maxRecent)
+            // newest last; oldest ("cmd 0".."cmd 4") evicted
+            #expect(profiler.recentCommands.last?.label == "cmd \(PerformanceProfiler.maxRecent + 4)")
+        }
+    }
+
+    @Test("a span recorded in a child task attributes to the parent turn")
+    func taskLocalPropagation() async {
+        let profiler = PerformanceProfiler()
+        let id = profiler.beginTurn(label: "parent", source: "UI")
+        await PerformanceProfiler.$currentTurnID.withValue(id) {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    // Inherits currentTurnID from parent.
+                    profiler.record(turnID: PerformanceProfiler.currentTurnID, category: .vibecop, durationMs: 7)
+                }
+                await group.waitForAll()
+            }
+        }
+        #expect(profiler.activeProfileForTesting(id)?.categories[.vibecop]?.ms == 7)
+    }
+}
