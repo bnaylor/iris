@@ -6,17 +6,19 @@ actor IrisEngine {
     let client = LLMClient()
     let executor = ToolExecutor.shared
     let manager = SkillManager.shared
-    
+
     var systemPrompt: Content!
     var modelTier: ModelTier
+    let principal: Principal
     
     // We need to keep a weak reference to the state or pass it in. 
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
     
-    init(state: AppState, tier: ModelTier = .medium) {
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main) {
         self.state = state
         self.modelTier = tier
+        self.principal = principal
         systemPrompt = nil
     }
     
