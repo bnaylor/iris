@@ -30,7 +30,7 @@
 - [x] Add cloud models for vibecop
 - [x] Evaluate HRR injection over time to make sure it's not growing too big; what do we age out, how and when?
 - [ ] Reimagine sandboxing flows.  We should allow for even the main agent's access to be sandboxed.  Per-workspace?
-    - [ ] Sandbox perf: `run_command` uses `container run --rm` per command (~0.85s fresh-container overhead each, measured; ~8-9s per 10 commands — bad for coding sessions). Reuse one long-lived container per workspace/session and `container exec` into it to drop per-command cost toward the unsandboxed range. Needs container lifecycle/cleanup + cwd/mount handling.
+    - [x] Sandbox perf: `run_command` uses `container run --rm` per command (~0.85s fresh-container overhead each, measured; ~8-9s per 10 commands — bad for coding sessions). Reuse one long-lived container per workspace/session and `container exec` into it to drop per-command cost toward the unsandboxed range. Needs container lifecycle/cleanup + cwd/mount handling. — DONE (Piece 1: per-conversation persistent sessions; see docs/specs/persistent_sandbox_sessions_design.md). Piece 2 (per-workspace/per-principal policy model, main-agent sandboxing) still open above.
 - [ ] hide "thinking" output in a twisty
 - [x] Concept of library registries - bot-owned, remote.  curated, read-only, okf vs diverse vs ?
 - [x] Organize ~/.iris/ and separate bot-written files from non
@@ -52,4 +52,5 @@
 - [x] enhanced performance tracking - what's taking time?
 - [ ] autoupdate
 - [ ] real packaging for non-developers, signed binary
+- [ ] establish stronger inner/outer loop semantics for main agent / subagent 
 
