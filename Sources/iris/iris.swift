@@ -752,14 +752,14 @@ actor IrisEngine {
             result = newResult
         }
         
-        // First-party trust: reading a file under ~/.iris/memory/ returns Iris's OWN content
-        // (SOUL, USER, memory.md, skills, artifacts, library) — not untrusted external data.
+        // First-party trust: reading a file under ~/.iris/ returns Iris's OWN content
+        // (SOUL, USER, memory.md, skills, artifacts, library, rules, configs) — not untrusted external data.
         // Return it raw, bypassing the guard, so the same `---`-stripping / <untrusted_context>
         // wrapping that mangles first-party content on read-back does not apply. Everything else
         // (other paths, other tools, web results) stays guarded below.
         if name == "read_file",
            let path = execArgs["path"]?.stringValue,
-           IrisPaths.default.isUnderMemory(path) {
+           IrisPaths.default.isUnderIrisDir(path) {
             return result
         }
 
