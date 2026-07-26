@@ -512,27 +512,30 @@ class AppState {
         case alwaysAllowProject
     }
     
-    func requestApproval(toolName: String, details: String, workspace: String? = nil) async -> Bool {
-        // Fast path: Check deterministic permissions first
+    func requestApproval(toolName: String, details: String, workspace: String? = nil,
+                         conversationId: UUID? = nil, origin: String = "Main agent",
+                         inSandbox: Bool = false) async -> Bool {
+        // Fast path: deterministic permissions.
         if PermissionManager.shared.isAllowed(toolName: toolName, details: details, workspace: workspace) {
             return true
         }
 
+        // Vibecop, bounded by a timeout so a wedged local model can't hang the turn.
         do {
-            let decision = try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace)
-            if decision.decision == "APPROVE" {
-                return true
-            } else if decision.decision == "DENY" {
-                return false
+            let timeout = Double(ConfigManager.shared.vibecopTimeoutSeconds)
+            let decision = try await withTimeout(seconds: timeout) {
+                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox)
             }
-            // If ESCALATE, fall through to user prompt
+            if decision.decision == "APPROVE" { return true }
+            if decision.decision == "DENY" { return false }
+            // ESCALATE → fall through to the user prompt.
         } catch {
-            // If Vibecop fails, fail open to the user prompt
-            print("Vibecop evaluation failed: \(error)")
+            // Timeout or Vibecop error → fail open to the user prompt.
+            print("Vibecop evaluation failed/timed out: \(error)")
         }
 
-        // Temporary shim — Task 5 will pass the real conversationId and origin.
-        return await enqueueUserApproval(toolName: toolName, details: details, workspace: workspace, conversationId: nil, origin: "Main agent")
+        return await enqueueUserApproval(toolName: toolName, details: details, workspace: workspace,
+                                         conversationId: conversationId, origin: origin)
     }
 
     /// Appends an approval request and awaits the user's decision. The queue/continuation seam,
