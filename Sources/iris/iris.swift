@@ -79,10 +79,32 @@ actor IrisEngine {
     /// Tracks the pending auto-reprompt task per conversation so the goal loop can be cancelled.
     private var repromptTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// Per-conversation loop detectors (reset on a fresh UI turn).
+    private var loopDetectors: [UUID: LoopDetector] = [:]
+
     /// Cancels a conversation's pending auto-reprompt, stopping its goal loop.
     func cancelReprompt(for conversationId: UUID) {
         repromptTasks[conversationId]?.cancel()
         repromptTasks[conversationId] = nil
+    }
+
+    /// Graceful stop for a responsive-but-stuck goal loop: clear the reprompt, instruct the model
+    /// to summarize and call goal_complete, and clear the goal so the loop cannot continue.
+    private func softStopWithSummary(conversationId: UUID, reason: String) async {
+        cancelReprompt(for: conversationId)
+        loopDetectors[conversationId]?.reset()
+        await pushToUI(role: .system, text: "[\(approvalOrigin)] \(reason) Summarizing and stopping.", conversationId: conversationId)
+        await processInput(
+            "You have reached a stopping condition (\(reason)). Summarize what you accomplished and what is blocking you, then call `goal_complete` with that summary. Do not take any other action.",
+            source: "System", conversationId: conversationId)
+        // Ensure the loop ends even if the model did not call goal_complete.
+        let localState = state
+        await MainActor.run {
+            if localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal != nil {
+                localState?.clearGoal(for: conversationId)
+                localState?.onSubagentComplete[conversationId]?("Stopped: \(reason) (no explicit summary produced).")
+            }
+        }
     }
 
     private var approvalOrigin: String {
@@ -150,6 +172,8 @@ actor IrisEngine {
     }
 
     private func processInputBody(_ input: String, source: String, conversationId: UUID) async {
+        if source == "UI" { loopDetectors[conversationId] = nil }
+
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
 
         let localState = state
@@ -498,6 +522,22 @@ actor IrisEngine {
                     history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
                     request.contents = history
 
+                    // Loop detection: if the same tool call repeats too many times, stop early.
+                    if await MainActor.run(body: { localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal != nil }) {
+                        let threshold = ConfigManager.shared.loopDetectionThreshold
+                        var detector = loopDetectors[conversationId] ?? LoopDetector(threshold: threshold)
+                        var tripped = false
+                        for call in toolCalls {
+                            if detector.record(LoopDetector.signature(toolName: call.name, args: call.args)) { tripped = true }
+                        }
+                        loopDetectors[conversationId] = detector
+                        if tripped {
+                            turnFinished = true
+                            await softStopWithSummary(conversationId: conversationId, reason: "repeated the same action \(threshold)× in a row")
+                            break
+                        }
+                    }
+
                     // `goal_complete` returns control to the parent/user, so the turn is over.
                     // Ending here also prevents an unbounded turn loop if the model keeps
                     // re-issuing the same tool call.
@@ -530,13 +570,9 @@ actor IrisEngine {
         }
         
         if let _ = activeGoalResult.0 {
-            if activeGoalResult.1 > 100 {
-                await pushToUI(role: .system, text: "Goal iteration limit (100) reached. Forcing goal completion to prevent unbounded recursion.", conversationId: conversationId)
-                cancelReprompt(for: conversationId)
-                await MainActor.run {
-                    localState?.clearGoal(for: conversationId)
-                    localState?.onSubagentComplete[conversationId]?("Subagent failed due to iteration limit.")
-                }
+            if activeGoalResult.1 >= ConfigManager.shared.maxGoalIterations {
+                await softStopWithSummary(conversationId: conversationId,
+                                          reason: "reached the \(ConfigManager.shared.maxGoalIterations)-iteration limit")
             } else {
                 await pushToUI(role: .system, text: "Auto-continuing goal loop (iteration \(activeGoalResult.1))...", conversationId: conversationId)
                 repromptTasks[conversationId]?.cancel()
