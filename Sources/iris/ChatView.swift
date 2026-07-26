@@ -208,14 +208,16 @@ struct ChatView: View {
                     }
                     
                     if let request = state.pendingApprovals.first {
-                        ApprovalBannerView(request: request, onResolve: { resolution in
+                        ApprovalBannerView(request: request,
+                                           queueDepth: state.pendingApprovals.count,
+                                           onResolve: { resolution in
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 state.resolveApproval(resolution)
                             }
                         })
                         .padding(.horizontal)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApprovals.first != nil)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApprovals.count)
                     }
                     
                     let matchingCommands = SlashCommandItem.matches(for: inputText)
@@ -665,8 +667,9 @@ struct SystemMessageContent: View {
 
 struct ApprovalBannerView: View {
     let request: ToolApprovalRequest
+    let queueDepth: Int
     let onResolve: (AppState.ApprovalResolution) -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -674,9 +677,14 @@ struct ApprovalBannerView: View {
                     .foregroundColor(.orange)
                 Text("Security Guard: Permission Required")
                     .font(.headline)
+                Spacer()
+                if queueDepth > 1 {
+                    Text("\(queueDepth - 1) more pending")
+                        .font(.caption).foregroundColor(.secondary)
+                }
             }
-            
-            Text("Iris is attempting to execute a potentially sensitive action:")
+
+            Text("\(request.origin) wants to run a potentially sensitive action:")
                 .font(.subheadline)
             
             Text("\(request.toolName): \(request.details)")
