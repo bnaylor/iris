@@ -25,7 +25,7 @@ final class VibecopService: @unchecked Sendable {
     }
     """
     
-    func evaluateAction(toolName: String, details: String, workspace: String?) async throws -> VibecopDecision {
+    func evaluateAction(toolName: String, details: String, workspace: String?, inSandbox: Bool = false) async throws -> VibecopDecision {
         guard ConfigManager.shared.enableVibecop else {
             return VibecopDecision(decision: "APPROVE", reason: "Vibecop is disabled in settings.")
         }
@@ -51,6 +51,18 @@ final class VibecopService: @unchecked Sendable {
             }
         }
         
+        if inSandbox {
+            prompt += """
+
+
+            EXECUTION CONTEXT: This command runs inside a disposable, network-capable Linux VM
+            fully isolated from the macOS host filesystem. Auto-APPROVE routine in-VM work
+            (building, testing, inspecting files, installing packages). Reserve ESCALATE/DENY for
+            genuinely risky actions: outbound network connections to new/unknown hosts, attempts
+            to escape the container or escalate privilege, or reaching host-bridged resources.
+            """
+        }
+
         prompt += "\n\nProposed Action:\nTool: \(toolName)\nDetails: \(details)"
         
         let startTime = CFAbsoluteTimeGetCurrent()

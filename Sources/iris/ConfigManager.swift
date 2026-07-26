@@ -160,7 +160,17 @@ class ConfigManager: @unchecked Sendable {
     var vibecopModel: String {
         didSet { UserDefaults.standard.set(vibecopModel, forKey: "VIBECOP_MODEL") }
     }
-    
+
+    var maxGoalIterations: Int {
+        didSet { UserDefaults.standard.set(maxGoalIterations, forKey: "MAX_GOAL_ITERATIONS") }
+    }
+    var loopDetectionThreshold: Int {
+        didSet { UserDefaults.standard.set(loopDetectionThreshold, forKey: "LOOP_DETECTION_THRESHOLD") }
+    }
+    var vibecopTimeoutSeconds: Int {
+        didSet { UserDefaults.standard.set(vibecopTimeoutSeconds, forKey: "VIBECOP_TIMEOUT_SECONDS") }
+    }
+
     var enableAdvancedPromptInjectionProtection: Bool {
         didSet { UserDefaults.standard.set(enableAdvancedPromptInjectionProtection, forKey: "ENABLE_PROMPT_INJECTION_PROTECTION") }
     }
@@ -293,7 +303,14 @@ class ConfigManager: @unchecked Sendable {
         
         let savedVibecop = UserDefaults.standard.string(forKey: "VIBECOP_MODEL") ?? ""
         self.vibecopModel = savedVibecop.isEmpty ? "gemma-4-E2B-it-Q4_K_M.gguf" : savedVibecop
-        
+
+        let savedMaxIters = UserDefaults.standard.integer(forKey: "MAX_GOAL_ITERATIONS")
+        self.maxGoalIterations = savedMaxIters == 0 ? 50 : savedMaxIters
+        let savedLoop = UserDefaults.standard.integer(forKey: "LOOP_DETECTION_THRESHOLD")
+        self.loopDetectionThreshold = savedLoop == 0 ? 5 : savedLoop
+        let savedVibecopTO = UserDefaults.standard.integer(forKey: "VIBECOP_TIMEOUT_SECONDS")
+        self.vibecopTimeoutSeconds = savedVibecopTO == 0 ? 5 : savedVibecopTO
+
         if UserDefaults.standard.object(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION") != nil {
             self.enableAdvancedPromptInjectionProtection = UserDefaults.standard.bool(forKey: "ENABLE_PROMPT_INJECTION_PROTECTION")
         } else {

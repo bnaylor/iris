@@ -10,6 +10,7 @@ actor IrisEngine {
     var systemPrompt: Content!
     var modelTier: ModelTier
     let principal: Principal
+    let roleLabel: String?
 
     /// Conversations already shown the "no sandbox runtime" fallback notice (deduped).
     private var warnedNoRuntime: Set<UUID> = []
@@ -17,11 +18,12 @@ actor IrisEngine {
     // We need to keep a weak reference to the state or pass it in.
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
-    
-    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main) {
+
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil) {
         self.state = state
         self.modelTier = tier
         self.principal = principal
+        self.roleLabel = roleLabel
         systemPrompt = nil
     }
     
@@ -77,10 +79,44 @@ actor IrisEngine {
     /// Tracks the pending auto-reprompt task per conversation so the goal loop can be cancelled.
     private var repromptTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// Per-conversation loop detectors (reset on a fresh UI turn).
+    private var loopDetectors: [UUID: LoopDetector] = [:]
+
     /// Cancels a conversation's pending auto-reprompt, stopping its goal loop.
     func cancelReprompt(for conversationId: UUID) {
         repromptTasks[conversationId]?.cancel()
         repromptTasks[conversationId] = nil
+    }
+
+    /// Graceful stop for a responsive-but-stuck goal loop: clear the reprompt, instruct the model
+    /// to summarize and call goal_complete, and clear the goal so the loop cannot continue.
+    private func softStopWithSummary(conversationId: UUID, reason: String) async {
+        cancelReprompt(for: conversationId)
+        loopDetectors[conversationId] = nil
+        let localState = state
+        // Clear the goal FIRST so the summary turn cannot re-enter the cap/loop-detection paths
+        // (both gated on activeGoal != nil) and recurse into softStopWithSummary.
+        await MainActor.run { localState?.clearGoal(for: conversationId) }
+        await pushToUI(role: .system, text: "[\(approvalOrigin)] \(reason) Summarizing and stopping.", conversationId: conversationId)
+        await processInput(
+            "You have reached a stopping condition (\(reason)). Summarize what you accomplished and what is blocking you, then call `goal_complete` with that summary. Do not take any other action.",
+            source: "System", conversationId: conversationId)
+        // If the summary turn didn't deliver a result via goal_complete, fire the fallback.
+        // (The goal_complete handler nils out the callback after firing, so a non-nil callback
+        // here means no summary was delivered.)
+        await MainActor.run {
+            if localState?.onSubagentComplete[conversationId] != nil {
+                localState?.onSubagentComplete[conversationId]?("Stopped: \(reason) (no explicit summary produced).")
+                localState?.onSubagentComplete[conversationId] = nil
+            }
+        }
+    }
+
+    private var approvalOrigin: String {
+        switch principal {
+        case .main: return "Main agent"
+        case .subagent: return "Subagent (\(roleLabel ?? "subagent"))"
+        }
     }
 
     /// The principal-based sandbox decision for this conversation (no side effects). Shared by
@@ -141,6 +177,8 @@ actor IrisEngine {
     }
 
     private func processInputBody(_ input: String, source: String, conversationId: UUID) async {
+        if source == "UI" { loopDetectors[conversationId] = nil }
+
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
 
         let localState = state
@@ -489,6 +527,22 @@ actor IrisEngine {
                     history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }
                     request.contents = history
 
+                    // Loop detection: if the same tool call repeats too many times, stop early.
+                    if await MainActor.run(body: { localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal != nil }) {
+                        let threshold = ConfigManager.shared.loopDetectionThreshold
+                        var detector = loopDetectors[conversationId] ?? LoopDetector(threshold: threshold)
+                        var tripped = false
+                        for call in toolCalls {
+                            if detector.record(LoopDetector.signature(toolName: call.name, args: call.args)) { tripped = true }
+                        }
+                        loopDetectors[conversationId] = detector
+                        if tripped {
+                            turnFinished = true
+                            await softStopWithSummary(conversationId: conversationId, reason: "repeated the same action \(threshold)× in a row")
+                            break
+                        }
+                    }
+
                     // `goal_complete` returns control to the parent/user, so the turn is over.
                     // Ending here also prevents an unbounded turn loop if the model keeps
                     // re-issuing the same tool call.
@@ -504,9 +558,10 @@ actor IrisEngine {
                 await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription, useSandbox: hooksSandbox)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
-                await MainActor.run { 
+                await MainActor.run {
                     localState?.clearGoal(for: conversationId)
                     localState?.onSubagentComplete[conversationId]?("Subagent failed due to LLM Error: \(error.localizedDescription)")
+                    localState?.onSubagentComplete[conversationId] = nil
                 }
             }
         }
@@ -521,13 +576,9 @@ actor IrisEngine {
         }
         
         if let _ = activeGoalResult.0 {
-            if activeGoalResult.1 > 100 {
-                await pushToUI(role: .system, text: "Goal iteration limit (100) reached. Forcing goal completion to prevent unbounded recursion.", conversationId: conversationId)
-                cancelReprompt(for: conversationId)
-                await MainActor.run {
-                    localState?.clearGoal(for: conversationId)
-                    localState?.onSubagentComplete[conversationId]?("Subagent failed due to iteration limit.")
-                }
+            if activeGoalResult.1 >= ConfigManager.shared.maxGoalIterations {
+                await softStopWithSummary(conversationId: conversationId,
+                                          reason: "reached the \(ConfigManager.shared.maxGoalIterations)-iteration limit")
             } else {
                 await pushToUI(role: .system, text: "Auto-continuing goal loop (iteration \(activeGoalResult.1))...", conversationId: conversationId)
                 repromptTasks[conversationId]?.cancel()
@@ -630,9 +681,10 @@ actor IrisEngine {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
-            await MainActor.run { 
-                localState?.clearGoal(for: conversationId) 
+            await MainActor.run {
+                localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
+                localState?.onSubagentComplete[conversationId] = nil
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             result = "Goal marked as complete. Summary: \(summary)"
@@ -648,8 +700,10 @@ actor IrisEngine {
             }
             
             let useSandbox = await resolveUseSandbox(toolName: functionCall.name, conversationId: conversationId, workspacePath: workspacePath)
-            if needsApproval && !useSandbox {
-                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
+            if needsApproval {
+                let approved = await localState?.requestApproval(
+                    toolName: functionCall.name, details: details, workspace: workspacePath,
+                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox) ?? false
                 if approved {
                     result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
                 } else {

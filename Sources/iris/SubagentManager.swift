@@ -38,7 +38,7 @@ final class SubagentManager: @unchecked Sendable {
         }
         
         // 2. Instantiate a fresh IrisEngine linked to this conversation
-        let engine = IrisEngine(state: appState, tier: tier, principal: .subagent)
+        let engine = IrisEngine(state: appState, tier: tier, principal: .subagent, roleLabel: role)
         
         // 3. Craft the role-specific prompt
         let customPromptText = generateRolePrompt(role: role)
@@ -68,7 +68,7 @@ final class SubagentManager: @unchecked Sendable {
             }
         }
         
-        Task {
+        let engineTask = Task {
             // Kick off the first turn. Since activeGoal is set, the engine will autonomously reprompt itself
             // in a loop until goal_complete is called.
             await engine.processInput(task, source: "System", conversationId: subagentId)
@@ -79,7 +79,14 @@ final class SubagentManager: @unchecked Sendable {
         
         while await holder.getSummary() == nil {
             if iterations >= maxIterations {
-                await holder.setSummary("Subagent timed out after 5 minutes.")
+                // Hard stop: cancel the engine task, unstick any pending approval, stop the
+                // reprompt loop, free the sandbox container, and clear the goal.
+                engineTask.cancel()
+                await MainActor.run { appState.denyPendingApprovals(for: subagentId) }
+                await engine.cancelReprompt(for: subagentId)
+                await SandboxSessionManager.shared.endSession(subagentId)
+                await MainActor.run { appState.clearGoal(for: subagentId) }
+                await holder.setSummary("Subagent timed out after 5 minutes and was cancelled (task, pending approvals, and sandbox container cleaned up).")
                 break
             }
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms

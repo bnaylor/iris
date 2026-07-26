@@ -502,6 +502,21 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                Section(header: Text("Agent Limits").font(.headline)) {
+                    Stepper("Max goal iterations: \(config.maxGoalIterations)",
+                            value: Binding(get: { config.maxGoalIterations },
+                                           set: { config.maxGoalIterations = max(1, $0) }), in: 1...500)
+                        .help("Hard cap on autonomous goal-loop turns before the agent summarizes and stops.")
+                    Stepper("Loop-detection threshold: \(config.loopDetectionThreshold)",
+                            value: Binding(get: { config.loopDetectionThreshold },
+                                           set: { config.loopDetectionThreshold = max(2, $0) }), in: 2...20)
+                        .help("Stop early if the agent repeats the exact same tool call this many times in a row.")
+                    Stepper("Vibecop timeout: \(config.vibecopTimeoutSeconds)s",
+                            value: Binding(get: { config.vibecopTimeoutSeconds },
+                                           set: { config.vibecopTimeoutSeconds = max(1, $0) }), in: 1...30)
+                        .help("How long to wait for the Vibecop guard before falling back to a manual approval prompt.")
+                }
             }
             .formStyle(.grouped)
             .padding(20)

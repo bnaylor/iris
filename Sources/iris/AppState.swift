@@ -76,6 +76,8 @@ struct ToolApprovalRequest: Identifiable {
     let toolName: String
     let details: String
     let workspace: String?
+    let conversationId: UUID?
+    let origin: String
     let continuation: CheckedContinuation<Bool, Never>
 }
 
@@ -95,7 +97,7 @@ class AppState {
     /// so overlapping turns (concurrent sends, subagents, auto-reprompt) can't leave it stuck.
     private(set) var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
-    var pendingApproval: ToolApprovalRequest?
+    var pendingApprovals: [ToolApprovalRequest] = []
     var availableUpdate: ReleaseInfo?
     var isCheckingForUpdates = false
     var updateCheckStatusMessage: String?
@@ -510,33 +512,58 @@ class AppState {
         case alwaysAllowProject
     }
     
-    func requestApproval(toolName: String, details: String, workspace: String? = nil) async -> Bool {
-        // Fast path: Check deterministic permissions first
+    func requestApproval(toolName: String, details: String, workspace: String? = nil,
+                         conversationId: UUID? = nil, origin: String = "Main agent",
+                         inSandbox: Bool = false) async -> Bool {
+        // Fast path: deterministic permissions.
         if PermissionManager.shared.isAllowed(toolName: toolName, details: details, workspace: workspace) {
             return true
         }
-        
+
+        // Vibecop, bounded by a timeout so a wedged local model can't hang the turn.
         do {
-            let decision = try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace)
-            if decision.decision == "APPROVE" {
-                return true
-            } else if decision.decision == "DENY" {
-                return false
+            let timeout = Double(ConfigManager.shared.vibecopTimeoutSeconds)
+            let decision = try await withTimeout(seconds: timeout) {
+                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox)
             }
-            // If ESCALATE, fall through to user prompt
+            if decision.decision == "APPROVE" { return true }
+            if decision.decision == "DENY" { return false }
+            // ESCALATE → fall through to the user prompt.
         } catch {
-            // If Vibecop fails, fail open to the user prompt
-            print("Vibecop evaluation failed: \(error)")
+            // Timeout or Vibecop error → fail open to the user prompt.
+            print("Vibecop evaluation failed/timed out: \(error)")
         }
-        
+
+        return await enqueueUserApproval(toolName: toolName, details: details, workspace: workspace,
+                                         conversationId: conversationId, origin: origin)
+    }
+
+    /// Appends an approval request and awaits the user's decision. The queue/continuation seam,
+    /// separated from `requestApproval`'s permission/Vibecop fast paths so it is unit-testable.
+    func enqueueUserApproval(toolName: String, details: String, workspace: String?,
+                             conversationId: UUID?, origin: String) async -> Bool {
+        // If our task was already cancelled (e.g. a subagent torn down while we were suspended
+        // in the Vibecop/timeout window), do NOT enqueue a request nobody will resolve — the
+        // teardown's denyPendingApprovals already ran and would miss a late append.
+        if Task.isCancelled { return false }
         return await withCheckedContinuation { continuation in
-            self.pendingApproval = ToolApprovalRequest(toolName: toolName, details: details, workspace: workspace, continuation: continuation)
+            pendingApprovals.append(ToolApprovalRequest(
+                toolName: toolName, details: details, workspace: workspace,
+                conversationId: conversationId, origin: origin, continuation: continuation))
         }
     }
-    
+
+    /// Resolves-false and removes every queued request for a conversation. Used to unstick a
+    /// subagent blocked on approval when it is cancelled/timed-out.
+    func denyPendingApprovals(for conversationId: UUID) {
+        let matching = pendingApprovals.filter { $0.conversationId == conversationId }
+        pendingApprovals.removeAll { $0.conversationId == conversationId }
+        for req in matching { req.continuation.resume(returning: false) }
+    }
+
     func resolveApproval(_ resolution: ApprovalResolution) {
-        guard let pending = pendingApproval else { return }
-        
+        guard !pendingApprovals.isEmpty else { return }
+        let pending = pendingApprovals.removeFirst()
         var approved = false
         switch resolution {
         case .approve:
@@ -550,15 +577,11 @@ class AppState {
             if let workspace = pending.workspace {
                 PermissionManager.shared.allowInProject(toolName: pending.toolName, details: pending.details, workspace: workspace)
             } else {
-                // Fallback to global if no workspace is active
                 PermissionManager.shared.allowGlobally(toolName: pending.toolName, details: pending.details)
             }
             approved = true
         }
-        
-        let cont = pending.continuation
-        pendingApproval = nil
-        cont.resume(returning: approved)
+        pending.continuation.resume(returning: approved)
     }
     
     func checkForUpdates(explicit: Bool = false) {
