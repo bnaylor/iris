@@ -10,6 +10,7 @@ actor IrisEngine {
     var systemPrompt: Content!
     var modelTier: ModelTier
     let principal: Principal
+    let roleLabel: String?
 
     /// Conversations already shown the "no sandbox runtime" fallback notice (deduped).
     private var warnedNoRuntime: Set<UUID> = []
@@ -17,11 +18,12 @@ actor IrisEngine {
     // We need to keep a weak reference to the state or pass it in.
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
-    
-    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main) {
+
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil) {
         self.state = state
         self.modelTier = tier
         self.principal = principal
+        self.roleLabel = roleLabel
         systemPrompt = nil
     }
     
@@ -81,6 +83,13 @@ actor IrisEngine {
     func cancelReprompt(for conversationId: UUID) {
         repromptTasks[conversationId]?.cancel()
         repromptTasks[conversationId] = nil
+    }
+
+    private var approvalOrigin: String {
+        switch principal {
+        case .main: return "Main agent"
+        case .subagent: return "Subagent (\(roleLabel ?? "subagent"))"
+        }
     }
 
     /// The principal-based sandbox decision for this conversation (no side effects). Shared by
@@ -648,8 +657,10 @@ actor IrisEngine {
             }
             
             let useSandbox = await resolveUseSandbox(toolName: functionCall.name, conversationId: conversationId, workspacePath: workspacePath)
-            if needsApproval && !useSandbox {
-                let approved = await localState?.requestApproval(toolName: functionCall.name, details: details, workspace: workspacePath) ?? false
+            if needsApproval {
+                let approved = await localState?.requestApproval(
+                    toolName: functionCall.name, details: details, workspace: workspacePath,
+                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox) ?? false
                 if approved {
                     result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
                 } else {

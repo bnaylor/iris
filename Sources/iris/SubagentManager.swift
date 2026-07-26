@@ -38,7 +38,7 @@ final class SubagentManager: @unchecked Sendable {
         }
         
         // 2. Instantiate a fresh IrisEngine linked to this conversation
-        let engine = IrisEngine(state: appState, tier: tier, principal: .subagent)
+        let engine = IrisEngine(state: appState, tier: tier, principal: .subagent, roleLabel: role)
         
         // 3. Craft the role-specific prompt
         let customPromptText = generateRolePrompt(role: role)
