@@ -32,11 +32,14 @@ struct IrisPaths: Sendable {
     var permissionsJSON: URL { configDir.appendingPathComponent("permissions.json") }
     var mcpServersJSON: URL { configDir.appendingPathComponent("mcp_servers.json") }
 
+    // rules/
+    var rulesDir: URL { root.appendingPathComponent("rules") }
+
     // models/ (resolved path unchanged from the old layout)
     var modelsDir: URL { root.appendingPathComponent("models") }
 
     /// True if `rawPath` resolves to a location inside `memoryDir` — used to treat reads of
-    /// first-party memory content (SOUL, USER, skills, artifacts, library, …) as trusted.
+    /// first-party memory content (SOUL, USER, skills, artifacts, library, ...) as trusted.
     /// Tilde-expands and standardizes the path (resolving `..`) first, so a traversal like
     /// `memory/../models/x` does NOT count as inside memory. A trailing separator on the
     /// prefix check prevents a sibling like `memory-evil` from matching.
@@ -59,7 +62,7 @@ struct IrisPaths: Sendable {
     /// Create the bucket directories if absent. Called by the migrator and by managers that
     /// need their directory to exist before writing.
     func ensureDirectories() throws {
-        for dir in [memoryDir, skillsDir, artifactsDir, libraryDir, configDir, modelsDir] {
+        for dir in [memoryDir, skillsDir, artifactsDir, libraryDir, configDir, modelsDir, rulesDir] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

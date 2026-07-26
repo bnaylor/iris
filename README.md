@@ -37,6 +37,7 @@ Instead of trapping your workflows inside a proprietary database or cloud servic
 *   **Memory Grooming:** The background `/reflect` loop actively grooms the memory library, ensuring frontmatter is up-to-date and repairing broken cross-links.
 *   **Project Artifacts:** Generated design docs and research notes are strictly organized into human-readable library trees (e.g., `~/.iris/library/<project_name>/`) instead of opaque UUID directories, and all artifacts enforce the OKF schema for seamless integration.
 *   **JIT Prompt Injection:** Iris uses `HolographicMemoryManager` to perform semantic vector searches against a fact store that sits in between the working context and the static library of markdown "memories" and skills.
+*   **Always-On Custom Rules:** Iris automatically loads any user-defined instruction or rule files inside `~/.iris/rules/` on startup and appends them directly to the base system prompt. This allows you to bootstrap custom behavior rules, environment notes, or stylistic constraints permanently.
 
 ### Core Native Tools
 Iris provides some native primitives to the LLM:

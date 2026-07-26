@@ -34,7 +34,9 @@ actor IrisEngine {
             let soul = await manager.loadSOUL()
             let skills = await manager.discoverSkills()
             let steering = SystemSteering.shipped()
-            let prompt = Content(role: "system", parts: [Part(text: "\(soul)\n\n\(skills)\n\n\(steering)", functionCall: nil, functionResponse: nil)])
+            let customRules = await manager.loadCustomRules()
+            let combined = "\(soul)\n\n\(skills)\n\n\(steering)\(customRules)"
+            let prompt = Content(role: "system", parts: [Part(text: combined, functionCall: nil, functionResponse: nil)])
             systemPrompt = prompt
             return prompt
         }

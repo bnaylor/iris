@@ -17,6 +17,29 @@ struct SkillManager {
         return "You are Iris, a native macOS agent running on the local machine."
     }
 
+    /// Auto-loads any custom, user-defined rules from `~/.iris/rules/` and returns them
+    /// as a combined Markdown block to be appended directly to the system prompt.
+    func loadCustomRules(paths: IrisPaths = .default) async -> String {
+        let rulesDir = paths.rulesDir.path
+        let fileManager = FileManager.default
+
+        guard let items = try? fileManager.contentsOfDirectory(atPath: rulesDir) else {
+            return ""
+        }
+
+        var rulesContent = ""
+        for item in items.sorted() {
+            let fileURL = paths.rulesDir.appendingPathComponent(item)
+            var isDir: ObjCBool = false
+            if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue {
+                if let content = try? String(contentsOfFile: fileURL.path, encoding: .utf8) {
+                    rulesContent += "\n\n# Rule: \(item)\n\(content)\n"
+                }
+            }
+        }
+        return rulesContent
+    }
+
     /// A registered skill, parsed from its SKILL.md frontmatter. The body is never read.
     struct SkillInfo: Sendable {
         let name: String

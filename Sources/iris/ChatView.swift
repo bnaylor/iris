@@ -207,19 +207,6 @@ struct ChatView: View {
                         }
                     }
                     
-                    if let request = state.pendingApprovals.first {
-                        ApprovalBannerView(request: request,
-                                           queueDepth: state.pendingApprovals.count,
-                                           onResolve: { resolution in
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                state.resolveApproval(resolution)
-                            }
-                        })
-                        .padding(.horizontal)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApprovals.count)
-                    }
-                    
                     let matchingCommands = SlashCommandItem.matches(for: inputText)
                     if !matchingCommands.isEmpty {
                         SlashCommandAutoCompleteView(commands: matchingCommands) { selected in
@@ -322,6 +309,22 @@ struct ChatView: View {
                 }
             }
         }
+        // Global approval overlay: floats over the whole window so a request from ANY conversation
+        // (incl. a background subagent) is visible without switching tabs. Reads the shared queue.
+        .overlay(alignment: .bottom) {
+            if let request = state.pendingApprovals.first {
+                ApprovalBannerView(request: request,
+                                   queueDepth: state.pendingApprovals.count,
+                                   onResolve: { resolution in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        state.resolveApproval(resolution)
+                    }
+                })
+                .padding()
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApprovals.count)
         .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)
         .preferredColorScheme(config.appearanceTheme == "light" ? .light : (config.appearanceTheme == "dark" ? .dark : nil))
         .sheet(isPresented: $showSetupWizard) {
@@ -684,9 +687,19 @@ struct ApprovalBannerView: View {
                 }
             }
 
-            Text("\(request.origin) wants to run a potentially sensitive action:")
+            HStack(spacing: 6) {
+                Image(systemName: request.origin.hasPrefix("Subagent") ? "cpu" : "person.fill")
+                Text(request.origin)
+            }
+            .font(.caption.bold())
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.irisIndigo.opacity(0.18)))
+            .foregroundColor(.irisIndigo)
+
+            Text("wants to run a potentially sensitive action:")
                 .font(.subheadline)
-            
+
             Text("\(request.toolName): \(request.details)")
                 .font(.caption.monospaced())
                 .padding(8)
@@ -721,13 +734,14 @@ struct ApprovalBannerView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.orange.opacity(0.15))
-                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.22), radius: 10, x: 0, y: 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                .stroke(Color.orange.opacity(0.45), lineWidth: 1)
         )
+        .frame(maxWidth: 560)
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
