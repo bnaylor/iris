@@ -40,6 +40,10 @@ Replace `AppState.pendingApproval: ToolApprovalRequest?` with `pendingApprovals:
 - `resolveApproval(_:)` resolves the **head** request and removes it, revealing the next.
 - Concurrent requests from multiple subagents (or subagent + main) stack safely; no continuation
   is ever leaked by being overwritten.
+- **Isolation:** `AppState` is `@MainActor`, so all queue mutations (append/remove) and every
+  continuation `resume` in `requestApproval`, `resolveApproval`, and `denyPendingApprovals` run on
+  the main actor. Background subagent tasks reach these methods via `await` (an actor hop), so
+  concurrent calls are serialized — no locks needed, and a continuation is resumed exactly once.
 
 ### A3. Origin labeling + reliable surfacing
 `ToolApprovalRequest` gains `id: UUID`, `conversationId: UUID?`, and `origin: String`.
@@ -56,6 +60,13 @@ Wrap `VibecopService.evaluateAction` in a timeout of `ConfigManager.vibecopTimeo
 (default 5). On timeout or error, fail **open to the user prompt** (treated as ESCALATE) — the
 turn never blocks on a wedged model call. (Observed Vibecop latency today: ~1.5–3.4s, so 5s gives
 headroom; configurable if a slower model needs more.)
+
+**Cancellation on timeout:** implement the timeout with a task group that cancels the losing
+branch, and best-effort-cancels the underlying `evaluateAction` (which should observe
+`Task.isCancelled`). Note the honest limitation: a native local-inference call already in flight
+may not be interruptible mid-token and could run to completion in the background — but its result
+is **abandoned** (we've already escalated), so it cannot resume the turn or leak a continuation;
+the only cost is some wasted compute on the losing call.
 
 ### A5. Sandbox-aware Vibecop
 `evaluateAction` gains `inSandbox: Bool` (threaded from the engine's `useSandbox`). When true, the
@@ -82,6 +93,12 @@ The engine keeps a short per-conversation history of executed tool-call signatur
 **5**) signatures are identical, the agent is stuck repeating itself → trigger a **soft stop**
 early (before the turn cap). The history is cleared on `goal_complete`, on a new user turn, and
 on stop.
+
+**Deterministic signatures (required):** the args serialization MUST be canonical so that
+identical arguments always produce identical strings. Swift dictionaries are unordered, so the
+signature is built with sorted keys — `JSONEncoder` with `.outputFormatting = [.sortedKeys]`
+(or `JSONSerialization` with `.sortedKeys`). Without this, key-ordering jitter would make the
+same repeated call look different and silently defeat detection.
 
 ### B3. Summarize + hand back (split by how it stopped)
 When a goal loop stops for a control reason, produce a summary and hand back — never silently
@@ -127,7 +144,9 @@ Unit-testable pure logic (the priority):
   independently; `resolveApproval` resolves FIFO head; `denyPendingApprovals(for:)` resolves-false
   only the matching conversation's requests and leaves others intact; no continuation leaked.
 - **Loop detector**: `threshold` identical consecutive signatures trips; a differing signature
-  resets the run; distinct calls never trip.
+  resets the run; distinct calls never trip. Signature determinism: the same tool name + args
+  supplied with different dictionary insertion order produces the **same** signature (guards the
+  Edge-2 sorted-keys requirement).
 - **Vibecop timeout wrapper**: a call exceeding the timeout resolves as ESCALATE (fail-open), not
   a throw that blocks; a fast call passes its real decision through.
 - **Turn-cap decision**: iteration ≥ cap → stop; below → continue.
