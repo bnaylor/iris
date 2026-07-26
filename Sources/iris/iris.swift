@@ -558,9 +558,10 @@ actor IrisEngine {
                 await HookManager.shared.fireNotification(title: "LLM Error", body: error.localizedDescription, useSandbox: hooksSandbox)
                 await pushToUI(role: .agent, text: "Error calling LLM: \(error.localizedDescription)", conversationId: conversationId)
                 turnFinished = true
-                await MainActor.run { 
+                await MainActor.run {
                     localState?.clearGoal(for: conversationId)
                     localState?.onSubagentComplete[conversationId]?("Subagent failed due to LLM Error: \(error.localizedDescription)")
+                    localState?.onSubagentComplete[conversationId] = nil
                 }
             }
         }

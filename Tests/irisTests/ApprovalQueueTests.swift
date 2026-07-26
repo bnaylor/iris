@@ -40,4 +40,21 @@ struct ApprovalQueueTests {
         let vb = await rb
         #expect(vb == true)
     }
+
+    @Test("enqueue in a cancelled task returns false and leaves the queue empty")
+    func cancelledEnqueueNoLeak() async {
+        let app = AppState()
+        let cid = UUID()
+        let t = Task { () -> Bool in
+            // Give t.cancel() time to land before we reach enqueue; the sleep throws under
+            // cancellation and try? swallows it, so we still call enqueueUserApproval.
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            return await app.enqueueUserApproval(toolName: "t", details: "d", workspace: nil,
+                                                 conversationId: cid, origin: "Subagent (x)")
+        }
+        t.cancel()
+        let v = await t.value
+        #expect(v == false)
+        #expect(app.pendingApprovals.isEmpty)
+    }
 }

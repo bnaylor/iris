@@ -542,7 +542,11 @@ class AppState {
     /// separated from `requestApproval`'s permission/Vibecop fast paths so it is unit-testable.
     func enqueueUserApproval(toolName: String, details: String, workspace: String?,
                              conversationId: UUID?, origin: String) async -> Bool {
-        await withCheckedContinuation { continuation in
+        // If our task was already cancelled (e.g. a subagent torn down while we were suspended
+        // in the Vibecop/timeout window), do NOT enqueue a request nobody will resolve — the
+        // teardown's denyPendingApprovals already ran and would miss a late append.
+        if Task.isCancelled { return false }
+        return await withCheckedContinuation { continuation in
             pendingApprovals.append(ToolApprovalRequest(
                 toolName: toolName, details: details, workspace: workspace,
                 conversationId: conversationId, origin: origin, continuation: continuation))
