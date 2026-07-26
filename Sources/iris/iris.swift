@@ -664,10 +664,12 @@ actor IrisEngine {
             result = "Memory updated."
         } else if functionCall.name == "reflect" {
             result = "Reflection logged. Proceed with your next action."
-        } else if functionCall.name == "invoke_subagent", 
-                  let role = functionCall.args["role"]?.stringValue, 
-                  let task = functionCall.args["task"]?.stringValue,
-                  let effort = functionCall.args["effort"]?.stringValue {
+        } else if functionCall.name == "invoke_subagent",
+                  let role = functionCall.args["role"]?.stringValue,
+                  let task = functionCall.args["task"]?.stringValue {
+            // `effort` is optional; default to medium so the subagent isn't silently dropped when
+            // the model omits it.
+            let effort = functionCall.args["effort"]?.stringValue ?? "medium"
             let isBackground = (functionCall.args["background"]?.stringValue.lowercased() == "true")
             
             if isBackground {
