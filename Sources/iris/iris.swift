@@ -92,17 +92,22 @@ actor IrisEngine {
     /// to summarize and call goal_complete, and clear the goal so the loop cannot continue.
     private func softStopWithSummary(conversationId: UUID, reason: String) async {
         cancelReprompt(for: conversationId)
-        loopDetectors[conversationId]?.reset()
+        loopDetectors[conversationId] = nil
+        let localState = state
+        // Clear the goal FIRST so the summary turn cannot re-enter the cap/loop-detection paths
+        // (both gated on activeGoal != nil) and recurse into softStopWithSummary.
+        await MainActor.run { localState?.clearGoal(for: conversationId) }
         await pushToUI(role: .system, text: "[\(approvalOrigin)] \(reason) Summarizing and stopping.", conversationId: conversationId)
         await processInput(
             "You have reached a stopping condition (\(reason)). Summarize what you accomplished and what is blocking you, then call `goal_complete` with that summary. Do not take any other action.",
             source: "System", conversationId: conversationId)
-        // Ensure the loop ends even if the model did not call goal_complete.
-        let localState = state
+        // If the summary turn didn't deliver a result via goal_complete, fire the fallback.
+        // (The goal_complete handler nils out the callback after firing, so a non-nil callback
+        // here means no summary was delivered.)
         await MainActor.run {
-            if localState?.conversations.first(where: { $0.id == conversationId })?.activeGoal != nil {
-                localState?.clearGoal(for: conversationId)
+            if localState?.onSubagentComplete[conversationId] != nil {
                 localState?.onSubagentComplete[conversationId]?("Stopped: \(reason) (no explicit summary produced).")
+                localState?.onSubagentComplete[conversationId] = nil
             }
         }
     }
@@ -675,9 +680,10 @@ actor IrisEngine {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
-            await MainActor.run { 
-                localState?.clearGoal(for: conversationId) 
+            await MainActor.run {
+                localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
+                localState?.onSubagentComplete[conversationId] = nil
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             result = "Goal marked as complete. Summary: \(summary)"
