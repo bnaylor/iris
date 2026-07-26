@@ -207,7 +207,7 @@ struct ChatView: View {
                         }
                     }
                     
-                    if let request = state.pendingApproval {
+                    if let request = state.pendingApprovals.first {
                         ApprovalBannerView(request: request, onResolve: { resolution in
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 state.resolveApproval(resolution)
@@ -215,7 +215,7 @@ struct ChatView: View {
                         })
                         .padding(.horizontal)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApproval != nil)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state.pendingApprovals.first != nil)
                     }
                     
                     let matchingCommands = SlashCommandItem.matches(for: inputText)
