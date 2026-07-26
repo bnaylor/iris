@@ -175,7 +175,9 @@ class AppState {
         var newConv = Conversation(id: id, title: "New Conversation")
         newConv.isSubagent = isSubagent
         conversations.append(newConv)
-        selectedConversationId = newConv.id
+        if !isSubagent {
+            selectedConversationId = newConv.id
+        }
         saveConversations()
 
         Task {
