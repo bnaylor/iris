@@ -91,6 +91,13 @@ struct ActiveSubagent: Identifiable, Hashable {
 @MainActor
 @Observable
 class AppState {
+    /// The single app-wide AppState. `ChatView` and `SubagentManager` MUST share one instance —
+    /// SwiftUI evaluates a `@State`'s default expression on every view re-init, so
+    /// `@State var state = AppState()` was constructing several AppStates (each registering itself
+    /// as the SubagentManager global and racing on UserDefaults). Referencing the singleton means
+    /// the expression returns the same object every time.
+    static let shared = AppState()
+
     var conversations: [Conversation] = []
     var selectedConversationId: UUID?
     /// Read-only for observers. Ownership is centralized through `beginThinking()`/`endThinking()`
@@ -196,7 +203,7 @@ class AppState {
         let subagent = ActiveSubagent(id: id, role: role, startTime: Date(), status: "Initializing...")
         activeSubagents.append(subagent)
     }
-    
+
     func removeSubagent(id: UUID) {
         activeSubagents.removeAll(where: { $0.id == id })
     }

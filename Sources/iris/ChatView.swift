@@ -3,7 +3,7 @@ import MarkdownUI
 import UniformTypeIdentifiers
 
 struct ChatView: View {
-    @State var state = AppState()
+    @State var state = AppState.shared
     @State private var inputText = ""
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
