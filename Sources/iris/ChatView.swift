@@ -453,28 +453,15 @@ struct ChatView: View {
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         HStack {
-            TextField("Message Iris...", text: $inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...6)
-                .padding(10)
+            ComposerTextView(text: $inputText, onSubmit: submit)
+                .frame(minHeight: 24, maxHeight: 120)
+                .padding(6)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
-                // Enter submits; Shift+Enter inserts a newline (chat-app convention).
-                // We insert the newline ourselves — deferring to the field turns Shift+Return
-                // into a selection-extend, not a line break.
-                .onKeyPress { key in
-                    guard key.key == .return else { return .ignored }
-                    if key.modifiers.contains(.shift) {
-                        inputText += "\n"
-                        return .handled
-                    }
-                    submit()
-                    return .handled       // consume Enter so it doesn't add a newline
-                }
 
             Button(action: submit) {
                 Image(systemName: "paperplane.fill")
