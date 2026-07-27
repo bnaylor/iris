@@ -11,7 +11,8 @@ struct ToolExecutor {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "command": Schema(type: "STRING", description: "The command to run in bash/zsh")
+                    "command": Schema(type: "STRING", description: "The command to run in bash/zsh"),
+                    "intent": Schema(type: "STRING", description: "One short phrase: why you're running this command (shown to the user; keep it under ~8 words).")
                 ],
                 required: ["command"]
             )
