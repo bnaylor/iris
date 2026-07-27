@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @State var state = AppState.shared
     @State private var inputText = ""
+    @State private var composerHeight: CGFloat = 24
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
     @State private var showSetupWizard = false
@@ -453,8 +454,8 @@ struct ChatView: View {
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         HStack {
-            ComposerTextView(text: $inputText, onSubmit: submit)
-                .frame(minHeight: 24, maxHeight: 120)
+            ComposerTextView(text: $inputText, onSubmit: submit, onHeightChange: { composerHeight = $0 })
+                .frame(height: min(max(composerHeight, 24), 120))
                 .padding(6)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)

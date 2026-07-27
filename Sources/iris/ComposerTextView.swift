@@ -7,6 +7,7 @@ import AppKit
 struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
+    var onHeightChange: (CGFloat) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -32,6 +33,7 @@ struct ComposerTextView: NSViewRepresentable {
         scroll.hasVerticalScroller = false
         scroll.borderType = .noBorder
         context.coordinator.textView = tv
+        context.coordinator.measureHeight(tv)
         return scroll
     }
 
@@ -39,11 +41,11 @@ struct ComposerTextView: NSViewRepresentable {
         guard let tv = nsView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
         if tv.string != text {
-            let sel = tv.selectedRange()
             tv.string = text
             let len = (text as NSString).length
-            tv.setSelectedRange(NSRange(location: min(sel.location, len), length: 0))
+            tv.setSelectedRange(NSRange(location: len, length: 0))
         }
+        context.coordinator.measureHeight(tv)
     }
 
     @MainActor
@@ -51,6 +53,7 @@ struct ComposerTextView: NSViewRepresentable {
         var parent: ComposerTextView
         weak var textView: NSTextView?
         var isEditing = false
+        private var lastHeight: CGFloat = 0
 
         init(_ parent: ComposerTextView) { self.parent = parent }
 
@@ -58,11 +61,25 @@ struct ComposerTextView: NSViewRepresentable {
             guard !isEditing, let tv = notification.object as? NSTextView else { return }
             parent.text = tv.string
             handleTextChange(tv)
+            measureHeight(tv)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !isEditing, let tv = notification.object as? NSTextView else { return }
             handleSelectionChange(tv)
+        }
+
+        /// Measure the laid-out text height and report it to SwiftUI (async to avoid
+        /// mutating view state mid-update). Skips until the view has a real width,
+        /// otherwise text wraps to zero width and reports a bogus height.
+        func measureHeight(_ tv: NSTextView) {
+            guard tv.bounds.width > 0, let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            lm.ensureLayout(for: tc)
+            let h = lm.usedRect(for: tc).height + tv.textContainerInset.height * 2
+            guard abs(h - lastHeight) > 0.5 else { return }
+            lastHeight = h
+            let report = parent.onHeightChange
+            DispatchQueue.main.async { report(h) }
         }
 
         /// Replaced in place in Task 6 to drive the emoji popup. No-op for parity.
@@ -80,6 +97,7 @@ struct ComposerTextView: NSViewRepresentable {
             parent.text = tv.string
             isEditing = false
             afterProgrammaticEdit(tv)
+            measureHeight(tv)
         }
 
         /// Replaced in place in Task 6 to refresh popup state after a programmatic edit.
