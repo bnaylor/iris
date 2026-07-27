@@ -174,13 +174,7 @@ struct ChatView: View {
                         // otherwise fall through to interrupting the agent (a no-op when idle).
                         // This replaced the Stop button's own .cancelAction shortcut so Escape
                         // isn't double-handled.
-                        .onExitCommand {
-                            if !selectedMessageIDs.isEmpty {
-                                selectedMessageIDs.removeAll()
-                            } else if state.isThinking {
-                                state.interruptActiveConversation()
-                            }
-                        }
+                        .onExitCommand { handleEscape() }
                         .onChange(of: conv.messages.count) { _, _ in
                             DispatchQueue.main.async {
                                 selectedMessageIDs.removeAll()
@@ -459,11 +453,22 @@ struct ChatView: View {
         slashModel.clear()
     }
 
+    /// Escape behavior shared by the message list (`.onExitCommand`) and the composer:
+    /// clear a message selection, else interrupt a running turn. Wired to the composer
+    /// too because the NSTextView holds focus and would otherwise swallow Escape.
+    private func handleEscape() {
+        if !selectedMessageIDs.isEmpty {
+            selectedMessageIDs.removeAll()
+        } else if state.isThinking {
+            state.interruptActiveConversation()
+        }
+    }
+
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         let isInputEmpty = inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return HStack {
-            ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onHeightChange: { composerHeight = $0 })
+            ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onEscape: handleEscape, onHeightChange: { composerHeight = $0 })
                 .frame(height: min(max(composerHeight, 24), 120))
                 .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
                 .onChange(of: config.defaultEmojiSkinTone) { _, new in

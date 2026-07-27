@@ -9,6 +9,7 @@ struct ComposerTextView: NSViewRepresentable {
     var onSubmit: () -> Void
     var emoji: EmojiTokenModel
     var slash: SlashCommandModel
+    var onEscape: () -> Void = {}
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -167,7 +168,9 @@ final class KeyCatchingTextView: NSTextView {
         case 126: // Up arrow
             if !coordinator.handleNavKey(.up) { super.keyDown(with: event) }
         case 53: // Escape
-            if !coordinator.handleNavKey(.escape) { super.keyDown(with: event) }
+            // Popup open → dismiss it. Otherwise hand Escape to the app-level action
+            // (clear message selection / interrupt) instead of letting NSTextView eat it.
+            if !coordinator.handleNavKey(.escape) { coordinator.parent.onEscape() }
         default:
             super.keyDown(with: event)
         }
