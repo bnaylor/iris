@@ -102,7 +102,7 @@ actor IrisEngine {
         await pushToUI(role: .system, text: "[\(approvalOrigin)] \(reason) Summarizing and stopping.", conversationId: conversationId)
         await processInput(
             "You have reached a stopping condition (\(reason)). Summarize what you accomplished and what is blocking you, then call `goal_complete` with that summary. Do not take any other action.",
-            source: "System", conversationId: conversationId)
+            source: "System", conversationId: conversationId, restrictToGoalComplete: true)
         // If the summary turn didn't deliver a result via goal_complete, fire the fallback.
         // (The goal_complete handler nils out the callback after firing, so a non-nil callback
         // here means no summary was delivered.)
@@ -164,7 +164,7 @@ actor IrisEngine {
         return false
     }
 
-    func processInput(_ input: String, source: String, conversationId: UUID) async {
+    func processInput(_ input: String, source: String, conversationId: UUID, restrictToGoalComplete: Bool = false) async {
         // Own the thinking indicator for the whole turn via a balanced begin/end so that
         // overlapping turns can't leave it stuck (centralized in AppState's reference count).
         let stateForThinking = state
@@ -172,13 +172,13 @@ actor IrisEngine {
         let turnID = PerformanceProfiler.shared.beginTurn(label: input, source: source)
         let turnStart = CFAbsoluteTimeGetCurrent()
         await PerformanceProfiler.$currentTurnID.withValue(turnID) {
-            await processInputBody(input, source: source, conversationId: conversationId)
+            await processInputBody(input, source: source, conversationId: conversationId, restrictToGoalComplete: restrictToGoalComplete)
         }
         PerformanceProfiler.shared.endTurn(turnID, totalMs: (CFAbsoluteTimeGetCurrent() - turnStart) * 1000.0)
         await MainActor.run { stateForThinking?.endThinking() }
     }
 
-    private func processInputBody(_ input: String, source: String, conversationId: UUID) async {
+    private func processInputBody(_ input: String, source: String, conversationId: UUID, restrictToGoalComplete: Bool = false) async {
         if source == "UI" { loopDetectors[conversationId] = nil }
 
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
@@ -402,6 +402,13 @@ actor IrisEngine {
             }
         }
         
+        // A soft-stop summary turn gets ONLY goal_complete: the model can summarize or finish,
+        // but physically cannot keep calling the tool it was looping on. A worded "please stop"
+        // does not bind the model (it rationalizes past it — see the loop-detection stop signal),
+        // so enforcement has to be mechanical: remove the tool from the schema.
+        if restrictToGoalComplete {
+            toolsList = toolsList.filter { $0.name == "goal_complete" }
+        }
         var request = GeminiRequest(contents: history, systemInstruction: currentSystemPrompt, tools: [Tool(functionDeclarations: toolsList)])
         
         var turnFinished = false
