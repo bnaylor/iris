@@ -29,10 +29,12 @@ struct SkillManager {
 
         var rulesContent = ""
         for item in items.sorted() {
+            guard !item.hasPrefix(".") else { continue }
             let fileURL = paths.rulesDir.appendingPathComponent(item)
             var isDir: ObjCBool = false
             if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue {
-                if let content = try? String(contentsOfFile: fileURL.path, encoding: .utf8) {
+                if let content = try? String(contentsOfFile: fileURL.path, encoding: .utf8),
+                   !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     rulesContent += "\n\n# Rule: \(item)\n\(content)\n"
                 }
             }
