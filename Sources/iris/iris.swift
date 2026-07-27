@@ -3,7 +3,7 @@ import SwiftUI
 import KeyboardShortcuts
 
 actor IrisEngine {
-    let client = LLMClient()
+    let client: any LLMClientProtocol
     let executor = ToolExecutor.shared
     let manager = SkillManager.shared
 
@@ -19,11 +19,12 @@ actor IrisEngine {
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
 
-    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil) {
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil, client: any LLMClientProtocol = LLMClient()) {
         self.state = state
         self.modelTier = tier
         self.principal = principal
         self.roleLabel = roleLabel
+        self.client = client
         systemPrompt = nil
     }
     

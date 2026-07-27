@@ -5,6 +5,14 @@ struct APIError: LocalizedError {
     var errorDescription: String? { return message }
 }
 
+/// Seam for injecting a scripted client in tests. The production `LLMClient` conforms;
+/// tests supply a mock to drive `IrisEngine` deterministically without network calls.
+protocol LLMClientProtocol: Sendable {
+    func generateContent(request: GeminiRequest, tier: ModelTier) async throws -> GeminiResponse
+}
+
+extension LLMClient: LLMClientProtocol {}
+
 struct LLMClient {
     func endpoint(for tier: ModelTier) -> String {
         let config = ConfigManager.shared
