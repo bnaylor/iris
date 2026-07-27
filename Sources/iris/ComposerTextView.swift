@@ -7,6 +7,7 @@ import AppKit
 struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
+    var emoji: EmojiTokenModel
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -34,6 +35,7 @@ struct ComposerTextView: NSViewRepresentable {
         scroll.borderType = .noBorder
         context.coordinator.textView = tv
         context.coordinator.measureHeight(tv)
+        context.coordinator.connectModel()
         return scroll
     }
 
@@ -82,9 +84,27 @@ struct ComposerTextView: NSViewRepresentable {
             DispatchQueue.main.async { report(h) }
         }
 
-        /// Replaced in place in Task 6 to drive the emoji popup. No-op for parity.
-        func handleTextChange(_ tv: NSTextView) {}
-        func handleSelectionChange(_ tv: NSTextView) {}
+        func connectModel() {
+            parent.emoji.performReplace = { [weak self] glyph, range in
+                self?.replace(range: range, with: glyph)
+            }
+        }
+
+        func handleTextChange(_ tv: NSTextView) {
+            let caret = tv.selectedRange().location
+            let ns = tv.string as NSString
+            if let (glyph, range) = EmojiTokenizer.completedReplacement(
+                in: ns, caret: caret, catalog: .shared, defaultTone: parent.emoji.defaultTone) {
+                replace(range: range, with: glyph)
+                parent.emoji.clear()
+                return
+            }
+            parent.emoji.update(text: ns, caret: caret)
+        }
+
+        func handleSelectionChange(_ tv: NSTextView) {
+            parent.emoji.update(text: tv.string as NSString, caret: tv.selectedRange().location)
+        }
 
         /// Replace a UTF-16 range with a string; place the caret after it.
         func replace(range: NSRange, with str: String) {
@@ -100,8 +120,9 @@ struct ComposerTextView: NSViewRepresentable {
             measureHeight(tv)
         }
 
-        /// Replaced in place in Task 6 to refresh popup state after a programmatic edit.
-        func afterProgrammaticEdit(_ tv: NSTextView) {}
+        func afterProgrammaticEdit(_ tv: NSTextView) {
+            parent.emoji.update(text: tv.string as NSString, caret: tv.selectedRange().location)
+        }
     }
 }
 
@@ -137,6 +158,15 @@ final class KeyCatchingTextView: NSTextView {
 
 extension ComposerTextView.Coordinator {
     enum NavKey { case up, down, tab, enter, escape }
-    /// Replaced in place in Task 6 to consume nav keys when the popup is open. Parity: no-op.
-    func handleNavKey(_ key: NavKey) -> Bool { false }
+
+    func handleNavKey(_ key: NavKey) -> Bool {
+        guard parent.emoji.isShowing else { return false }
+        switch key {
+        case .up:     parent.emoji.moveSelection(-1)
+        case .down:   parent.emoji.moveSelection(1)
+        case .tab, .enter: parent.emoji.commitSelected()
+        case .escape: parent.emoji.clear()
+        }
+        return true
+    }
 }

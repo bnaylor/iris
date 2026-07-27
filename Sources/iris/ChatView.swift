@@ -6,6 +6,7 @@ struct ChatView: View {
     @State var state = AppState.shared
     @State private var inputText = ""
     @State private var composerHeight: CGFloat = 24
+    @State private var emojiModel = EmojiTokenModel()
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
     @State private var showSetupWizard = false
@@ -211,6 +212,11 @@ struct ChatView: View {
                         }
                     }
                     
+                    if emojiModel.isShowing {
+                        EmojiAutoCompleteView(model: emojiModel)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     let matchingCommands = SlashCommandItem.matches(for: inputText)
                     if !matchingCommands.isEmpty {
                         SlashCommandAutoCompleteView(commands: matchingCommands) { selected in
@@ -449,13 +455,18 @@ struct ChatView: View {
         selectedMessageIDs.removeAll()
         state.sendMessage(inputText)
         inputText = ""
+        emojiModel.clear()
     }
 
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         HStack {
-            ComposerTextView(text: $inputText, onSubmit: submit, onHeightChange: { composerHeight = $0 })
+            ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, onHeightChange: { composerHeight = $0 })
                 .frame(height: min(max(composerHeight, 24), 120))
+                .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
+                .onChange(of: config.defaultEmojiSkinTone) { _, new in
+                    emojiModel.defaultTone = SkinTone(rawValue: new) ?? .none
+                }
                 .padding(6)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
