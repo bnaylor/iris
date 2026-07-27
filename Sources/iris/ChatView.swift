@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @State var state = AppState.shared
     @State private var inputText = ""
+    @State private var composerHeight: CGFloat = 24
+    @State private var emojiModel = EmojiTokenModel()
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
     @State private var showSetupWizard = false
@@ -210,6 +212,11 @@ struct ChatView: View {
                         }
                     }
                     
+                    if emojiModel.isShowing {
+                        EmojiAutoCompleteView(model: emojiModel)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     let matchingCommands = SlashCommandItem.matches(for: inputText)
                     if !matchingCommands.isEmpty {
                         SlashCommandAutoCompleteView(commands: matchingCommands) { selected in
@@ -450,32 +457,26 @@ struct ChatView: View {
         selectedMessageIDs.removeAll()
         state.sendMessage(inputText)
         inputText = ""
+        emojiModel.clear()
     }
 
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         let isInputEmpty = inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return HStack {
-            TextField("Message Iris...", text: $inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...6)
-                .padding(10)
+            ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, onHeightChange: { composerHeight = $0 })
+                .frame(height: min(max(composerHeight, 24), 120))
+                .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
+                .onChange(of: config.defaultEmojiSkinTone) { _, new in
+                    emojiModel.defaultTone = SkinTone(rawValue: new) ?? .none
+                }
+                .padding(6)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
-                // Enter submits; Shift/Option/Ctrl+Enter inserts a newline (chat-app convention).
-                .onKeyPress { key in
-                    guard key.key == .return else { return .ignored }
-                    if key.modifiers.contains(.shift) || key.modifiers.contains(.option) || key.modifiers.contains(.control) {
-                        inputText += "\n"
-                        return .handled
-                    }
-                    submit()
-                    return .handled       // consume Enter so it doesn't add a newline
-                }
 
             Button(action: submit) {
                 Image(systemName: "paperplane.fill")

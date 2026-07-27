@@ -27,7 +27,11 @@ class ConfigManager: @unchecked Sendable {
     var copyChatsAsMarkdown: Bool {
         didSet { UserDefaults.standard.set(copyChatsAsMarkdown, forKey: "COPY_CHATS_AS_MARKDOWN") }
     }
-    
+
+    var defaultEmojiSkinTone: Int {
+        didSet { UserDefaults.standard.set(defaultEmojiSkinTone, forKey: "DEFAULT_EMOJI_SKIN_TONE") }
+    }
+
     var primaryProvider: String {
         didSet { UserDefaults.standard.set(primaryProvider, forKey: "PRIMARY_PROVIDER") }
     }
@@ -199,6 +203,8 @@ class ConfigManager: @unchecked Sendable {
         } else {
             self.copyChatsAsMarkdown = true
         }
+
+        self.defaultEmojiSkinTone = UserDefaults.standard.object(forKey: "DEFAULT_EMOJI_SKIN_TONE") as? Int ?? SkinTone.none.rawValue
         
         var keychainSecrets = KeychainManager.shared.loadSecrets()
         var secretsMigrated = false

@@ -28,6 +28,14 @@ struct SettingsView: View {
                 Section(header: Text("Preferences").font(.headline)) {
                     Toggle("Copy chats as Markdown (default)", isOn: $config.copyChatsAsMarkdown)
                         .help("If disabled, copies will default to plain text without markdown formatting.")
+                    Picker("Default emoji skin tone", selection: $config.defaultEmojiSkinTone) {
+                        Text("Default 👋").tag(SkinTone.none.rawValue)
+                        Text("Light 👋🏻").tag(SkinTone.light.rawValue)
+                        Text("Medium-Light 👋🏼").tag(SkinTone.mediumLight.rawValue)
+                        Text("Medium 👋🏽").tag(SkinTone.medium.rawValue)
+                        Text("Medium-Dark 👋🏾").tag(SkinTone.mediumDark.rawValue)
+                        Text("Dark 👋🏿").tag(SkinTone.dark.rawValue)
+                    }
                 }
                 .padding(.bottom)
             }
