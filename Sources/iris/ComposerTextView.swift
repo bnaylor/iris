@@ -39,7 +39,10 @@ struct ComposerTextView: NSViewRepresentable {
         guard let tv = nsView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
         if tv.string != text {
+            let sel = tv.selectedRange()
             tv.string = text
+            let len = (text as NSString).length
+            tv.setSelectedRange(NSRange(location: min(sel.location, len), length: 0))
         }
     }
 
