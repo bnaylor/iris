@@ -461,10 +461,13 @@ struct ChatView: View {
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
                 // Enter submits; Shift+Enter inserts a newline (chat-app convention).
+                // We insert the newline ourselves — deferring to the field turns Shift+Return
+                // into a selection-extend, not a line break.
                 .onKeyPress { key in
                     guard key.key == .return else { return .ignored }
                     if key.modifiers.contains(.shift) {
-                        return .ignored   // let the field insert the newline
+                        inputText += "\n"
+                        return .handled
                     }
                     submit()
                     return .handled       // consume Enter so it doesn't add a newline
