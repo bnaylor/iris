@@ -569,7 +569,29 @@ struct MessageView: View {
 struct SystemGroupView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
-    
+
+    private var toolCalls: [ToolCallDisplay] {
+        messages.compactMap { ToolCallParser.parse($0.content) }
+    }
+    private var allToolCalls: Bool { !messages.isEmpty && toolCalls.count == messages.count }
+
+    private var headerText: String {
+        if allToolCalls {
+            return toolCalls.count == 1 ? "1 command" : "\(toolCalls.count) commands"
+        }
+        return (messages.count > 1 && isExpanded) ? "System Events (\(messages.count))" : "System Event"
+    }
+
+    /// Live "current intent": the most recent tool call's intent (or command / name).
+    /// If the last message is a non-tool system line, show that line instead.
+    private var collapsedStatus: String? {
+        guard let last = messages.last else { return nil }
+        if let call = ToolCallParser.parse(last.content) {
+            return call.intent ?? call.command ?? call.name
+        }
+        return last.content
+    }
+
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
@@ -577,20 +599,18 @@ struct SystemGroupView: View {
                     if messages.count > 1 {
                         Button(action: { withAnimation { isExpanded.toggle() } }) {
                             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .foregroundColor(.secondary)
-                                .frame(width: 14)
+                                .foregroundColor(.secondary).frame(width: 14)
                         }
                         .buttonStyle(.plain)
                     } else {
                         Spacer().frame(width: 14)
                     }
-                    
                     Image(systemName: "gearshape.fill")
-                    Text(messages.count > 1 && isExpanded ? "System Events (\(messages.count))" : "System Event")
+                    Text(headerText)
                 }
                 .font(.caption.bold())
                 .foregroundColor(.secondary)
-                
+
                 if isExpanded || messages.count == 1 {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(messages) { msg in
@@ -599,9 +619,12 @@ struct SystemGroupView: View {
                         }
                     }
                     .padding(.leading, 22)
-                } else if let last = messages.last {
-                    SystemMessageContent(text: last.content)
-                        .textSelection(.enabled)
+                } else if let status = collapsedStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .padding(.leading, 22)
                 }
             }
@@ -612,58 +635,44 @@ struct SystemGroupView: View {
 
 struct SystemMessageContent: View {
     let text: String
-    @State private var isExpanded = false
-    
+
     var body: some View {
-        if text.hasPrefix("[TOOL_CALL]\n") {
-            let jsonString = String(text.dropFirst("[TOOL_CALL]\n".count))
-            if let data = jsonString.data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let name = dict["name"] as? String {
-                
-                VStack(alignment: .leading, spacing: 0) {
-                    Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { isExpanded.toggle() } }) {
-                        HStack {
-                            Image(systemName: "wrench.and.screwdriver.fill")
-                                .foregroundColor(.blue)
-                            Text("Tool Execution: ")
-                                .foregroundColor(.secondary)
-                            + Text(name).bold()
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                        }
-                        .padding(10)
-                        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                    
-                    if isExpanded {
-                        Divider()
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            Text(jsonString)
-                                .font(.caption.monospaced())
-                                .foregroundColor(.secondary)
-                                .padding(10)
-                        }
-                        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                    }
-                }
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                )
-            } else {
-                fallbackView
-            }
+        if let call = ToolCallParser.parse(text) {
+            toolCallRow(call)
         } else {
             fallbackView
         }
+    }
+
+    @ViewBuilder
+    private func toolCallRow(_ call: ToolCallDisplay) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let command = call.command {
+                HStack(spacing: 6) {
+                    Text("$").foregroundColor(.secondary)
+                    Text(command).foregroundColor(.primary)
+                }
+                .font(.caption.monospaced())
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .foregroundColor(.blue).font(.caption2)
+                    Text(call.name).font(.caption.bold()).foregroundColor(.primary)
+                }
+            }
+            if let intent = call.intent {
+                Text(intent)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, call.command != nil ? 14 : 0)
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
     }
     
     private var fallbackView: some View {
