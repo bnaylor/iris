@@ -100,13 +100,6 @@ struct ChatView: View {
                                         copyMessagesToClipboard(ids: selectedMessageIDs.contains(item.id) ? selectedMessageIDs : [item.id], from: conv, asMarkdown: false)
                                     }
                                 }
-                                .simultaneousGesture(TapGesture().onEnded {
-                                    if selectedMessageIDs.contains(item.id) {
-                                        DispatchQueue.main.async {
-                                            selectedMessageIDs.remove(item.id)
-                                        }
-                                    }
-                                })
                             }
                             
                             if state.isThinking {
@@ -122,7 +115,6 @@ struct ChatView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundColor(.secondary)
-                                    .keyboardShortcut(.cancelAction)
                                     .help("Interrupt Iris (Esc)")
                                 }
                                 .padding(.leading, 12)
@@ -175,6 +167,17 @@ struct ChatView: View {
                             return [NSItemProvider(object: text as NSString)]
                         }
                         .background(Color(NSColor.textBackgroundColor))
+                        // Single Escape handler: clear a message selection if there is one,
+                        // otherwise fall through to interrupting the agent (a no-op when idle).
+                        // This replaced the Stop button's own .cancelAction shortcut so Escape
+                        // isn't double-handled.
+                        .onExitCommand {
+                            if !selectedMessageIDs.isEmpty {
+                                selectedMessageIDs.removeAll()
+                            } else {
+                                state.interruptActiveConversation()
+                            }
+                        }
                         .onChange(of: conv.messages.count) { _, _ in
                             selectedMessageIDs.removeAll()
                             DispatchQueue.main.async {
