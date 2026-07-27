@@ -3,7 +3,7 @@ import Observation
 
 @MainActor
 @Observable
-final class EmojiTokenModel {
+final class EmojiTokenModel: PopupNav {
     var activeQuery: String? = nil
     var activeRange: NSRange? = nil
     var suggestions: [EmojiItem] = []

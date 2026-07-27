@@ -8,6 +8,7 @@ struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
     var emoji: EmojiTokenModel
+    var slash: SlashCommandModel
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -88,6 +89,12 @@ struct ComposerTextView: NSViewRepresentable {
             parent.emoji.performReplace = { [weak self] glyph, range in
                 self?.replace(range: range, with: glyph)
             }
+            parent.slash.onCommit = { [weak self] item in
+                // Slash commands occupy the whole input (they only match at string start),
+                // so the completion replaces the entire field.
+                let inserted = item.command + (item.command.contains(" ") ? "" : " ")
+                self?.replaceAll(with: inserted)
+            }
         }
 
         func handleTextChange(_ tv: NSTextView) {
@@ -95,15 +102,17 @@ struct ComposerTextView: NSViewRepresentable {
             let ns = tv.string as NSString
             if let (glyph, range) = EmojiTokenizer.completedReplacement(
                 in: ns, caret: caret, catalog: .shared, defaultTone: parent.emoji.defaultTone) {
-                replace(range: range, with: glyph)
+                replace(range: range, with: glyph)   // afterProgrammaticEdit refreshes both popups
                 parent.emoji.clear()
                 return
             }
             parent.emoji.update(text: ns, caret: caret)
+            parent.slash.update(text: tv.string)
         }
 
         func handleSelectionChange(_ tv: NSTextView) {
             parent.emoji.update(text: tv.string as NSString, caret: tv.selectedRange().location)
+            parent.slash.update(text: tv.string)
         }
 
         /// Replace a UTF-16 range with a string; place the caret after it.
@@ -122,6 +131,13 @@ struct ComposerTextView: NSViewRepresentable {
 
         func afterProgrammaticEdit(_ tv: NSTextView) {
             parent.emoji.update(text: tv.string as NSString, caret: tv.selectedRange().location)
+            parent.slash.update(text: tv.string)
+        }
+
+        /// Replace the entire field contents (used by slash-command completion).
+        func replaceAll(with str: String) {
+            let len = (textView?.string as NSString?)?.length ?? 0
+            replace(range: NSRange(location: 0, length: len), with: str)
         }
     }
 }
@@ -162,12 +178,15 @@ extension ComposerTextView.Coordinator {
     enum NavKey { case up, down, tab, enter, escape }
 
     func handleNavKey(_ key: NavKey) -> Bool {
-        guard parent.emoji.isShowing else { return false }
+        // The two popups are mutually exclusive; route to whichever is showing.
+        let target: (any PopupNav)? = parent.emoji.isShowing ? parent.emoji
+                                    : (parent.slash.isShowing ? parent.slash : nil)
+        guard let target else { return false }
         switch key {
-        case .up:     parent.emoji.moveSelection(-1)
-        case .down:   parent.emoji.moveSelection(1)
-        case .tab, .enter: parent.emoji.commitSelected()
-        case .escape: parent.emoji.clear()
+        case .up:     target.moveSelection(-1)
+        case .down:   target.moveSelection(1)
+        case .tab, .enter: target.commitSelected()
+        case .escape: target.clear()
         }
         return true
     }
