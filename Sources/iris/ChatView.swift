@@ -217,29 +217,7 @@ struct ChatView: View {
                     
                     SpectrumLine(active: state.isThinking)
 
-                    HStack {
-                        TextField("Message Iris...", text: $inputText)
-                            .textFieldStyle(.plain)
-                            .padding(10)
-                            .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                            )
-                            .onSubmit {
-                                submit()
-                            }
-                        
-                        Button(action: submit) {
-                            Image(systemName: "paperplane.fill")
-                                .foregroundColor(inputText.isEmpty ? .secondary : .irisIndigo)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(inputText.isEmpty)
-                    }
-                    .padding()
-                    .background(.regularMaterial)
+                    messageInputBar
                 }
                 .background(Color(NSColor.textBackgroundColor))
                 .navigationTitle(conv.title)
@@ -467,6 +445,40 @@ struct ChatView: View {
         selectedMessageIDs.removeAll()
         state.sendMessage(inputText)
         inputText = ""
+    }
+
+    /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
+    private var messageInputBar: some View {
+        HStack {
+            TextField("Message Iris...", text: $inputText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1...6)
+                .padding(10)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                )
+                // Enter submits; Shift+Enter inserts a newline (chat-app convention).
+                .onKeyPress { key in
+                    guard key.key == .return else { return .ignored }
+                    if key.modifiers.contains(.shift) {
+                        return .ignored   // let the field insert the newline
+                    }
+                    submit()
+                    return .handled       // consume Enter so it doesn't add a newline
+                }
+
+            Button(action: submit) {
+                Image(systemName: "paperplane.fill")
+                    .foregroundColor(inputText.isEmpty ? .secondary : .irisIndigo)
+            }
+            .buttonStyle(.plain)
+            .disabled(inputText.isEmpty)
+        }
+        .padding()
+        .background(.regularMaterial)
     }
 }
 
