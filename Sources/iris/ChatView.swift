@@ -174,13 +174,13 @@ struct ChatView: View {
                         .onExitCommand {
                             if !selectedMessageIDs.isEmpty {
                                 selectedMessageIDs.removeAll()
-                            } else {
+                            } else if state.isThinking {
                                 state.interruptActiveConversation()
                             }
                         }
                         .onChange(of: conv.messages.count) { _, _ in
-                            selectedMessageIDs.removeAll()
                             DispatchQueue.main.async {
+                                selectedMessageIDs.removeAll()
                                 proxy.scrollTo("bottomAnchor", anchor: .bottom)
                             }
                         }
@@ -197,14 +197,14 @@ struct ChatView: View {
                             }
                         }
                         .onChange(of: state.activeConversationIndex) { _, _ in
-                            selectedMessageIDs.removeAll()
                             DispatchQueue.main.async {
+                                selectedMessageIDs.removeAll()
                                 proxy.scrollTo("bottomAnchor", anchor: .bottom)
                             }
                         }
                         .onAppear {
-                            selectedMessageIDs.removeAll()
                             DispatchQueue.main.async {
+                                selectedMessageIDs.removeAll()
                                 proxy.scrollTo("bottomAnchor", anchor: .bottom)
                             }
                         }
@@ -445,6 +445,8 @@ struct ChatView: View {
     }
     
     private func submit() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         selectedMessageIDs.removeAll()
         state.sendMessage(inputText)
         inputText = ""
@@ -452,7 +454,8 @@ struct ChatView: View {
 
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
-        HStack {
+        let isInputEmpty = inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return HStack {
             TextField("Message Iris...", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...6)
@@ -463,12 +466,10 @@ struct ChatView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
-                // Enter submits; Shift+Enter inserts a newline (chat-app convention).
-                // We insert the newline ourselves — deferring to the field turns Shift+Return
-                // into a selection-extend, not a line break.
+                // Enter submits; Shift/Option/Ctrl+Enter inserts a newline (chat-app convention).
                 .onKeyPress { key in
                     guard key.key == .return else { return .ignored }
-                    if key.modifiers.contains(.shift) {
+                    if key.modifiers.contains(.shift) || key.modifiers.contains(.option) || key.modifiers.contains(.control) {
                         inputText += "\n"
                         return .handled
                     }
@@ -478,10 +479,10 @@ struct ChatView: View {
 
             Button(action: submit) {
                 Image(systemName: "paperplane.fill")
-                    .foregroundColor(inputText.isEmpty ? .secondary : .irisIndigo)
+                    .foregroundColor(isInputEmpty ? .secondary : .irisIndigo)
             }
             .buttonStyle(.plain)
-            .disabled(inputText.isEmpty)
+            .disabled(isInputEmpty)
         }
         .padding()
         .background(.regularMaterial)

@@ -53,4 +53,16 @@ struct SkillManagerTests {
         #expect(soul == "You are Iris. Be warm and direct.")
         #expect(!soul.contains("<untrusted_context"))
     }
+
+    @Test("loadCustomRules auto-loads rules and ignores hidden files")
+    func testLoadCustomRules() async {
+        let p = tempPaths { p in
+            try? "Rule content 1".write(to: p.rulesDir.appendingPathComponent("01_rule.md"), atomically: true, encoding: .utf8)
+            try? "DS_Store binary noise".write(to: p.rulesDir.appendingPathComponent(".DS_Store"), atomically: true, encoding: .utf8)
+        }
+        let rules = await SkillManager.shared.loadCustomRules(paths: p)
+        #expect(rules.contains("# Rule: 01_rule.md"))
+        #expect(rules.contains("Rule content 1"))
+        #expect(!rules.contains(".DS_Store"))
+    }
 }
