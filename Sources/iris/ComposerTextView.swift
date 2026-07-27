@@ -44,12 +44,15 @@ struct ComposerTextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let tv = nsView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
-        if tv.string != text {
+        let textChanged = (tv.string != text)
+        if textChanged {
             tv.string = text
             let len = (text as NSString).length
             tv.setSelectedRange(NSRange(location: len, length: 0))
         }
-        context.coordinator.measureHeight(tv)
+        // Only re-measure on a real content/width change. Measuring on every update pass
+        // (including the ones our own height write triggers) is an AttributeGraph cycle.
+        context.coordinator.measureHeight(tv, force: textChanged)
     }
 
     @MainActor
@@ -58,6 +61,7 @@ struct ComposerTextView: NSViewRepresentable {
         weak var textView: NSTextView?
         var isEditing = false
         private var lastHeight: CGFloat = 0
+        private var lastWidth: CGFloat = 0
 
         init(_ parent: ComposerTextView) { self.parent = parent }
 
@@ -65,7 +69,7 @@ struct ComposerTextView: NSViewRepresentable {
             guard !isEditing, let tv = notification.object as? NSTextView else { return }
             parent.text = tv.string
             handleTextChange(tv)
-            measureHeight(tv)
+            measureHeight(tv, force: true)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -76,8 +80,16 @@ struct ComposerTextView: NSViewRepresentable {
         /// Measure the laid-out text height and report it to SwiftUI (async to avoid
         /// mutating view state mid-update). Skips until the view has a real width,
         /// otherwise text wraps to zero width and reports a bogus height.
-        func measureHeight(_ tv: NSTextView) {
+        ///
+        /// Measures only when `force` (a real text change) or the width changed (a resize).
+        /// A pure height re-render — which is exactly what reporting a new height triggers —
+        /// leaves both unchanged, so it no-ops. That's what breaks the AttributeGraph cycle:
+        /// height writes no longer feed back into another measure.
+        func measureHeight(_ tv: NSTextView, force: Bool = false) {
             guard tv.bounds.width > 0, let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            let widthChanged = abs(tv.bounds.width - lastWidth) > 0.5
+            guard force || widthChanged else { return }
+            lastWidth = tv.bounds.width
             lm.ensureLayout(for: tc)
             let h = lm.usedRect(for: tc).height + tv.textContainerInset.height * 2
             guard abs(h - lastHeight) > 0.5 else { return }
@@ -127,7 +139,7 @@ struct ComposerTextView: NSViewRepresentable {
             parent.text = tv.string
             isEditing = false
             afterProgrammaticEdit(tv)
-            measureHeight(tv)
+            measureHeight(tv, force: true)
         }
 
         func afterProgrammaticEdit(_ tv: NSTextView) {
