@@ -497,6 +497,15 @@ actor IrisEngine {
                         await withTaskGroup(of: (Int, String).self) { group in
                             for (index, call) in toolCalls.enumerated() {
                                 group.addTask {
+                                    // Hard enforcement for a soft-stop summary turn: the model can
+                                    // still EMIT any tool call (the restricted schema is only advisory
+                                    // to it, and this dispatcher executes any named tool), so block
+                                    // everything except goal_complete here — this is what actually
+                                    // stops the looping action from running again.
+                                    if restrictToGoalComplete && call.name != "goal_complete" {
+                                        await self.pushToUI(role: .system, text: "[blocked] '\(call.name)' is unavailable — the goal loop was stopped. Call goal_complete.", conversationId: conversationId)
+                                        return (index, "Blocked: the goal loop has been stopped after repeating an action too many times. '\(call.name)' is unavailable in this turn. Call goal_complete with a summary of what you accomplished and what is blocking you.")
+                                    }
                                     let toolCallDict: [String: Any] = [
                                         "name": call.name,
                                         "args": call.args.mapValues { $0.anyValue }
@@ -556,6 +565,13 @@ actor IrisEngine {
                     // Ending here also prevents an unbounded turn loop if the model keeps
                     // re-issuing the same tool call.
                     if toolCalls.contains(where: { $0.name == "goal_complete" }) {
+                        turnFinished = true
+                    }
+
+                    // A soft-stop summary turn runs exactly one round: with the looping tool
+                    // blocked above, do not reprompt a stopped loop into another attempt.
+                    // (The goal is already cleared, so loop detection above is inactive here.)
+                    if restrictToGoalComplete {
                         turnFinished = true
                     }
                 }
