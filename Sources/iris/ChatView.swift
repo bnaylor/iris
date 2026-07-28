@@ -546,6 +546,23 @@ struct MessageView: View {
                     // Trade-off: no drag-to-select of partial text inside an agent bubble; whole-
                     // message copy still works via row selection + Cmd-C.
                     Markdown(message.content)
+                        // Render fenced code blocks WITHOUT MarkdownUI's default horizontal
+                        // ScrollView (Theme.basic wraps the label in ScrollView(.horizontal)).
+                        // That scroll view swallows trackpad scroll when hovered (#30); wrapping
+                        // long lines instead keeps the outer list scrollable everywhere.
+                        .markdownBlockStyle(\.codeBlock) { configuration in
+                            configuration.label
+                                .relativeLineSpacing(.em(0.15))
+                                .markdownTextStyle {
+                                    FontFamilyVariant(.monospaced)
+                                    FontSize(.em(0.94))
+                                }
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(NSColor.textBackgroundColor).opacity(0.5))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .markdownMargin(top: .zero, bottom: .em(1))
+                        }
                         .padding(.vertical, 4)
                 }
             }
