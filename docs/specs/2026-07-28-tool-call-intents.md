@@ -50,7 +50,15 @@ Delete the `intent` property added to `run_command` in `ToolExecutor.getTools()`
 
 ### 3. Steering (`SYSTEM.md`)
 
-Generalize the `## Communicating While Working` guidance from the `run_command`-specific wording to: for **every** tool call, put a one-line rationale in the tool's `intent` field rather than narrating between calls; the UI shows it beside the call. Keep the "one high-level declaration up front" guidance.
+Rewrite the `## Communicating While Working` guidance in two ways:
+
+1. **Generalize the per-tool intent guidance** from `run_command`-specific to: for **every** tool call, put a one-line rationale in the tool's `intent` field rather than narrating between calls; the UI shows it beside the call.
+
+2. **Strengthen the high-level declaration** from the current soft phrasing to a firmer, *triggered, position-specific* directive (better compliance than pleading; still probabilistic — no mechanical enforcement, by decision):
+
+   > When a turn will involve more than one tool call, or any multi-step work, your **first output — before the first tool call — must be a single sentence** stating what you're about to do and why. One line, up front, then act; don't narrate each step (the per-tool `intent` fields carry that). Skip the orientation line only for a single quick action.
+
+   Note in the design: this is best-effort steering, not enforcement — a mechanical "declare your plan" nudge is explicitly out of scope for #31.
 
 ### 4. UI
 
