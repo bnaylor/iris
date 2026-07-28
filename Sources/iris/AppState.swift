@@ -9,10 +9,30 @@ enum ChatRole: String, Codable {
     case command
 }
 
-struct ChatMessage: Identifiable, Codable {
+struct ChatMessage: Identifiable, Codable, Sendable {
     var id = UUID()
     let role: ChatRole
     let content: String
+    var attachments: [FileAttachment] = []
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, attachments
+    }
+
+    init(id: UUID = UUID(), role: ChatRole, content: String, attachments: [FileAttachment] = []) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.attachments = attachments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        role = try container.decode(ChatRole.self, forKey: .role)
+        content = try container.decode(String.self, forKey: .content)
+        attachments = try container.decodeIfPresent([FileAttachment].self, forKey: .attachments) ?? []
+    }
 }
 
 struct TokenUsage: Codable, Equatable {

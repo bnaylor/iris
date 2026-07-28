@@ -12,15 +12,16 @@ struct GeminiRequest: Codable {
     var tools: [Tool]?
 }
 
-struct Content: Codable {
+struct Content: Codable, Sendable {
     var role: String?
     var parts: [Part]
 }
 
-struct Part: Codable {
+struct Part: Codable, Sendable {
     var text: String?
     var functionCall: FunctionCall?
     var functionResponse: FunctionResponse?
+    var inlineData: InlineData? = nil
     var thought_signature: String?
     var thoughtSignature: String?
 }
