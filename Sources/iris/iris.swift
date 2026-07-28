@@ -212,11 +212,10 @@ actor IrisEngine {
         
         let userProfile = MemoryManager.shared.getUserProfile()
         
-        let queryVector = HolographicVector.encode(string: input)
-        let facts = (try? HolographicMemoryManager.shared.search(query: input, queryVector: queryVector, limit: 5)) ?? []
+        let facts = (try? FactStoreManager.shared.search(query: input, limit: 5)) ?? []
         
         if !facts.isEmpty {
-            try? HolographicMemoryManager.shared.reinforceFacts(ids: facts.map { $0.id })
+            try? FactStoreManager.shared.reinforceFacts(ids: facts.map { $0.id })
         }
         
     if let textPart = currentSystemPrompt.parts.first?.text {
@@ -241,8 +240,8 @@ actor IrisEngine {
         
         if !facts.isEmpty, let textPart = currentSystemPrompt.parts.first?.text {
             let factString = facts.map { "- \($0.content)" }.joined(separator: "\n")
-            // Append Holographic Memory last (highly volatile, changes per query)
-            currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Holographic Memory (JIT Context)\n" + factString
+            // Append Fact Store Memory last (highly volatile, changes per query)
+            currentSystemPrompt.parts[0].text = textPart + "\n\n# Mid-Term Fact Store Memory (JIT Context)\n" + factString
         }
         
         var toolsList = await executor.getTools()
@@ -667,12 +666,12 @@ actor IrisEngine {
             )
             result = "Job scheduled successfully. It will fire in the background."
         } else if functionCall.name == "save_fact", let content = functionCall.args["content"]?.stringValue {
-            let vector = HolographicVector.encode(string: content)
-            try? HolographicMemoryManager.shared.addFact(content: content, vector: vector)
-            result = "Fact saved to holographic memory."
+            let category = functionCall.args["category"]?.stringValue ?? "general"
+            let entity = functionCall.args["entity"]?.stringValue
+            try? FactStoreManager.shared.addFact(content: content, category: category, entity: entity)
+            result = "Fact saved to fact store."
         } else if functionCall.name == "search_memory", let query = functionCall.args["query"]?.stringValue {
-            let vector = HolographicVector.encode(string: query)
-            let facts = (try? HolographicMemoryManager.shared.search(query: query, queryVector: vector)) ?? []
+            let facts = (try? FactStoreManager.shared.search(query: query)) ?? []
             if facts.isEmpty {
                 result = "No relevant facts found."
             } else {

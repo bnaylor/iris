@@ -24,6 +24,7 @@ struct IrisPaths: Sendable {
     var skillsDir: URL { memoryDir.appendingPathComponent("skills") }
     var artifactsDir: URL { memoryDir.appendingPathComponent("artifacts") }
     var libraryDir: URL { memoryDir.appendingPathComponent("library") }
+    var factStoreDB: URL { memoryDir.appendingPathComponent("fact_store.sqlite") }
     var holographicDB: URL { memoryDir.appendingPathComponent("holographic_memory.sqlite") }
 
     // config/

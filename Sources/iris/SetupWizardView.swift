@@ -85,7 +85,7 @@ struct SetupWizardView: View {
     private func finishSetup() {
         // Force creation of memory DB and USER.md immediately
         _ = MemoryManager.shared
-        _ = HolographicMemoryManager.shared
+        _ = FactStoreManager.shared
         
         UserDefaults.standard.set(true, forKey: "HAS_COMPLETED_SETUP")
         dismiss()
