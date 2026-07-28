@@ -3,17 +3,12 @@ import Foundation
 public enum VisionRouter {
     public static func isVisionCapable(modelName: String) -> Bool {
         let name = modelName.lowercased()
-        return name.contains("gemini") ||
-               name.contains("gpt-4") ||
-               name.contains("claude") ||
-               name.contains("o1") ||
-               name.contains("o3") ||
-               name.contains("vision") ||
-               name.contains("llava") ||
-               name.contains("vl") ||
-               name.contains("pixtral") ||
-               name.contains("paligemma") ||
-               name.contains("minicpm")
+        if name.contains("gemini") { return true }
+        if name.contains("gpt-4o") || name.contains("gpt-4.5") || name.contains("gpt-4-turbo") || name.contains("gpt-4-vision") { return true }
+        if name.contains("claude-3") || name.contains("claude-4") || name.contains("claude-sonnet") || name.contains("claude-haiku") || name.contains("claude-opus") { return true }
+        if (name.contains("o1") || name.contains("o3")) && !name.contains("mini") { return true }
+        if name.contains("vision") || name.contains("llava") || name.contains("qwen-vl") || name.contains("pixtral") || name.contains("paligemma") || name.contains("minicpm") { return true }
+        return false
     }
 
     public static func processTextOnlyImages(attachments: [FileAttachment]) async -> (descriptionText: String, warnings: [String]) {

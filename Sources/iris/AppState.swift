@@ -426,6 +426,10 @@ class AppState {
             let userMessagesCount = conversations[idx].messages.filter { $0.role == .user }.count
             let shouldRename = userMessagesCount == 3 && conversations[idx].messageCountSinceReflection == 3
             let shouldReflect = conversations[idx].messageCountSinceReflection >= 30
+            if shouldReflect {
+                conversations[idx].messageCountSinceReflection = 0
+                saveConversations()
+            }
 
             let attachmentsToProcess = attachments
             let rawContent = messageContent

@@ -23,6 +23,9 @@ protocol AuxiliaryInferenceEngine: Sendable {
     /// Generates a response based on prompt and optional JSON schema.
     func generate(prompt: String, jsonSchema: String?) async throws -> String
     
+    /// Generates a response based on prompt, optional JSON schema, and optional base64 image array.
+    func generate(prompt: String, jsonSchema: String?, images: [String]?) async throws -> String
+
     /// Checks whether the engine's model is currently loaded in memory.
     /// Default returns true (assumes always loaded) — engines that can unload
     /// (e.g. Ollama) should implement this to query their runtime state.

@@ -42,7 +42,8 @@ public enum AttachmentProcessor {
                     ?? (try? String(contentsOf: attachment.fileURL, encoding: .isoLatin1))
                     ?? (try? String(contentsOf: attachment.fileURL)) {
                     let truncated = text.count > 100_000 ? String(text.prefix(100_000)) + "\n[Content truncated at 100,000 characters]" : text
-                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"\(attachment.mimeType)\">\n\(truncated)\n</attached_file>")
+                    let sanitized = PromptInjectionGuard.sanitizeUntrustedInput(truncated)
+                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"\(attachment.mimeType)\">\n\(sanitized)\n</attached_file>")
                 } else {
                     warnings.append("Could not read text from file: \(attachment.filename)")
                 }
@@ -56,16 +57,19 @@ public enum AttachmentProcessor {
                         }
                     }
                     let truncated = fullPDFText.count > 100_000 ? String(fullPDFText.prefix(100_000)) + "\n[Content truncated at 100,000 characters]" : fullPDFText
-                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"application/pdf\">\n\(truncated)\n</attached_file>")
+                    let sanitized = PromptInjectionGuard.sanitizeUntrustedInput(truncated)
+                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"application/pdf\">\n\(sanitized)\n</attached_file>")
                 } else {
                     warnings.append("Could not parse PDF file: \(attachment.filename)")
                 }
 
             case .document:
-                if let attrString = try? NSAttributedString(url: attachment.fileURL, options: [:], documentAttributes: nil) {
+                let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [NSAttributedString.DocumentReadingOptionKey(rawValue: "NSReadAccessURL"): attachment.fileURL]
+                if let attrString = try? NSAttributedString(url: attachment.fileURL, options: options, documentAttributes: nil) {
                     let docText = attrString.string
                     let truncated = docText.count > 100_000 ? String(docText.prefix(100_000)) + "\n[Content truncated at 100,000 characters]" : docText
-                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"\(attachment.mimeType)\">\n\(truncated)\n</attached_file>")
+                    let sanitized = PromptInjectionGuard.sanitizeUntrustedInput(truncated)
+                    textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"\(attachment.mimeType)\">\n\(sanitized)\n</attached_file>")
                 } else {
                     warnings.append("Could not read document file: \(attachment.filename)")
                 }

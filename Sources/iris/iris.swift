@@ -464,7 +464,6 @@ actor IrisEngine {
                 let modelContent = Content(role: "model", parts: responseContent.parts)
                 await MainActor.run { 
                     localState?.appendContentToHistory(for: conversationId, content: modelContent) 
-                    localState?.stripInlineDataFromHistory(for: conversationId)
                 }
                 history = await MainActor.run {
                     localState?.conversations.first(where: { $0.id == conversationId })?.history ?? []
@@ -596,6 +595,10 @@ actor IrisEngine {
             }
         }
         
+        await MainActor.run {
+            localState?.stripInlineDataFromHistory(for: conversationId)
+        }
+
         // Auto-reprompt if we are in goal mode
         let activeGoalResult = await MainActor.run { () -> (String?, Int) in
             if let index = localState?.conversations.firstIndex(where: { $0.id == conversationId }) {
