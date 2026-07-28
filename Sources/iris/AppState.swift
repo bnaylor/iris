@@ -530,8 +530,26 @@ class AppState {
         }
 
         // Vibecop, bounded by a timeout so a wedged local model can't hang the turn.
+        // Uses adaptive timeout: if the Ollama model is cold (unloaded), give it 30s to load.
         do {
-            let timeout = Double(ConfigManager.shared.vibecopTimeoutSeconds)
+            let configuredTimeout = Double(ConfigManager.shared.vibecopTimeoutSeconds)
+            let engineType = AuxiliaryEngineType(rawValue: ConfigManager.shared.vibecopEngine) ?? .llamaCPP
+            var timeout = configuredTimeout
+            
+            if engineType == .ollama {
+                let engine = try? await AuxiliaryModelManager.shared.getEngine(
+                    for: "vibecop", config: AuxiliaryModelConfig(
+                        role: "vibecop",
+                        engineType: .ollama,
+                        modelPathOrName: ConfigManager.shared.vibecopModel
+                    )
+                )
+                if let ollamaEngine = engine, !(await ollamaEngine.isModelLoaded()) {
+                    timeout = 30.0  // cold-start budget
+                    print("Vibecop: Ollama model cold, using \(timeout)s timeout")
+                }
+            }
+            
             let decision = try await withTimeout(seconds: timeout) {
                 try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox)
             }

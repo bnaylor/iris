@@ -5,11 +5,11 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
 
     func loadModel(config: AuxiliaryModelConfig) async throws {
         self.modelName = config.modelPathOrName
-        // Ollama handles loading automatically, but we could explicitly preload here if we wanted via the generate endpoint.
+        // Warm the model on init so the first Vibecop call doesn't hit a cold-start timeout
+        preloadModel()
     }
     
     func unloadModel() async {
-        // We could send a request with keep_alive: 0 to force Ollama to unload the model
         let url = URL(string: "http://localhost:11434/api/generate")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -20,6 +20,52 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await URLSession.shared.data(for: req)
+    }
+    
+    /// Checks whether the model is currently loaded in Ollama's VRAM/RAM
+    /// by querying the /api/ps endpoint.
+    func isModelLoaded() async -> Bool {
+        guard !modelName.isEmpty,
+              let url = URL(string: "http://localhost:11434/api/ps") else { return false }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else { return false }
+            
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let models = json["models"] as? [[String: Any]] {
+                return models.contains { model in
+                    guard let name = model["name"] as? String else { return false }
+                    return name == modelName || name.hasPrefix(modelName + ":")
+                }
+            }
+        } catch {
+            return false
+        }
+        return false
+    }
+    
+    /// Fires a non-blocking warmup request to keep the model alive.
+    /// Ollama's default keep_alive is ~5m, so this extends the window.
+    private func preloadModel() {
+        Task {
+            guard !modelName.isEmpty,
+                  let url = URL(string: "http://localhost:11434/api/generate") else { return }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body: [String: Any] = [
+                "model": modelName,
+                "prompt": "",
+                "keep_alive": "5m"
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            _ = try? await URLSession.shared.data(for: req)
+        }
     }
     
     func generate(prompt: String, jsonSchema: String?) async throws -> String {
