@@ -537,8 +537,15 @@ struct MessageView: View {
                         .cornerRadius(0, corners: [.bottomRight])
                         .shadow(color: Color.irisIndigo.opacity(0.25), radius: 3, x: 0, y: 2)
                 } else {
+                    // Agent messages render via MarkdownUI. We deliberately do NOT apply
+                    // `.textSelection(.enabled)` here: on a large Markdown message, MarkdownUI's
+                    // layout + SwiftUI text selection form an AttributeGraph cycle that re-fires
+                    // on every re-layout (selection, background observable updates), spamming
+                    // ~265 "cycle detected" per event (#28). Isolated by bisection: plain Text = 0
+                    // cycles, Markdown without textSelection = 0, Markdown WITH textSelection = spam.
+                    // Trade-off: no drag-to-select of partial text inside an agent bubble; whole-
+                    // message copy still works via row selection + Cmd-C.
                     Markdown(message.content)
-                        .textSelection(.enabled)
                         .padding(.vertical, 4)
                 }
             }
