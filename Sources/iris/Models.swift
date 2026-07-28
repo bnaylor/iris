@@ -12,31 +12,62 @@ struct GeminiRequest: Codable {
     var tools: [Tool]?
 }
 
-struct Content: Codable {
+struct Content: Codable, Sendable {
     var role: String?
     var parts: [Part]
 }
 
-struct Part: Codable {
-    var text: String?
-    var functionCall: FunctionCall?
-    var functionResponse: FunctionResponse?
-    var thought_signature: String?
-    var thoughtSignature: String?
+public struct Part: Codable, Sendable {
+    public var text: String?
+    public var functionCall: FunctionCall?
+    public var functionResponse: FunctionResponse?
+    public var inlineData: InlineData? = nil
+    public var thought_signature: String?
+    public var thoughtSignature: String?
+
+    public init(
+        text: String? = nil,
+        functionCall: FunctionCall? = nil,
+        functionResponse: FunctionResponse? = nil,
+        inlineData: InlineData? = nil,
+        thought_signature: String? = nil,
+        thoughtSignature: String? = nil
+    ) {
+        self.text = text
+        self.functionCall = functionCall
+        self.functionResponse = functionResponse
+        self.inlineData = inlineData
+        self.thought_signature = thought_signature
+        self.thoughtSignature = thoughtSignature
+    }
 }
 
-struct FunctionCall: Codable, Sendable {
-    var name: String
-    var args: [String: JSONValue]
-    var id: String?
-    var thought_signature: String?
-    var thoughtSignature: String?
+public struct FunctionCall: Codable, Sendable {
+    public var name: String
+    public var args: [String: JSONValue]
+    public var id: String?
+    public var thought_signature: String?
+    public var thoughtSignature: String?
+
+    public init(name: String, args: [String: JSONValue], id: String? = nil, thought_signature: String? = nil, thoughtSignature: String? = nil) {
+        self.name = name
+        self.args = args
+        self.id = id
+        self.thought_signature = thought_signature
+        self.thoughtSignature = thoughtSignature
+    }
 }
 
-struct FunctionResponse: Codable, Sendable {
-    var name: String
-    var response: [String: JSONValue]
-    var id: String?
+public struct FunctionResponse: Codable, Sendable {
+    public var name: String
+    public var response: [String: JSONValue]
+    public var id: String?
+
+    public init(name: String, response: [String: JSONValue], id: String? = nil) {
+        self.name = name
+        self.response = response
+        self.id = id
+    }
 }
 
 struct Tool: Codable {

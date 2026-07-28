@@ -553,4 +553,56 @@ final class AnthropicClientTests: XCTestCase {
         
         await fulfillment(of: [expectation], timeout: 1.0)
     }
+
+    func testAnthropicInlineDataPayloadFormat() async throws {
+        let part = Part(text: "Look at this image", inlineData: InlineData(mimeType: "image/png", data: "b64data"))
+        let content = Content(role: "user", parts: [part])
+        let request = GeminiRequest(contents: [content])
+        
+        MockURLProtocol.handler = { urlRequest in
+            guard let bodyData = urlRequest.bodyData,
+                  let bodyJson = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let messages = bodyJson["messages"] as? [[String: Any]],
+                  let firstMessage = messages.first,
+                  let contentBlocks = firstMessage["content"] as? [[String: Any]] else {
+                XCTFail("Failed to parse request body or content blocks array")
+                return (HTTPURLResponse(), Data())
+            }
+            
+            XCTAssertEqual(firstMessage["role"] as? String, "user")
+            XCTAssertEqual(contentBlocks.count, 2)
+            
+            XCTAssertEqual(contentBlocks[0]["type"] as? String, "text")
+            XCTAssertEqual(contentBlocks[0]["text"] as? String, "Look at this image")
+            
+            XCTAssertEqual(contentBlocks[1]["type"] as? String, "image")
+            if let sourceDict = contentBlocks[1]["source"] as? [String: Any] {
+                XCTAssertEqual(sourceDict["type"] as? String, "base64")
+                XCTAssertEqual(sourceDict["media_type"] as? String, "image/png")
+                XCTAssertEqual(sourceDict["data"] as? String, "b64data")
+            } else {
+                XCTFail("Missing source dictionary")
+            }
+            
+            let responseJson: [String: Any] = [
+                "id": "msg_img",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet",
+                "content": [["type": "text", "text": "I see the image."]],
+                "usage": ["input_tokens": 100, "output_tokens": 10]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await AnthropicClient.generateContent(
+            request: request,
+            model: "claude-3-5-sonnet",
+            apiKey: "test-key"
+        )
+        
+        XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "I see the image.")
+    }
 }

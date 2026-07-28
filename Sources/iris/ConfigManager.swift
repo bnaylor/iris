@@ -191,6 +191,14 @@ class ConfigManager: @unchecked Sendable {
         didSet { UserDefaults.standard.set(promptGuardCoreMLModel, forKey: "PROMPT_GUARD_COREML_MODEL") }
     }
     
+    var auxiliaryVisionEngine: String {
+        didSet { UserDefaults.standard.set(auxiliaryVisionEngine, forKey: "AUXILIARY_VISION_ENGINE") }
+    }
+    
+    var auxiliaryVisionModel: String {
+        didSet { UserDefaults.standard.set(auxiliaryVisionModel, forKey: "AUXILIARY_VISION_MODEL") }
+    }
+    
     init() {
         let savedProvider = UserDefaults.standard.string(forKey: "PRIMARY_PROVIDER") ?? "Gemini"
         self.primaryProvider = savedProvider
@@ -333,6 +341,9 @@ class ConfigManager: @unchecked Sendable {
         // over-blocked ordinary tool output; see docs/prompt_guard_coreml.md.
         let savedCoreMLModel = UserDefaults.standard.string(forKey: "PROMPT_GUARD_COREML_MODEL") ?? ""
         self.promptGuardCoreMLModel = savedCoreMLModel.isEmpty ? "https://luthen.scromp.net/iris/deberta-v3-base-prompt-injection-v2.onnx.zip" : savedCoreMLModel
+
+        self.auxiliaryVisionEngine = UserDefaults.standard.string(forKey: "AUXILIARY_VISION_ENGINE") ?? ""
+        self.auxiliaryVisionModel = UserDefaults.standard.string(forKey: "AUXILIARY_VISION_MODEL") ?? ""
     }
     
     var isConfigured: Bool {

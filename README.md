@@ -27,6 +27,7 @@ At its core, Iris is a Swift-based execution chassis that bridges your local env
 *   **Prompt Injection Defense:** Includes a multi-tiered security pipeline (Structural Isolation + Behavioral Canary Probes) to actively neutralize indirect prompt injections hidden within untrusted external data.
 *   **Rich Native UI:** Beautiful macOS `NavigationSplitView` with multi-conversation support, `.regularMaterial` frosted glass input bars, and native markdown chat rendering powered by `swift-markdown-ui`.
 *   **Active Subagent Monitoring:** A dedicated popover pane to track the real-time status, role, and uptime of concurrently running background subagents. Subagents dynamically self-assign the Easy, Medium, or Hard model tiers based on task complexity.
+*   **File Attachments & Vision Routing:** Attach images, PDFs, Word documents, RTF files, and text files via the 📎 button or drag & drop. Vision-capable models process image attachments directly. Non-vision primary models fall back to an auxiliary local/cloud vision model to generate image descriptions. Includes automated document text parsing (PDF/RTF/DocX) and strictly enforced file size limits (20 MB images, 50 MB documents).
 *   **Markdown Export & Utilities:** Right-click conversations or select specific chat turns to instantly copy them to your clipboard as clean, formatted Markdown. Automatically renames conversations via the `/rename` command.
 
 ## 🧠 The Portable Memory & Skill System
@@ -72,6 +73,13 @@ Once connected, Iris has native API access to the following Workspace tools dire
 *   **Google Sheets**: `google_sheets_get`
 *   **Google Tasks**: `google_tasks_list_tasklists`, `google_tasks_list_tasks`, `google_tasks_create_task`
 *   **Gmail**: `gmail_list_unread`, `gmail_send_email`
+
+### File Attachments & Auxiliary Vision 📎
+Iris supports attaching files directly to your prompt using the **📎 attachment button** or via **drag & drop**:
+*   **Supported Formats**: Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`), PDFs (`.pdf`), rich documents (`.docx`, `.rtf`), and text/code files (`.txt`, `.md`, `.json`, `.swift`, `.py`, etc.).
+*   **Document Text Parsing**: Text, PDF, and rich text documents are automatically parsed into plain text blocks and appended to the prompt context (up to 100,000 characters per file).
+*   **Vision Routing & Auxiliary Configuration**: When attached to vision-capable models (e.g., Gemini 2.0 Flash, Claude 3.5 Sonnet, GPT-4o), images are passed directly in the inline payload. If the active model lacks vision capabilities, Iris automatically routes images to a configured Auxiliary Vision Model (such as local `ollama` with `llava`) to generate detailed image descriptions.
+*   **File Size Limits**: Built-in guardrails restrict individual image files to **20 MB** and document/PDF/text files to **50 MB**. Oversized attachments trigger a warning and are safely excluded from memory.
 
 ## 🛡️ Vibecop Guardian
 

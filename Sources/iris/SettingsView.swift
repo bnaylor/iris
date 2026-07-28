@@ -104,6 +104,24 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.bottom)
+
+                Section(header: Text("Auxiliary Vision Engine").font(.headline)) {
+                    Picker("Engine", selection: $config.auxiliaryVisionEngine) {
+                        Text("None").tag("")
+                        Text("Ollama (Local Daemon)").tag("ollama")
+                        Text("Cloud (Primary Provider)").tag("cloud")
+                    }
+                    
+                    if !config.auxiliaryVisionEngine.isEmpty {
+                        TextField("Vision Model Name", text: $config.auxiliaryVisionModel)
+                            .help("The model to use for vision processing when primary model is non-vision (e.g. llama3.2-vision, gemma4:12b)")
+                    }
+                    
+                    Text("When your active primary model does not support vision, Iris routes image attachments through this auxiliary vision engine to generate descriptive text.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom)
             }
             .formStyle(.grouped)
             .padding(20)
