@@ -64,15 +64,21 @@ final class VisionRouterTests: XCTestCase {
         )
         
         // Mock auxiliary engine
-        struct MockVisionEngine: AuxiliaryInferenceEngine {
+        final class MockVisionEngine: AuxiliaryInferenceEngine, @unchecked Sendable {
+            var receivedImages: [String]?
             func loadModel(config: AuxiliaryModelConfig) async throws {}
             func unloadModel() async {}
             func generate(prompt: String, jsonSchema: String?) async throws -> String {
                 return "A sample diagram showing workflow."
             }
+            func generate(prompt: String, jsonSchema: String?, images: [String]?) async throws -> String {
+                self.receivedImages = images
+                return "A sample diagram showing workflow."
+            }
         }
         
-        AuxiliaryModelManager.shared.setMockEngine(MockVisionEngine(), for: "vision")
+        let mockEngine = MockVisionEngine()
+        AuxiliaryModelManager.shared.setMockEngine(mockEngine, for: "vision")
         ConfigManager.shared.auxiliaryVisionEngine = "ollama"
         ConfigManager.shared.auxiliaryVisionModel = "llava"
         
@@ -81,5 +87,6 @@ final class VisionRouterTests: XCTestCase {
         XCTAssertTrue(result.descriptionText.contains("<image_description file=\"test_image.png\">"))
         XCTAssertTrue(result.descriptionText.contains("A sample diagram showing workflow."))
         XCTAssertTrue(result.descriptionText.contains("</image_description>"))
+        XCTAssertEqual(mockEngine.receivedImages, [dummyData.base64EncodedString()])
     }
 }

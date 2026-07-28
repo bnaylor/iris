@@ -26,6 +26,15 @@ public enum AttachmentProcessor {
                 continue
             }
 
+            let maxAllowedSize: Int64 = (attachment.category == .image) ? 20_000_000 : 50_000_000
+            let fileSizeOnDisk = (try? (FileManager.default.attributesOfItem(atPath: attachment.fileURL.path)[.size] as? NSNumber)?.int64Value) ?? 0
+            let effectiveSize = max(attachment.fileSize, fileSizeOnDisk)
+
+            if effectiveSize > maxAllowedSize {
+                warnings.append("File '\(attachment.filename)' exceeds the maximum allowed size limit.")
+                continue
+            }
+
             switch attachment.category {
             case .text:
                 if let text = try? String(contentsOf: attachment.fileURL, encoding: .utf8) {

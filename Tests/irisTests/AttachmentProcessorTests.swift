@@ -219,4 +219,38 @@ final class AttachmentProcessorTests: XCTestCase {
         XCTAssertTrue(result.warnings[0].contains("File not found: nonexistent.txt"))
         XCTAssertTrue(result.extractedPromptText.isEmpty)
     }
+
+    func testImageFileSizeLimitExceeded() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("oversized.png")
+        try "dummy".write(to: fileURL, atomically: true, encoding: .utf8)
+        let attachment = FileAttachment(
+            filename: "oversized.png",
+            fileURL: fileURL,
+            mimeType: "image/png",
+            fileSize: 20_000_001,
+            category: .image
+        )
+
+        let result = try await AttachmentProcessor.process(attachments: [attachment], primarySupportsVision: true)
+        XCTAssertEqual(result.warnings.count, 1)
+        XCTAssertEqual(result.warnings[0], "File 'oversized.png' exceeds the maximum allowed size limit.")
+        XCTAssertTrue(result.inlineParts.isEmpty)
+    }
+
+    func testDocumentFileSizeLimitExceeded() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("oversized.txt")
+        try "dummy".write(to: fileURL, atomically: true, encoding: .utf8)
+        let attachment = FileAttachment(
+            filename: "oversized.txt",
+            fileURL: fileURL,
+            mimeType: "text/plain",
+            fileSize: 50_000_001,
+            category: .text
+        )
+
+        let result = try await AttachmentProcessor.process(attachments: [attachment], primarySupportsVision: true)
+        XCTAssertEqual(result.warnings.count, 1)
+        XCTAssertEqual(result.warnings[0], "File 'oversized.txt' exceeds the maximum allowed size limit.")
+        XCTAssertTrue(result.extractedPromptText.isEmpty)
+    }
 }

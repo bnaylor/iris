@@ -39,7 +39,7 @@ public enum VisionRouter {
                 let prompt = "Describe this image in detail, including text, structure, and visual content, for an AI coding assistant."
                 
                 let auxiliaryEngine = try await AuxiliaryModelManager.shared.getEngine(for: "vision", config: auxConfig)
-                let description = try await auxiliaryEngine.generate(prompt: "\(prompt)\n[ImageData: \(base64.prefix(100))...]", jsonSchema: nil)
+                let description = try await auxiliaryEngine.generate(prompt: prompt, jsonSchema: nil, images: [base64])
                 
                 descriptions.append("<image_description file=\"\(img.filename)\">\n\(description)\n</image_description>")
             } catch {
