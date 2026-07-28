@@ -4,11 +4,10 @@ import Foundation
 
 @Suite("run_command intent")
 struct RunCommandIntentTests {
-    @Test("run_command schema exposes an optional intent property")
+    @Test("run_command exposes an optional intent property after augmentation")
     func schemaHasOptionalIntent() async {
-        let tools = await ToolExecutor.shared.getTools()
+        let tools = ToolIntent.augment(await ToolExecutor.shared.getTools())
         let runCmd = tools.first { $0.name == "run_command" }
-        #expect(runCmd != nil)
         #expect(runCmd?.parameters?.properties?["intent"] != nil)
         #expect(runCmd?.parameters?.required?.contains("intent") != true)
     }

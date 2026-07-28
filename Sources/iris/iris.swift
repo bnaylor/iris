@@ -386,6 +386,11 @@ actor IrisEngine {
             )
         ))
 
+        // Offer an optional `intent` on every tool so the model can attach a one-line
+        // rationale the UI shows next to each call (#31). Central + idempotent, so any
+        // future tool is covered automatically.
+        toolsList = ToolIntent.augment(toolsList)
+
         let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList, useSandbox: hooksSandbox)
         if case .block(let reason) = toolSelectionDecision {
             await pushToUI(role: .system, text: "Hook blocked tool selection: \(reason)", conversationId: conversationId)
