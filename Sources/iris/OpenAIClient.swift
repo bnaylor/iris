@@ -22,6 +22,8 @@ struct OpenAIClient {
             let role = content.role == "model" ? "assistant" : "user"
             var message: [String: Any] = ["role": role]
             var textParts = [String]()
+            var messageContentBlocks = [[String: Any]]()
+            var hasInlineData = false
             var toolCalls = [[String: Any]]()
             var toolResponses = [[String: Any]]()
             
@@ -34,7 +36,16 @@ struct OpenAIClient {
                 
                 if let text = part.text {
                     textParts.append(text)
-                } else if let fc = part.functionCall {
+                    messageContentBlocks.append(["type": "text", "text": text])
+                }
+                if let inline = part.inlineData {
+                    hasInlineData = true
+                    messageContentBlocks.append([
+                        "type": "image_url",
+                        "image_url": ["url": "data:\(inline.mimeType);base64,\(inline.data)"]
+                    ])
+                }
+                if let fc = part.functionCall {
                     let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
                     pendingIdsForName[fc.name, default: []].append(id)
@@ -71,7 +82,9 @@ struct OpenAIClient {
                 }
             }
             
-            if !textParts.isEmpty {
+            if hasInlineData {
+                message["content"] = messageContentBlocks
+            } else if !textParts.isEmpty {
                 message["content"] = textParts.joined(separator: "\n")
             } else if toolCalls.isEmpty && toolResponses.isEmpty {
                 message["content"] = ""

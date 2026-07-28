@@ -23,7 +23,18 @@ struct AnthropicClient {
             for part in content.parts {
                 if let text = part.text {
                     partsArray.append(["type": "text", "text": text])
-                } else if let fc = part.functionCall {
+                }
+                if let inline = part.inlineData {
+                    partsArray.append([
+                        "type": "image",
+                        "source": [
+                            "type": "base64",
+                            "media_type": inline.mimeType,
+                            "data": inline.data
+                        ]
+                    ])
+                }
+                if let fc = part.functionCall {
                     let id = fc.id ?? "call_\(fc.name)_\(callIdCounter)"
                     callIdCounter += 1
                     pendingIdsForName[fc.name, default: []].append(id)

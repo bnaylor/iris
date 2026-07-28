@@ -462,4 +462,60 @@ final class OpenAIClientTests: XCTestCase {
         
         XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "Hi!")
     }
+    
+    func testOpenAIInlineDataPayloadFormat() async throws {
+        let part = Part(text: "Look at this image", inlineData: InlineData(mimeType: "image/png", data: "b64data"))
+        let content = Content(role: "user", parts: [part])
+        let request = GeminiRequest(contents: [content])
+        
+        MockURLProtocol.handler = { urlRequest in
+            guard let bodyData = urlRequest.bodyData,
+                  let bodyJson = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let messages = bodyJson["messages"] as? [[String: Any]],
+                  let firstMessage = messages.first,
+                  let contentBlocks = firstMessage["content"] as? [[String: Any]] else {
+                XCTFail("Failed to parse request body or content blocks array")
+                return (HTTPURLResponse(), Data())
+            }
+            
+            XCTAssertEqual(firstMessage["role"] as? String, "user")
+            XCTAssertEqual(contentBlocks.count, 2)
+            
+            XCTAssertEqual(contentBlocks[0]["type"] as? String, "text")
+            XCTAssertEqual(contentBlocks[0]["text"] as? String, "Look at this image")
+            
+            XCTAssertEqual(contentBlocks[1]["type"] as? String, "image_url")
+            if let imageUrlDict = contentBlocks[1]["image_url"] as? [String: Any] {
+                XCTAssertEqual(imageUrlDict["url"] as? String, "data:image/png;base64,b64data")
+            } else {
+                XCTFail("Missing image_url dictionary")
+            }
+            
+            let responseJson: [String: Any] = [
+                "id": "chatcmpl-img",
+                "object": "chat.completion",
+                "model": "gpt-4o",
+                "choices": [
+                    [
+                        "index": 0,
+                        "message": ["role": "assistant", "content": "I see the image."],
+                        "finish_reason": "stop"
+                    ]
+                ],
+                "usage": ["prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110]
+            ]
+            let responseData = try! JSONSerialization.data(withJSONObject: responseJson)
+            let httpResponse = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (httpResponse, responseData)
+        }
+        
+        let response = try await OpenAIClient.generateContent(
+            request: request,
+            model: "gpt-4o",
+            apiKey: "test-key"
+        )
+        
+        XCTAssertEqual(response.candidates?.first?.content?.parts.first?.text, "I see the image.")
+    }
 }
+
