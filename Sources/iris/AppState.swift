@@ -531,6 +531,27 @@ class AppState {
             saveConversations()
         }
     }
+
+    /// Strips binary Base64 inlineData from all history entries in a conversation to prevent
+    /// token multiplication and disk inflation on subsequent turns.
+    func stripInlineDataFromHistory(for conversationId: UUID) {
+        if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+            var updatedHistory = conversations[idx].history
+            var modified = false
+            for i in 0..<updatedHistory.count {
+                for j in 0..<updatedHistory[i].parts.count {
+                    if updatedHistory[i].parts[j].inlineData != nil {
+                        updatedHistory[i].parts[j].inlineData = nil
+                        modified = true
+                    }
+                }
+            }
+            if modified {
+                conversations[idx].history = updatedHistory
+                saveConversations()
+            }
+        }
+    }
     
     func appendContentsToHistory(for conversationId: UUID, contents: [Content]) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {

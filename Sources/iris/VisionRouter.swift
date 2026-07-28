@@ -3,10 +3,17 @@ import Foundation
 public enum VisionRouter {
     public static func isVisionCapable(modelName: String) -> Bool {
         let name = modelName.lowercased()
-        if name.contains("gemini") || name.contains("gpt-4o") || name.contains("claude-3") || name.contains("vision") || name.contains("llava") {
-            return true
-        }
-        return false
+        return name.contains("gemini") ||
+               name.contains("gpt-4") ||
+               name.contains("claude") ||
+               name.contains("o1") ||
+               name.contains("o3") ||
+               name.contains("vision") ||
+               name.contains("llava") ||
+               name.contains("vl") ||
+               name.contains("pixtral") ||
+               name.contains("paligemma") ||
+               name.contains("minicpm")
     }
 
     public static func processTextOnlyImages(attachments: [FileAttachment]) async -> (descriptionText: String, warnings: [String]) {

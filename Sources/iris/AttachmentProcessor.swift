@@ -37,7 +37,10 @@ public enum AttachmentProcessor {
 
             switch attachment.category {
             case .text:
-                if let text = try? String(contentsOf: attachment.fileURL, encoding: .utf8) {
+                if let text = (try? String(contentsOf: attachment.fileURL, encoding: .utf8))
+                    ?? (try? String(contentsOf: attachment.fileURL, encoding: .ascii))
+                    ?? (try? String(contentsOf: attachment.fileURL, encoding: .isoLatin1))
+                    ?? (try? String(contentsOf: attachment.fileURL)) {
                     let truncated = text.count > 100_000 ? String(text.prefix(100_000)) + "\n[Content truncated at 100,000 characters]" : text
                     textBlocks.append("<attached_file name=\"\(attachment.filename)\" mime=\"\(attachment.mimeType)\">\n\(truncated)\n</attached_file>")
                 } else {

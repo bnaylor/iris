@@ -67,7 +67,10 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
             _ = try? await URLSession.shared.data(for: req)
         }
     }
-    
+    func generate(prompt: String, jsonSchema: String?) async throws -> String {
+        try await generate(prompt: prompt, jsonSchema: jsonSchema, images: nil)
+    }
+
     func generate(prompt: String, jsonSchema: String?, images: [String]? = nil) async throws -> String {
         let url = URL(string: "http://localhost:11434/api/generate")!
         var req = URLRequest(url: url)

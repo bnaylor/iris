@@ -464,6 +464,7 @@ actor IrisEngine {
                 let modelContent = Content(role: "model", parts: responseContent.parts)
                 await MainActor.run { 
                     localState?.appendContentToHistory(for: conversationId, content: modelContent) 
+                    localState?.stripInlineDataFromHistory(for: conversationId)
                 }
                 history = await MainActor.run {
                     localState?.conversations.first(where: { $0.id == conversationId })?.history ?? []
