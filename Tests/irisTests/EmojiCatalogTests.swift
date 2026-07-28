@@ -51,4 +51,13 @@ struct EmojiCatalogTests {
         #expect(SkinTone.fromModifier("skin-tone-1") == nil)
         #expect(SkinTone.fromModifier("nonsense") == nil)
     }
+
+    @Test("missing or invalid URL handles gracefully without crash")
+    func invalidUrl() {
+        let missingCatalog = EmojiCatalog(url: nil)
+        #expect(missingCatalog.items.isEmpty)
+
+        let bogusCatalog = EmojiCatalog(url: URL(fileURLWithPath: "/nonexistent/emoji.json"))
+        #expect(bogusCatalog.items.isEmpty)
+    }
 }

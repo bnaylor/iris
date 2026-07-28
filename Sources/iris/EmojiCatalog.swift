@@ -41,8 +41,16 @@ final class EmojiCatalog: @unchecked Sendable {
     private(set) var items: [EmojiItem] = []                        // one entry per alias, ordered
 
     init(url: URL? = Bundle.module.url(forResource: "emoji", withExtension: "json")) {
-        guard let url, let data = try? Data(contentsOf: url) else { return }
-        load(data)
+        guard let url else {
+            print("WARNING: [EmojiCatalog] Could not locate resource 'emoji.json' in bundle.")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            load(data)
+        } catch {
+            print("WARNING: [EmojiCatalog] Failed to read emoji data at \(url.path): \(error)")
+        }
     }
 
     private struct RawEmoji: Decodable {
@@ -53,19 +61,23 @@ final class EmojiCatalog: @unchecked Sendable {
     }
 
     private func load(_ data: Data) {
-        guard let raw = try? JSONDecoder().decode([RawEmoji].self, from: data) else { return }
-        for e in raw {
-            let base = Self.scalars(from: e.unified)
-            var toned: [String: String] = [:]
-            if let sv = e.skin_variations {
-                for (tone, v) in sv { toned[tone] = Self.scalars(from: v.unified) }
+        do {
+            let raw = try JSONDecoder().decode([RawEmoji].self, from: data)
+            for e in raw {
+                let base = Self.scalars(from: e.unified)
+                var toned: [String: String] = [:]
+                if let sv = e.skin_variations {
+                    for (tone, v) in sv { toned[tone] = Self.scalars(from: v.unified) }
+                }
+                let supports = !toned.isEmpty
+                for name in e.short_names {
+                    glyphByCode[name] = base
+                    if supports { tonedGlyphByCode[name] = toned }
+                    items.append(EmojiItem(shortcode: name, glyph: base, supportsSkinTone: supports))
+                }
             }
-            let supports = !toned.isEmpty
-            for name in e.short_names {
-                glyphByCode[name] = base
-                if supports { tonedGlyphByCode[name] = toned }
-                items.append(EmojiItem(shortcode: name, glyph: base, supportsSkinTone: supports))
-            }
+        } catch {
+            print("WARNING: [EmojiCatalog] Failed to decode emoji JSON: \(error)")
         }
     }
 
