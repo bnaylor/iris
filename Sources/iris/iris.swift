@@ -668,7 +668,7 @@ actor IrisEngine {
         } else if functionCall.name == "save_fact", let content = functionCall.args["content"]?.stringValue {
             let category = functionCall.args["category"]?.stringValue ?? "general"
             let entity = functionCall.args["entity"]?.stringValue
-            try? FactStoreManager.shared.addFact(content: content, category: category, entity: entity)
+            _ = try? FactStoreManager.shared.addFact(content: content, category: category, entity: entity)
             result = "Fact saved to fact store."
         } else if functionCall.name == "search_memory", let query = functionCall.args["query"]?.stringValue {
             let facts = (try? FactStoreManager.shared.search(query: query)) ?? []
