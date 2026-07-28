@@ -4,7 +4,6 @@ import Observation
 @MainActor
 @Observable
 final class EmojiTokenModel: PopupNav {
-    var activeQuery: String? = nil
     var activeRange: NSRange? = nil
     var suggestions: [EmojiItem] = []
     var selectedIndex: Int = 0
@@ -27,13 +26,11 @@ final class EmojiTokenModel: PopupNav {
         let hits = catalog.matches(prefix: token.query, limit: 8)
         guard !hits.isEmpty else { clear(); return }
         if suggestions.map(\.id) != hits.map(\.id) { selectedIndex = 0 }
-        activeQuery = token.query
         activeRange = token.range
         suggestions = hits
     }
 
     func clear() {
-        activeQuery = nil
         activeRange = nil
         suggestions = []
         selectedIndex = 0

@@ -22,9 +22,6 @@ enum SkinTone: Int, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Slack modifier shortcode, e.g. "skin-tone-2". Nil for `.none`.
-    var modifierName: String? { self == .none ? nil : "skin-tone-\(rawValue)" }
-
     static func fromModifier(_ name: String) -> SkinTone? {
         let prefix = "skin-tone-"
         guard name.hasPrefix(prefix), let n = Int(name.dropFirst(prefix.count)),
