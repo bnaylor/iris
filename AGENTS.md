@@ -15,3 +15,8 @@
 - Add unit tests when introducing new function whenever practical
 - Run unit tests before commit and ensure that they pass.
 
+## Specs & Plans Layout
+- **Design Specs:** Save to `docs/specs/YYYY-MM-DD-feature-name.md`.
+- **Implementation Plans:** Save to `docs/plans/YYYY-MM-DD-feature-name.md`.
+- Do NOT save specs or plans under `superpowers/specs/`, `superpowers/plans/`, or root `superpowers/`. Always enforce `docs/specs/` and `docs/plans/` as the canonical directories with date-prefixed filenames (`YYYY-MM-DD-feature-name.md`).
+

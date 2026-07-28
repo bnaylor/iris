@@ -87,10 +87,9 @@ Markdown links to cross-link related memory files into a navigable knowledge gra
 ## Artifacts & Design Docs
 
 When generating artifacts, research notes, or design docs, do not store them in opaque
-UUID-based directories. Save them in a human-readable tree: by default docs/specs/ and
-docs/plans/ relative to the active workspace, falling back to ~/.iris/memory/artifacts/<project_name>/
-when no workspace is active. These artifacts also use OKF frontmatter so they integrate with
-the memory system.
+UUID-based directories. Save them in a human-readable tree: by default `docs/specs/YYYY-MM-DD-feature-name.md`
+and `docs/plans/YYYY-MM-DD-feature-name.md` relative to the active workspace, falling back to
+`~/.iris/memory/artifacts/<project_name>/` when no workspace is active. Do not write plans or specs under `superpowers/`. These artifacts also use OKF frontmatter so they integrate with the memory system.
 
 ## Security Notice
 
