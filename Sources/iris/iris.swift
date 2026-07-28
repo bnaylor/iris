@@ -165,7 +165,7 @@ actor IrisEngine {
         return false
     }
 
-    func processInput(_ input: String, source: String, conversationId: UUID, restrictToGoalComplete: Bool = false) async {
+    func processInput(_ input: String, source: String, conversationId: UUID, inlineParts: [Part] = [], restrictToGoalComplete: Bool = false) async {
         // Own the thinking indicator for the whole turn via a balanced begin/end so that
         // overlapping turns can't leave it stuck (centralized in AppState's reference count).
         let stateForThinking = state
@@ -173,13 +173,13 @@ actor IrisEngine {
         let turnID = PerformanceProfiler.shared.beginTurn(label: input, source: source)
         let turnStart = CFAbsoluteTimeGetCurrent()
         await PerformanceProfiler.$currentTurnID.withValue(turnID) {
-            await processInputBody(input, source: source, conversationId: conversationId, restrictToGoalComplete: restrictToGoalComplete)
+            await processInputBody(input, source: source, conversationId: conversationId, inlineParts: inlineParts, restrictToGoalComplete: restrictToGoalComplete)
         }
         PerformanceProfiler.shared.endTurn(turnID, totalMs: (CFAbsoluteTimeGetCurrent() - turnStart) * 1000.0)
         await MainActor.run { stateForThinking?.endThinking() }
     }
 
-    private func processInputBody(_ input: String, source: String, conversationId: UUID, restrictToGoalComplete: Bool = false) async {
+    private func processInputBody(_ input: String, source: String, conversationId: UUID, inlineParts: [Part] = [], restrictToGoalComplete: Bool = false) async {
         if source == "UI" { loopDetectors[conversationId] = nil }
 
         let text = (source == "UI") ? input : "System Event [\(source)]: \(input)\nAnalyze this event. If it requires action based on your directives/skills, take it. Otherwise, briefly acknowledge it."
@@ -202,7 +202,11 @@ actor IrisEngine {
             finalText = modifiedInput
         }
 
-        let userContent = Content(role: "user", parts: [Part(text: finalText, functionCall: nil, functionResponse: nil)])
+        var userParts: [Part] = [Part(text: finalText, functionCall: nil, functionResponse: nil)]
+        if !inlineParts.isEmpty {
+            userParts.append(contentsOf: inlineParts)
+        }
+        let userContent = Content(role: "user", parts: userParts)
         await MainActor.run { localState?.appendContentToHistory(for: conversationId, content: userContent) }
         
         var history = await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.history ?? [] }

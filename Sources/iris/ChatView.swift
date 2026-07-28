@@ -8,6 +8,8 @@ struct ChatView: View {
     @State private var composerHeight: CGFloat = 24
     @State private var emojiModel = EmojiTokenModel()
     @State private var slashModel = SlashCommandModel()
+    @State private var draftAttachments: [FileAttachment] = []
+    @State private var isDraggingOver = false
     @State private var selectedMessageIDs = Set<UUID>()
     @State private var showSubagents = false
     @State private var showSetupWizard = false
@@ -220,6 +222,31 @@ struct ChatView: View {
                     SpectrumLine(active: state.isThinking)
 
                     messageInputBar
+                }
+                .onDrop(of: [.fileURL], isTargeted: $isDraggingOver) { providers in
+                    handleDrop(providers: providers)
+                }
+                .overlay {
+                    if isDraggingOver {
+                        ZStack {
+                            Color.accentColor.opacity(0.12)
+                            VStack(spacing: 12) {
+                                Image(systemName: "arrow.down.doc.fill")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(.accentColor)
+                                Text("Drop files to attach")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(24)
+                            .background(RoundedRectangle(cornerRadius: 16).fill(.thinMaterial))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
+                            )
+                        }
+                        .allowsHitTesting(false)
+                    }
                 }
                 .background(Color(NSColor.textBackgroundColor))
                 .navigationTitle(conv.title)
@@ -443,14 +470,57 @@ struct ChatView: View {
         pasteboard.setString(text, forType: .string)
     }
     
+    private func selectAttachments() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.prompt = "Attach"
+        if panel.runModal() == .OK {
+            for url in panel.urls {
+                let (category, mime) = AttachmentProcessor.categorize(url: url)
+                let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                let att = FileAttachment(filename: url.lastPathComponent, fileURL: url, mimeType: mime, fileSize: size, category: category)
+                if !draftAttachments.contains(where: { $0.fileURL == url }) {
+                    draftAttachments.append(att)
+                }
+            }
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        var handled = false
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    if let url = url {
+                        DispatchQueue.main.async {
+                            let (category, mime) = AttachmentProcessor.categorize(url: url)
+                            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                            let att = FileAttachment(filename: url.lastPathComponent, fileURL: url, mimeType: mime, fileSize: size, category: category)
+                            if !draftAttachments.contains(where: { $0.fileURL == url }) {
+                                draftAttachments.append(att)
+                            }
+                        }
+                    }
+                }
+                handled = true
+            }
+        }
+        return handled
+    }
+
     private func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || !draftAttachments.isEmpty else { return }
         selectedMessageIDs.removeAll()
-        state.sendMessage(inputText)
+        let text = inputText
+        let attachments = draftAttachments
         inputText = ""
+        draftAttachments = []
         emojiModel.clear()
         slashModel.clear()
+
+        state.sendMessage(text, attachments: attachments)
     }
 
     /// Escape behavior shared by the message list (`.onExitCommand`) and the composer:
@@ -467,27 +537,41 @@ struct ChatView: View {
     /// The message input bar: a multi-line field (Enter submits, Shift+Enter newlines) + send button.
     private var messageInputBar: some View {
         let isInputEmpty = inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return HStack {
-            ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onEscape: handleEscape, onHeightChange: { composerHeight = $0 })
-                .frame(height: min(max(composerHeight, 24), 120))
-                .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
-                .onChange(of: config.defaultEmojiSkinTone) { _, new in
-                    emojiModel.defaultTone = SkinTone(rawValue: new) ?? .none
+        let isSendDisabled = isInputEmpty && draftAttachments.isEmpty
+        return VStack(spacing: 8) {
+            AttachmentBarView(attachments: $draftAttachments)
+            HStack(alignment: .bottom, spacing: 8) {
+                Button(action: selectAttachments) {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
                 }
-                .padding(6)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .help("Attach Files")
+                .padding(.bottom, 8)
 
-            Button(action: submit) {
-                Image(systemName: "paperplane.fill")
-                    .foregroundColor(isInputEmpty ? .secondary : .irisIndigo)
+                ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onEscape: handleEscape, onHeightChange: { composerHeight = $0 })
+                    .frame(height: min(max(composerHeight, 24), 120))
+                    .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
+                    .onChange(of: config.defaultEmojiSkinTone) { _, new in
+                        emojiModel.defaultTone = SkinTone(rawValue: new) ?? .none
+                    }
+                    .padding(6)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+
+                Button(action: submit) {
+                    Image(systemName: "paperplane.fill")
+                        .foregroundColor(isSendDisabled ? .secondary : .irisIndigo)
+                }
+                .buttonStyle(.plain)
+                .disabled(isSendDisabled)
+                .padding(.bottom, 8)
             }
-            .buttonStyle(.plain)
-            .disabled(isInputEmpty)
         }
         .padding()
         .background(.regularMaterial)
@@ -522,20 +606,33 @@ struct MessageView: View {
                     SystemMessageContent(text: message.content)
                         .textSelection(.enabled)
                 } else if message.role == .user {
-                    Text(message.content)
-                        .textSelection(.enabled)
-                        .padding(10)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.irisIndigo.opacity(0.55), Color.irisIndigo]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .foregroundColor(textColor)
-                        .cornerRadius(12)
-                        .cornerRadius(0, corners: [.bottomRight])
-                        .shadow(color: Color.irisIndigo.opacity(0.25), radius: 3, x: 0, y: 2)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if !message.attachments.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(message.attachments) { attachment in
+                                        AttachmentChipView(attachment: attachment)
+                                    }
+                                }
+                            }
+                        }
+                        if !message.content.isEmpty {
+                            Text(message.content)
+                                .textSelection(.enabled)
+                                .padding(10)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.irisIndigo.opacity(0.55), Color.irisIndigo]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .foregroundColor(textColor)
+                                .cornerRadius(12)
+                                .cornerRadius(0, corners: [.bottomRight])
+                                .shadow(color: Color.irisIndigo.opacity(0.25), radius: 3, x: 0, y: 2)
+                        }
+                    }
                 } else {
                     // Agent messages render via MarkdownUI. We deliberately do NOT apply
                     // `.textSelection(.enabled)` here: on a large Markdown message, MarkdownUI's

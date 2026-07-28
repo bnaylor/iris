@@ -337,9 +337,9 @@ class AppState {
         }
     }
     
-    func sendMessage(_ text: String) {
+    func sendMessage(_ text: String, attachments: [FileAttachment] = []) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let convId = selectedConversationId else { return }
+        guard (!trimmed.isEmpty || !attachments.isEmpty), let convId = selectedConversationId else { return }
         
         var messageContent = trimmed
         if trimmed.hasPrefix("/goal") {
@@ -417,7 +417,7 @@ class AppState {
             return
         }
 
-        appendMessage(role: .user, content: messageContent, to: convId)
+        appendMessage(role: .user, content: messageContent, attachments: attachments, to: convId)
 
         if let idx = conversations.firstIndex(where: { $0.id == convId }) {
             conversations[idx].messageCountSinceReflection += 1
@@ -426,30 +426,55 @@ class AppState {
             let userMessagesCount = conversations[idx].messages.filter { $0.role == .user }.count
             let shouldRename = userMessagesCount == 3 && conversations[idx].messageCountSinceReflection == 3
             let shouldReflect = conversations[idx].messageCountSinceReflection >= 30
+
+            let attachmentsToProcess = attachments
+            let rawContent = messageContent
             
-            if shouldReflect {
-                conversations[idx].messageCountSinceReflection = 0
-                saveConversations()
+            runThinkingTask(conversationId: convId) { [self] in
+                var promptForEngine = rawContent
+                var inlineParts: [Part] = []
 
-                // We'll queue the reflection system message after the current task finishes.
-                runThinkingTask(conversationId: convId) { [self] in
-                    await engine.processInput(messageContent, source: "UI", conversationId: convId)
+                if !attachmentsToProcess.isEmpty {
+                    let primaryModel = ConfigManager.shared.getModel(for: .medium)
+                    let primarySupportsVision = VisionRouter.isVisionCapable(modelName: primaryModel)
+                    let processed = (try? await AttachmentProcessor.process(attachments: attachmentsToProcess, primarySupportsVision: primarySupportsVision)) ?? AttachmentProcessingResult()
 
+                    for warning in processed.warnings {
+                        appendMessage(role: .system, content: "⚠️ \(warning)", to: convId)
+                    }
+
+                    var textParts: [String] = []
+                    if !rawContent.isEmpty {
+                        textParts.append(rawContent)
+                    }
+                    if !processed.extractedPromptText.isEmpty {
+                        textParts.append(processed.extractedPromptText)
+                    }
+
+                    if !primarySupportsVision {
+                        let visionResult = await VisionRouter.processTextOnlyImages(attachments: attachmentsToProcess)
+                        if !visionResult.descriptionText.isEmpty {
+                            textParts.append(visionResult.descriptionText)
+                        }
+                        for warning in visionResult.warnings {
+                            appendMessage(role: .system, content: "⚠️ \(warning)", to: convId)
+                        }
+                    }
+
+                    promptForEngine = textParts.joined(separator: "\n\n")
+                    inlineParts = processed.inlineParts
+                }
+
+                await engine.processInput(promptForEngine, source: "UI", conversationId: convId, inlineParts: inlineParts)
+
+                if shouldReflect {
                     let reflectionPrompt = "System Event [Reflection Trigger]: It's time to consolidate your memories. Reflect on the recent conversation. Have you learned any new user preferences, project structures, or recurring workflows? If so, use `update_soul` to evolve your persona, `update_user_profile` to update the user profile, `update_memory` to consolidate durable facts, and `write_file`/`read_file` under `~/.iris/memory/skills/` for skills. When you learn something durable — a lesson, recipe, decision, or reusable artifact — archive it to your permanent library at `~/.iris/memory/library/` (see your Library Management skill). Output a transparent summary of the gist of the updates for the user. If nothing needs updating, just reply 'No memory consolidation needed at this time.'"
                     appendMessage(role: .system, content: "Triggering automatic memory reflection...", to: convId)
                     await engine.processInput(reflectionPrompt, source: "System", conversationId: convId)
-                }
-            } else if shouldRename {
-                runThinkingTask(conversationId: convId) { [self] in
-                    await engine.processInput(messageContent, source: "UI", conversationId: convId)
-
+                } else if shouldRename {
                     let renamePrompt = "System Event [Rename Trigger]: Evaluate the conversation history and use the `rename_conversation` tool to assign a short, descriptive title (1-4 words) that captures the true gist of this conversation."
                     appendMessage(role: .system, content: "Triggering automatic conversation rename...", to: convId)
                     await engine.processInput(renamePrompt, source: "System", conversationId: convId)
-                }
-            } else {
-                runThinkingTask(conversationId: convId) { [self] in
-                    await engine.processInput(messageContent, source: "UI", conversationId: convId)
                 }
             }
         } else {
@@ -476,13 +501,14 @@ class AppState {
         appendMessage(role: role, content: text, to: conversationId)
     }
 
-    func appendMessage(role: ChatRole, content: String, to conversationId: UUID) {
+    func appendMessage(role: ChatRole, content: String, attachments: [FileAttachment] = [], to conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
-            conversations[idx].messages.append(ChatMessage(role: role, content: content))
+            conversations[idx].messages.append(ChatMessage(role: role, content: content, attachments: attachments))
             
             // Auto-title generation based on first message
             if role == .user && conversations[idx].messages.filter({ $0.role == .user }).count == 1 {
-                conversations[idx].title = String(content.prefix(30)) + (content.count > 30 ? "..." : "")
+                let displayTitle = content.isEmpty ? (attachments.first?.filename ?? "Attachment") : content
+                conversations[idx].title = String(displayTitle.prefix(30)) + (displayTitle.count > 30 ? "..." : "")
             }
             saveConversations()
         }
