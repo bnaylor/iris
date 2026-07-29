@@ -365,11 +365,16 @@ class AppState {
                 appendMessage(role: .system, content: "Please specify a goal, e.g., `/goal Build a snake game in Python`", to: convId)
                 return
             }
-            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
-                conversations[idx].activeGoal = goalText
-                saveConversations()
+            appendMessage(role: .system, content: "Drafting goal contract for: \(goalText)", to: convId)
+            let draftPrompt = """
+            System Event [Goal Contract Draft]: The user wants to start a goal loop with this goal: "\(goalText)".
+
+            Before starting the loop, use the `propose_goal_contract` tool to draft a structured contract. Produce a concrete, honest definition of "done". Follow the honesty rules in the tool description — do not invent executable checks you cannot actually run. This is a DRAFT for the user to review and edit; the loop does not start until they approve.
+            """
+            runThinkingTask(conversationId: convId) { [self] in
+                await engine.processInput(draftPrompt, source: "System", conversationId: convId)
             }
-            messageContent = "GOAL MODE ACTIVATED. Your goal is: \(goalText). You must continually use tools to achieve this goal. If you need to stop and think or plan, use the `reflect` tool or just output text. When the goal is COMPLETELY FINISHED, use the `goal_complete` tool."
+            return
         } else if trimmed.hasPrefix("/stop") {
             if let idx = conversations.firstIndex(where: { $0.id == convId }) {
                 conversations[idx].activeGoal = nil
@@ -632,6 +637,18 @@ class AppState {
         conversations[idx].activeGoal = locked.objective
         conversations[idx].goalIterationCount = 0
         saveConversations()
+    }
+
+    /// Sends the goal-loop kickoff message for a conversation whose contract is already locked.
+    /// Called by `GoalContractPanel` after the user approves the draft.
+    func sendGoalKickoff(for conversationId: UUID) {
+        guard let conv = conversations.first(where: { $0.id == conversationId }),
+              let contract = conv.goalContract else { return }
+        let objective = contract.objective
+        let kickoff = "GOAL MODE ACTIVATED. Your goal is: \(objective). You must continually use tools to achieve this goal. If you need to stop and think or plan, use the `reflect` tool or just output text. When the goal is COMPLETELY FINISHED, use the `goal_complete` tool."
+        runThinkingTask(conversationId: conversationId) { [self] in
+            await engine.processInput(kickoff, source: "System", conversationId: conversationId)
+        }
     }
 
     func setGoal(for conversationId: UUID, goal: String) {

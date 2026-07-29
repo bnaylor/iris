@@ -218,7 +218,12 @@ struct ChatView: View {
                         SlashCommandAutoCompleteView(model: slashModel)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    
+
+                    if conv.goalContract?.state == .draft {
+                        GoalContractPanel(state: state, conversation: conv)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     SpectrumLine(active: state.isThinking)
 
                     messageInputBar
