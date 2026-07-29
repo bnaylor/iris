@@ -614,6 +614,14 @@ class AppState {
         }
     }
 
+    /// Stores a draft contract on the conversation without locking or touching `activeGoal`.
+    /// Called by the `propose_goal_contract` tool handler so the user can review before approval.
+    func setDraftContract(for conversationId: UUID, _ draft: GoalContract) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].goalContract = draft
+        saveConversations()
+    }
+
     /// Locks a drafted contract onto the conversation and mirrors its objective into `activeGoal`
     /// so the existing loop gate (activeGoal != nil) and #16's machinery keep working unchanged.
     func setGoalContract(for conversationId: UUID, _ contract: GoalContract) {

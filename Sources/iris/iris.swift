@@ -390,6 +390,21 @@ actor IrisEngine {
                 required: ["content"]
             )
         ))
+        toolsList.append(FunctionDeclaration(
+            name: "propose_goal_contract",
+            description: "Draft a structured contract for a goal the user is starting. Produce concrete criteria for 'done'. Honesty rules: never invent an `executable` check you cannot actually run; prefer a `qualitative` criterion over a fabricated number; flag taste/direction as `humanJudged`. This proposes a DRAFT for the user to edit and approve — it does not start the loop.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "objective": Schema(type: "STRING", description: "One-line restatement of the goal."),
+                    "criteria": Schema(type: "ARRAY", description: "Definition of done. Each item: {text, kind: executable|qualitative|humanJudged, check?}. `check` is a runnable command/test, only for executable."),
+                    "out_of_scope": Schema(type: "ARRAY", description: "Explicit non-goals."),
+                    "stop_before": Schema(type: "ARRAY", description: "Irreversible / authorization boundaries to stop and ask before (e.g. force-push, merge, delete, spend)."),
+                    "assumptions": Schema(type: "ARRAY", description: "Anything you inferred that the user should confirm.")
+                ],
+                required: ["objective", "criteria"]
+            )
+        ))
 
         // Offer an optional `intent` on every tool so the model can attach a one-line
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
@@ -664,6 +679,13 @@ actor IrisEngine {
         } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"]?.stringValue {
             await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
             result = "Conversation renamed to '\(newTitle)'."
+        } else if functionCall.name == "propose_goal_contract" {
+            if let draft = GoalContractParsing.contract(from: functionCall.args) {
+                await MainActor.run { localState?.setDraftContract(for: conversationId, draft) }
+                result = "Draft goal contract proposed for user review. Await approval before starting the goal loop."
+            } else {
+                result = "Could not parse the proposed goal contract (missing objective?)."
+            }
         } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"]?.stringValue {
             let minute = Int(functionCall.args["minute"]?.stringValue ?? "")
             let hour = Int(functionCall.args["hour"]?.stringValue ?? "")
