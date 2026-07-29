@@ -771,6 +771,25 @@ class AppState {
                 let report = await SkillCurator.shared.curateSkills()
                 let markdown = SkillCurator.shared.formatReportMarkdown(report)
                 self.emitCommandOutput(markdown, format: .markdown, to: convId)
+            } else if args.hasPrefix("new ") {
+                let name = String(args.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let templateBody = """
+                # Overview
+                Provide a clear summary of when to use this skill.
+
+                # Steps
+                1. Step one
+                2. Step two
+
+                # Pitfalls & Verification
+                - Step verification criteria
+                """
+                let res = await ToolExecutor.shared.createSkill(
+                    name: name,
+                    description: "Scaffolded skill '\(name)'",
+                    body: templateBody
+                )
+                self.emitCommandOutput("✨ Scaffolded skill template for **\(name)**.\n\(res)", format: .markdown, to: convId)
             } else if args.hasPrefix("reload") {
                 let skillArg = args.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
                 await self.engine.invalidateSystemPrompt()
@@ -819,10 +838,17 @@ class AppState {
                 emitCommandOutput("Failed to save bundle: \(error.localizedDescription)", format: .markdown, to: convId)
             }
         } else if !args.isEmpty {
-            if let bundle = SkillBundleManager.shared.getBundle(name: args) {
+            if args == "clear" || args == "off" {
+                SkillBundleManager.shared.activeBundle = nil
                 Task { [weak self] in
                     await self?.engine.invalidateSystemPrompt()
-                    self?.emitCommandOutput("Activated skill bundle **\(bundle.name)** (\(bundle.skillNames.joined(separator: ", "))). System prompt cache updated.", format: .markdown, to: convId)
+                    self?.emitCommandOutput("Cleared active skill bundle filter. All registered skills are now loaded.", format: .markdown, to: convId)
+                }
+            } else if let bundle = SkillBundleManager.shared.getBundle(name: args) {
+                SkillBundleManager.shared.activeBundle = bundle
+                Task { [weak self] in
+                    await self?.engine.invalidateSystemPrompt()
+                    self?.emitCommandOutput("Activated skill bundle **\(bundle.name)** (\(bundle.skillNames.joined(separator: ", "))). Context filtered & prompt cache updated.", format: .markdown, to: convId)
                 }
             } else {
                 emitCommandOutput("Bundle '\(args)' not found. Type `/bundle` to list saved bundles.", format: .markdown, to: convId)

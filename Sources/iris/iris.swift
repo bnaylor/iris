@@ -37,7 +37,8 @@ actor IrisEngine {
         if let existing = systemPrompt { return existing }
         return await measure(.contextAssembly) {
             let soul = await manager.loadSOUL()
-            let skills = await manager.discoverSkills()
+            let activeBundle = SkillBundleManager.shared.activeBundle
+            let skills = await manager.discoverSkills(activeBundle: activeBundle)
             let steering = SystemSteering.shipped()
             let customRules = await manager.loadCustomRules()
             let combined = "\(soul)\n\n\(skills)\n\n\(steering)\(customRules)"

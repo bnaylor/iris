@@ -15,6 +15,22 @@ public struct SkillBundle: Codable, Sendable, Equatable {
 public final class SkillBundleManager: Sendable {
     public static let shared = SkillBundleManager()
 
+    private let lock = NSLock()
+    private var _activeBundle: SkillBundle? = nil
+
+    public var activeBundle: SkillBundle? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _activeBundle
+        }
+        set {
+            lock.lock()
+            _activeBundle = newValue
+            lock.unlock()
+        }
+    }
+
     private init() {}
 
     private func bundleFile(paths: IrisPaths) -> URL {

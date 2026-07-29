@@ -88,4 +88,32 @@ struct SkillCurationAdvancementsTests {
         #expect(reportContent.contains("Iris Skill Curator Report"))
         #expect(reportContent.contains("corrupt-skill"))
     }
+
+    @Test("SkillManager filters discoverSkills when activeBundle is set")
+    func testSkillManagerSelectiveBundleFiltering() async throws {
+        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("iris-discover-bundle-test-\(UUID().uuidString)")
+        let paths = IrisPaths(root: tempRoot)
+        try paths.ensureDirectories()
+
+        // Create 2 skills
+        let s1 = paths.skillsDir.appendingPathComponent("humanizer")
+        try FileManager.default.createDirectory(at: s1, withIntermediateDirectories: true)
+        try "---\nname: humanizer\ndescription: Humanize text\n---\n\nBody 1".write(to: s1.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let s2 = paths.skillsDir.appendingPathComponent("k8s-debug")
+        try FileManager.default.createDirectory(at: s2, withIntermediateDirectories: true)
+        try "---\nname: k8s-debug\ndescription: K8s debug\n---\n\nBody 2".write(to: s2.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        // Without active bundle -> returns both
+        let allPrompt = await SkillManager.shared.discoverSkills(paths: paths, activeBundle: nil)
+        #expect(allPrompt.contains("humanizer"))
+        #expect(allPrompt.contains("k8s-debug"))
+
+        // With active bundle 'writing-day' (only humanizer) -> returns only humanizer
+        let bundle = SkillBundle(name: "writing-day", description: "Writing day", skillNames: ["humanizer"])
+        let bundlePrompt = await SkillManager.shared.discoverSkills(paths: paths, activeBundle: bundle)
+        #expect(bundlePrompt.contains("humanizer"))
+        #expect(!bundlePrompt.contains("k8s-debug"))
+    }
 }
