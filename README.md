@@ -68,8 +68,9 @@ Iris runs in the background and can be summoned instantly over any other app by 
 Iris supports in-app slash commands typed directly into the composer. Deterministic commands run instantly in-app without invoking the LLM (zero token cost):
 
 *   **Harness & Models:** `/model [tier|name]` (inspect/switch active model), `/mcp [reload]` (inspect/reconnect MCP servers), `/tokens` (view token usage).
-*   **Skills & Rules:** `/skills [reload|show <name>]` (list, reload, or view SKILL.md body), `/rules [reload]` (inspect/reload custom rules from `~/.iris/rules/`).
-*   **Memory & Facts:** `/facts [search <q>|probe <e>]` (query SQLite FactStore).
+*   **Skills & Bundles:** `/skills [new <name>|reload|show <name>|curate]` (scaffold, list, reload, view, or curate skills), `/bundle [save <name> s1,s2|<name>|clear]` (manage or activate selective skill bundle filters).
+*   **Journey & Learning:** `/journey` (render chronological timeline of all learned memories, skills, and facts).
+*   **Memory & Rules:** `/rules [reload]` (inspect/reload custom rules), `/facts [search <q>|probe <e>]` (query SQLite FactStore).
 *   **Session Control:** `/new` (fresh chat), `/clear` (clear current buffer), `/stop` (cancel active goal/subagents), `/update` (check for GitHub releases).
 *   **Autonomous Workflows:** `/goal <desc>` (autonomous execution loop), `/reflect` (memory reflection), `/vibecop init` (generate security rules).
 
