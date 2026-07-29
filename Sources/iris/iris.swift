@@ -341,7 +341,12 @@ actor IrisEngine {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion.")
+                    "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion."),
+                    "criteria_status": Schema(type: "ARRAY", description: "Per-criterion self-report against the goal contract. Self-report shown to the user as UNVERIFIED — do not overstate.", items: Schema(type: "OBJECT", properties: [
+                        "criterion": Schema(type: "STRING", description: "The criterion text being reported on."),
+                        "status": Schema(type: "STRING", description: "met | not_met | cannot_verify"),
+                        "evidence": Schema(type: "STRING", description: "Brief evidence or reasoning for the status.")
+                    ], required: ["criterion", "status"]))
                 ],
                 required: ["summary"]
             )
@@ -390,11 +395,47 @@ actor IrisEngine {
                 required: ["content"]
             )
         ))
+        toolsList.append(FunctionDeclaration(
+            name: "propose_goal_contract",
+            description: "Draft a structured contract for a goal the user is starting. Produce concrete criteria for 'done'. Honesty rules: never invent an `executable` check you cannot actually run; prefer a `qualitative` criterion over a fabricated number; flag taste/direction as `humanJudged`. This proposes a DRAFT for the user to edit and approve — it does not start the loop.",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "objective": Schema(type: "STRING", description: "One-line restatement of the goal."),
+                    "criteria": Schema(type: "ARRAY", description: "Definition of done.", items: Schema(type: "OBJECT", properties: [
+                        "text": Schema(type: "STRING", description: "The criterion — what 'done' looks like."),
+                        "kind": Schema(type: "STRING", description: "executable | qualitative | humanJudged"),
+                        "check": Schema(type: "STRING", description: "A runnable command/test. ONLY for executable criteria.")
+                    ], required: ["text", "kind"])),
+                    "out_of_scope": Schema(type: "ARRAY", description: "Explicit non-goals.", items: Schema(type: "STRING")),
+                    "stop_before": Schema(type: "ARRAY", description: "Irreversible / authorization boundaries to stop and ask before (e.g. force-push, merge, delete, spend).", items: Schema(type: "STRING")),
+                    "assumptions": Schema(type: "ARRAY", description: "Anything you inferred that the user should confirm.", items: Schema(type: "STRING"))
+                ],
+                required: ["objective", "criteria"]
+            )
+        ))
+        toolsList.append(FunctionDeclaration(
+            name: "amend_goal_contract",
+            description: "Change the LOCKED goal contract's criteria when the work reveals they were wrong. A `rationale` is mandatory — criteria never change silently. The change is logged and shown to the user.",
+            parameters: Schema(type: "OBJECT", properties: [
+                "action": Schema(type: "STRING", description: "add | remove | update"),
+                "criterion": Schema(type: "STRING", description: "The criterion text to add, or the existing text to remove/update."),
+                "kind": Schema(type: "STRING", description: "executable | qualitative | humanJudged (for add/update)."),
+                "check": Schema(type: "STRING", description: "Runnable command/test, only for executable."),
+                "rationale": Schema(type: "STRING", description: "One line: why the criteria must change.")
+            ], required: ["action", "criterion", "rationale"])
+        ))
 
         // Offer an optional `intent` on every tool so the model can attach a one-line
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
         // future tool is covered automatically.
         toolsList = ToolIntent.augment(toolsList)
+
+        // Guard the Gemini array-schema contract: an ARRAY property missing `items` is rejected
+        // with HTTP 400. Fires in debug/test builds (the engine-exercising tests run this path),
+        // so a future tool that forgets `items` trips here instead of at runtime against the API.
+        assert(toolsList.arrayItemsViolations().isEmpty,
+               "Tool ARRAY schema(s) missing `items` (Gemini will reject): \(toolsList.arrayItemsViolations())")
 
         let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList, useSandbox: hooksSandbox)
         if case .block(let reason) = toolSelectionDecision {
@@ -635,7 +676,13 @@ actor IrisEngine {
                         return conv.activeGoal != nil
                     }
                     guard stillActive else { return }
-                    await self.processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
+                    let oracle = await MainActor.run { () -> String in
+                        localState?.conversations.first(where: { $0.id == conversationId })?.goalContract?.oracleText() ?? ""
+                    }
+                    let reprompt = oracle.isEmpty
+                        ? "Continue working on your goal. What is your next step? If finished, call goal_complete."
+                        : "\(oracle)\n\nContinue working toward the objective above. What is your next step? If every criterion is satisfied, call goal_complete."
+                    await self.processInput(reprompt, source: "System", conversationId: conversationId)
                 }
             }
         }
@@ -664,6 +711,13 @@ actor IrisEngine {
         } else if functionCall.name == "rename_conversation", let newTitle = functionCall.args["title"]?.stringValue {
             await MainActor.run { localState?.renameConversation(id: conversationId, newTitle: newTitle) }
             result = "Conversation renamed to '\(newTitle)'."
+        } else if functionCall.name == "propose_goal_contract" {
+            if let draft = GoalContractParsing.contract(from: functionCall.args) {
+                await MainActor.run { localState?.setDraftContract(for: conversationId, draft) }
+                result = "Draft goal contract proposed for user review. Await approval before starting the goal loop."
+            } else {
+                result = "Could not parse the proposed goal contract (missing objective?)."
+            }
         } else if functionCall.name == "schedule_job", let prompt = functionCall.args["prompt"]?.stringValue {
             let minute = Int(functionCall.args["minute"]?.stringValue ?? "")
             let hour = Int(functionCall.args["hour"]?.stringValue ?? "")
@@ -726,7 +780,9 @@ actor IrisEngine {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
+            let statusReport = functionCall.args["criteria_status"]
             await MainActor.run {
+                localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
                 localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
                 localState?.onSubagentComplete[conversationId] = nil
@@ -737,6 +793,17 @@ actor IrisEngine {
                 await processInput(reflectionNotice, source: "System", conversationId: conversationId)
             }
             result = "Goal marked as complete. Summary: \(summary)"
+        } else if functionCall.name == "amend_goal_contract" {
+            let action = functionCall.args["action"]?.stringValue ?? "add"
+            let text = functionCall.args["criterion"]?.stringValue ?? ""
+            let kind = functionCall.args["kind"]?.stringValue ?? "qualitative"
+            let check = functionCall.args["check"]?.stringValue
+            let rationale = functionCall.args["rationale"]?.stringValue ?? ""
+            let ok = await MainActor.run {
+                localState?.amendGoalContract(for: conversationId, action: action, criterionText: text, kind: kind, check: check, rationale: rationale) ?? false
+            }
+            result = ok ? "Goal contract amended (\(action): \(text)). Logged with rationale."
+                        : "Amend rejected — a non-empty rationale is required to change locked criteria."
         } else {
             var needsApproval = false
             var details = ""

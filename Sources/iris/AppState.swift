@@ -53,8 +53,10 @@ struct Conversation: Identifiable, Codable, Hashable {
     var goalIterationCount: Int = 0
     var mainAgentSandbox: SandboxPref? = nil
     var isSubagent: Bool = false
+    var goalContract: GoalContract? = nil
+    var lastGoalCompletionReport: JSONValue? = nil
 
-    init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0) {
+    init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
         self.title = title
         self.messages = messages
@@ -63,12 +65,13 @@ struct Conversation: Identifiable, Codable, Hashable {
         self.tokenUsage = tokenUsage
         self.activeGoal = activeGoal
         self.messageCountSinceReflection = messageCountSinceReflection
+        self.goalContract = goalContract
     }
-    
+
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -81,6 +84,16 @@ struct Conversation: Identifiable, Codable, Hashable {
         messageCountSinceReflection = try container.decodeIfPresent(Int.self, forKey: .messageCountSinceReflection) ?? 0
         mainAgentSandbox = try container.decodeIfPresent(SandboxPref.self, forKey: .mainAgentSandbox)
         isSubagent = try container.decodeIfPresent(Bool.self, forKey: .isSubagent) ?? false
+        goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
+        lastGoalCompletionReport = try container.decodeIfPresent(JSONValue.self, forKey: .lastGoalCompletionReport)
+        // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
+        // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
+        if goalContract == nil, let legacy = activeGoal {
+            var c = GoalContract(objective: legacy,
+                                 criteria: [Criterion(text: legacy, kind: .qualitative, check: nil)])
+            c.lock()
+            goalContract = c
+        }
     }
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
@@ -354,16 +367,18 @@ class AppState {
                 appendMessage(role: .system, content: "Please specify a goal, e.g., `/goal Build a snake game in Python`", to: convId)
                 return
             }
-            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
-                conversations[idx].activeGoal = goalText
-                saveConversations()
+            appendMessage(role: .system, content: "Drafting goal contract for: \(goalText)", to: convId)
+            let draftPrompt = """
+            System Event [Goal Contract Draft]: The user wants to start a goal loop with this goal: "\(goalText)".
+
+            Before starting the loop, use the `propose_goal_contract` tool to draft a structured contract. Produce a concrete, honest definition of "done". Follow the honesty rules in the tool description — do not invent executable checks you cannot actually run. This is a DRAFT for the user to review and edit; the loop does not start until they approve.
+            """
+            runThinkingTask(conversationId: convId) { [self] in
+                await engine.processInput(draftPrompt, source: "System", conversationId: convId)
             }
-            messageContent = "GOAL MODE ACTIVATED. Your goal is: \(goalText). You must continually use tools to achieve this goal. If you need to stop and think or plan, use the `reflect` tool or just output text. When the goal is COMPLETELY FINISHED, use the `goal_complete` tool."
+            return
         } else if trimmed.hasPrefix("/stop") {
-            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
-                conversations[idx].activeGoal = nil
-                saveConversations()
-            }
+            clearGoal(for: convId)
             cancelTasks(for: convId)
             appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
             return
@@ -597,11 +612,93 @@ class AppState {
     func clearGoal(for conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = nil
+            conversations[idx].goalContract = nil
             conversations[idx].goalIterationCount = 0
             saveConversations()
         }
     }
-    
+
+    /// Records the optional per-criterion self-report from a `goal_complete` call.
+    /// Must be called BEFORE `clearGoal` so the contract is still present for context.
+    func recordCompletionSelfReport(for conversationId: UUID, statusJSON: JSONValue?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalCompletionReport = statusJSON
+        saveConversations()
+    }
+
+    /// Dismisses the completion self-report chip (the ✕). Independent of `clearGoal` so the
+    /// report survives a goal_complete but the user can still put it away without starting a
+    /// new goal.
+    func dismissCompletionReport(for conversationId: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalCompletionReport = nil
+        saveConversations()
+    }
+
+    /// Stores a draft contract on the conversation without locking or touching `activeGoal`.
+    /// Called by the `propose_goal_contract` tool handler so the user can review before approval.
+    func setDraftContract(for conversationId: UUID, _ draft: GoalContract) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        // Never replace a locked contract with a fresh draft — locked criteria change ONLY
+        // through amend_goal_contract (with a rationale). A stray propose_goal_contract during
+        // a running goal is ignored.
+        if conversations[idx].goalContract?.isLocked == true { return }
+        // Starting a new goal clears any prior completion report so it doesn't linger.
+        conversations[idx].lastGoalCompletionReport = nil
+        conversations[idx].goalContract = draft
+        saveConversations()
+    }
+
+    /// Locks a drafted contract onto the conversation and mirrors its objective into `activeGoal`
+    /// so the existing loop gate (activeGoal != nil) and #16's machinery keep working unchanged.
+    func setGoalContract(for conversationId: UUID, _ contract: GoalContract) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        var locked = contract
+        locked.lock()
+        conversations[idx].goalContract = locked
+        conversations[idx].activeGoal = locked.objective
+        conversations[idx].goalIterationCount = 0
+        saveConversations()
+    }
+
+    /// The only sanctioned edit path for a LOCKED contract. Returns false if rejected
+    /// (blank rationale) or no contract. `action` is "add" | "remove" | "update".
+    @discardableResult
+    func amendGoalContract(for conversationId: UUID, action: String, criterionText: String,
+                           kind: String, check: String?, rationale: String) -> Bool {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }),
+              var contract = conversations[idx].goalContract else { return false }
+        let ck = CriterionKind(rawValue: kind) ?? .qualitative
+        let ok = contract.applyCriteriaEdit(rationale: rationale) { criteria in
+            switch action {
+            case "remove": criteria.removeAll { $0.text == criterionText }
+            case "update":
+                if let i = criteria.firstIndex(where: { $0.text == criterionText }) {
+                    criteria[i].kind = ck; criteria[i].check = ck == .executable ? check : nil
+                }
+            default: // "add"
+                criteria.append(Criterion(text: criterionText, kind: ck, check: ck == .executable ? check : nil))
+            }
+        }
+        if ok {
+            conversations[idx].goalContract = contract
+            saveConversations()
+        }
+        return ok
+    }
+
+    /// Sends the goal-loop kickoff message for a conversation whose contract is already locked.
+    /// Called by `GoalContractPanel` after the user approves the draft.
+    func sendGoalKickoff(for conversationId: UUID) {
+        guard let conv = conversations.first(where: { $0.id == conversationId }),
+              let contract = conv.goalContract else { return }
+        let objective = contract.objective
+        let kickoff = "GOAL MODE ACTIVATED. Your goal is: \(objective). You must continually use tools to achieve this goal. If you need to stop and think or plan, use the `reflect` tool or just output text. When the goal is COMPLETELY FINISHED, use the `goal_complete` tool."
+        runThinkingTask(conversationId: conversationId) { [self] in
+            await engine.processInput(kickoff, source: "System", conversationId: conversationId)
+        }
+    }
+
     func setGoal(for conversationId: UUID, goal: String) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = goal

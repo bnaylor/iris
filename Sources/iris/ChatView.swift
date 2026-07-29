@@ -218,7 +218,22 @@ struct ChatView: View {
                         SlashCommandAutoCompleteView(model: slashModel)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    
+
+                    if conv.goalContract?.state == .draft {
+                        GoalContractPanel(state: state, conversation: conv)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
+                    if conv.goalContract?.state == .locked {
+                        LockedContractChip(conversation: conv)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
+                    if let report = conv.lastGoalCompletionReport {
+                        CompletionReportChip(state: state, conversationId: conv.id, report: report)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     SpectrumLine(active: state.isThinking)
 
                     messageInputBar
