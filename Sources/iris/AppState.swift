@@ -145,6 +145,12 @@ class AppState {
             createNewConversation()
         }
     }
+
+    func invalidateEnginePrompt() {
+        Task {
+            await engine?.invalidateSystemPrompt()
+        }
+    }
     
     var activeConversationIndex: Int? {
         conversations.firstIndex(where: { $0.id == selectedConversationId })

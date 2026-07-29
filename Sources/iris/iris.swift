@@ -731,6 +731,10 @@ actor IrisEngine {
                 localState?.onSubagentComplete[conversationId] = nil
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
+            if principal == .main {
+                let reflectionNotice = "System Event [Goal Completion Skill Check]: Evaluate the goal just completed. Did you execute a complex multi-step procedure, overcome non-obvious errors, or discover a reusable recipe? If so, call `create_skill` now to save it to your permanent skill library."
+                await processInput(reflectionNotice, source: "System", conversationId: conversationId)
+            }
             result = "Goal marked as complete. Summary: \(summary)"
         } else {
             var needsApproval = false
