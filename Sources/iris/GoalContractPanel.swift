@@ -20,6 +20,11 @@ struct GoalContractPanel: View {
             objective: "",
             criteria: []
         )
+        // Seeding @State from the conversation's draft contract is safe here because:
+        // (a) GoalContractPanel only appears while goalContract.state == .draft, and
+        // (b) the state machine never transitions a contract back to .draft once it leaves
+        //     that phase — so this init runs exactly once per panel lifetime and there is
+        //     no risk of a re-render clobbering in-progress edits.
         _objective = State(initialValue: contract.objective)
         _criteria = State(initialValue: contract.criteria)
         _outOfScope = State(initialValue: contract.outOfScope)
@@ -160,9 +165,21 @@ struct GoalContractPanel: View {
     // MARK: - Actions
 
     private func approveAndLock() {
+        // Normalize: a criterion's `check` is only valid for `.executable` kind.
+        // If the user switched the picker away from `.executable` after typing a command,
+        // the check string is still in local state — strip it here so the locked contract
+        // never carries a check value on a non-executable criterion.
+        let normalizedCriteria = criteria.map { criterion in
+            Criterion(
+                id: criterion.id,
+                text: criterion.text,
+                kind: criterion.kind,
+                check: criterion.kind == .executable ? criterion.check : nil
+            )
+        }
         let edited = GoalContract(
             objective: objective,
-            criteria: criteria,
+            criteria: normalizedCriteria,
             outOfScope: outOfScope,
             stopBefore: stopBefore,
             assumptions: assumptions
@@ -223,18 +240,40 @@ private struct CriterionRow: View {
     }
 }
 
+/// Pairs a stable UUID with an index so `ForEach` can use a fixed identity while
+/// `StringListSection` still binds edits directly into the underlying `[String]` array.
+private struct IndexedString: Identifiable {
+    let id: UUID
+    let index: Int
+}
+
 private struct StringListSection: View {
     let label: String
     let systemImage: String
     @Binding var items: [String]
+
+    /// Stable row identifiers generated once per section lifetime.
+    /// Each entry maps a UUID to a positional index in `items`.
+    /// Using UUID-based identity prevents SwiftUI from recycling rows incorrectly
+    /// when the collection is mutated (add/delete in future iterations).
+    @State private var rowIDs: [IndexedString]
+
+    init(label: String, systemImage: String, items: Binding<[String]>) {
+        self.label = label
+        self.systemImage = systemImage
+        _items = items
+        _rowIDs = State(initialValue: items.wrappedValue.indices.map {
+            IndexedString(id: UUID(), index: $0)
+        })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(label, systemImage: systemImage)
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
-            ForEach(items.indices, id: \.self) { idx in
-                TextField(label, text: $items[idx], axis: .vertical)
+            ForEach(rowIDs) { row in
+                TextField(label, text: $items[row.index], axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.body)
                     .lineLimit(1...2)
