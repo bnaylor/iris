@@ -370,6 +370,12 @@ class AppState {
         } else if trimmed == "/skills" || trimmed.hasPrefix("/skills ") {
             handleSkillsCommand(trimmed, convId: convId)
             return
+        } else if trimmed == "/bundle" || trimmed.hasPrefix("/bundle ") {
+            handleBundleCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/journey" {
+            handleJourneyCommand(convId: convId)
+            return
         } else if trimmed == "/rules" || trimmed.hasPrefix("/rules ") {
             handleRulesCommand(trimmed, convId: convId)
             return
@@ -761,7 +767,30 @@ class AppState {
         let args = trimmed.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines)
         Task { [weak self] in
             guard let self = self else { return }
-            if args.hasPrefix("reload") {
+            if args.hasPrefix("curate") {
+                let report = await SkillCurator.shared.curateSkills()
+                let markdown = SkillCurator.shared.formatReportMarkdown(report)
+                self.emitCommandOutput(markdown, format: .markdown, to: convId)
+            } else if args.hasPrefix("new ") {
+                let name = String(args.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let templateBody = """
+                # Overview
+                Provide a clear summary of when to use this skill.
+
+                # Steps
+                1. Step one
+                2. Step two
+
+                # Pitfalls & Verification
+                - Step verification criteria
+                """
+                let res = await ToolExecutor.shared.createSkill(
+                    name: name,
+                    description: "Scaffolded skill '\(name)'",
+                    body: templateBody
+                )
+                self.emitCommandOutput("✨ Scaffolded skill template for **\(name)**.\n\(res)", format: .markdown, to: convId)
+            } else if args.hasPrefix("reload") {
                 let skillArg = args.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
                 await self.engine.invalidateSystemPrompt()
                 let skills = await SkillManager.shared.listSkills()
@@ -787,6 +816,63 @@ class AppState {
                 }
                 self.emitCommandOutput(body, format: .markdown, to: convId)
             }
+        }
+    }
+
+    private func handleBundleCommand(_ trimmed: String, convId: UUID) {
+        let args = trimmed.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines)
+        if args.hasPrefix("save ") {
+            let rest = String(args.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = rest.split(separator: " ", maxSplits: 1).map { String($0) }
+            guard parts.count == 2 else {
+                emitCommandOutput("Usage: `/bundle save <name> skill1,skill2,...`", format: .markdown, to: convId)
+                return
+            }
+            let name = parts[0]
+            let skills = parts[1].split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            let bundle = SkillBundle(name: name, description: "Custom bundle '\(name)'", skillNames: skills)
+            do {
+                try SkillBundleManager.shared.saveBundle(bundle)
+                emitCommandOutput("Saved skill bundle **\(name)** (\(skills.joined(separator: ", "))).", format: .markdown, to: convId)
+            } catch {
+                emitCommandOutput("Failed to save bundle: \(error.localizedDescription)", format: .markdown, to: convId)
+            }
+        } else if !args.isEmpty {
+            if args == "clear" || args == "off" {
+                SkillBundleManager.shared.activeBundle = nil
+                Task { [weak self] in
+                    await self?.engine.invalidateSystemPrompt()
+                    self?.emitCommandOutput("Cleared active skill bundle filter. All registered skills are now loaded.", format: .markdown, to: convId)
+                }
+            } else if let bundle = SkillBundleManager.shared.getBundle(name: args) {
+                SkillBundleManager.shared.activeBundle = bundle
+                Task { [weak self] in
+                    await self?.engine.invalidateSystemPrompt()
+                    self?.emitCommandOutput("Activated skill bundle **\(bundle.name)** (\(bundle.skillNames.joined(separator: ", "))). Context filtered & prompt cache updated.", format: .markdown, to: convId)
+                }
+            } else {
+                emitCommandOutput("Bundle '\(args)' not found. Type `/bundle` to list saved bundles.", format: .markdown, to: convId)
+            }
+        } else {
+            let bundles = SkillBundleManager.shared.listBundles()
+            if bundles.isEmpty {
+                emitCommandOutput("No skill bundles defined. Use `/bundle save <name> skill1,skill2` to create one.", format: .markdown, to: convId)
+            } else {
+                var body = "**Defined Skill Bundles (\(bundles.count))**\n\n"
+                for b in bundles {
+                    body += "• **\(b.name)**: \(b.skillNames.joined(separator: ", "))\n"
+                }
+                emitCommandOutput(body, format: .markdown, to: convId)
+            }
+        }
+    }
+
+    private func handleJourneyCommand(convId: UUID) {
+        Task { [weak self] in
+            guard let self = self else { return }
+            let items = await JourneyManager.shared.buildTimeline()
+            let markdown = JourneyManager.shared.formatTimelineMarkdown(items: items)
+            self.emitCommandOutput(markdown, format: .markdown, to: convId)
         }
     }
 

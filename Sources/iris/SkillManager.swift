@@ -73,13 +73,26 @@ struct SkillManager {
         return skills.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    func discoverSkills(paths: IrisPaths = .default) async -> String {
-        let skills = await listSkills(paths: paths)
+    func discoverSkills(paths: IrisPaths = .default, activeBundle: SkillBundle? = nil) async -> String {
+        let allSkills = await listSkills(paths: paths)
+        let skills: [SkillInfo]
+        if let bundle = activeBundle {
+            let bundleNames = Set(bundle.skillNames.map { $0.lowercased() })
+            skills = allSkills.filter {
+                bundleNames.contains($0.name.lowercased()) || bundleNames.contains($0.folderName.lowercased())
+            }
+        } else {
+            skills = allSkills
+        }
+
         guard !skills.isEmpty else {
+            if let bundle = activeBundle {
+                return "# Available Skills (Active Bundle: \(bundle.name))\n\nNo matching skills found in active bundle."
+            }
             return "# Available Skills\n\nNo skills found."
         }
 
-        var skillsSummary = "# Available Skills\n\n"
+        var skillsSummary = "# Available Skills" + (activeBundle != nil ? " (Active Bundle: \(activeBundle!.name))\n\n" : "\n\n")
         for skill in skills {
             skillsSummary += "## Skill: \(skill.name)\n**Description:** \(skill.description)\n"
             skillsSummary += "**Path:** ~/.iris/memory/skills/\(skill.folderName)/SKILL.md\n\n"

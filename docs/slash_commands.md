@@ -9,8 +9,12 @@ Iris supports in-app slash commands (`/-commands`) typed into the chat composer 
 | Command | Usage | Description |
 |---|---|---|
 | `/skills` | `/skills` | List all registered skills and memory tools. |
+| `/skills new` | `/skills new <name>` | Scaffold a structured OKF `SKILL.md` template for a new skill. |
 | `/skills reload` | `/skills reload [name]` | Invalidate system prompt cache and reload skill definitions from disk. |
 | `/skills show` | `/skills show <name>` | Display the full `SKILL.md` body for a given skill. |
+| `/skills curate` | `/skills curate` | Run skill health pass, soft-delete corrupt skills to trash, and write `~/.iris/memory/curator/REPORT.md`. |
+| `/bundle` | `/bundle [save <name> s1,s2\|<name>\|clear]` | List, save, activate, or clear selective skill bundle context filters. |
+| `/journey` | `/journey` | Render chronological timeline of all learned skills, profile evolutions, and facts. |
 | `/rules` | `/rules` | View loaded custom rules from `~/.iris/rules/`. |
 | `/rules reload` | `/rules reload` | Force system prompt cache invalidation to re-read custom rule files. |
 | `/model` | `/model [fast\|medium\|heavy\|<name>]` | View active model tiers or switch active model for conversation. |
