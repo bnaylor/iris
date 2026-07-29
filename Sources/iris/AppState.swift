@@ -53,8 +53,9 @@ struct Conversation: Identifiable, Codable, Hashable {
     var goalIterationCount: Int = 0
     var mainAgentSandbox: SandboxPref? = nil
     var isSubagent: Bool = false
+    var goalContract: GoalContract? = nil
 
-    init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0) {
+    init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
         self.title = title
         self.messages = messages
@@ -63,12 +64,13 @@ struct Conversation: Identifiable, Codable, Hashable {
         self.tokenUsage = tokenUsage
         self.activeGoal = activeGoal
         self.messageCountSinceReflection = messageCountSinceReflection
+        self.goalContract = goalContract
     }
-    
+
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -81,6 +83,15 @@ struct Conversation: Identifiable, Codable, Hashable {
         messageCountSinceReflection = try container.decodeIfPresent(Int.self, forKey: .messageCountSinceReflection) ?? 0
         mainAgentSandbox = try container.decodeIfPresent(SandboxPref.self, forKey: .mainAgentSandbox)
         isSubagent = try container.decodeIfPresent(Bool.self, forKey: .isSubagent) ?? false
+        goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
+        // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
+        // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
+        if goalContract == nil, let legacy = activeGoal {
+            var c = GoalContract(objective: legacy,
+                                 criteria: [Criterion(text: legacy, kind: .qualitative, check: nil)])
+            c.lock()
+            goalContract = c
+        }
     }
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
@@ -597,11 +608,24 @@ class AppState {
     func clearGoal(for conversationId: UUID) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = nil
+            conversations[idx].goalContract = nil
             conversations[idx].goalIterationCount = 0
             saveConversations()
         }
     }
-    
+
+    /// Locks a drafted contract onto the conversation and mirrors its objective into `activeGoal`
+    /// so the existing loop gate (activeGoal != nil) and #16's machinery keep working unchanged.
+    func setGoalContract(for conversationId: UUID, _ contract: GoalContract) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        var locked = contract
+        locked.lock()
+        conversations[idx].goalContract = locked
+        conversations[idx].activeGoal = locked.objective
+        conversations[idx].goalIterationCount = 0
+        saveConversations()
+    }
+
     func setGoal(for conversationId: UUID, goal: String) {
         if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
             conversations[idx].activeGoal = goal
