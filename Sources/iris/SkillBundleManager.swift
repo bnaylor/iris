@@ -16,7 +16,9 @@ public final class SkillBundleManager: Sendable {
     public static let shared = SkillBundleManager()
 
     private let lock = NSLock()
-    private var _activeBundle: SkillBundle? = nil
+    // Guarded by `lock`; the manual synchronization is what makes the class Sendable-safe,
+    // so the mutable storage is opted out of Swift 6's Sendable checking explicitly.
+    nonisolated(unsafe) private var _activeBundle: SkillBundle? = nil
 
     public var activeBundle: SkillBundle? {
         get {
@@ -63,7 +65,7 @@ public final class SkillBundleManager: Sendable {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: paths.memoryDir, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(current)
-        try data.write(to: url, atomically: true)
+        try data.write(to: url, options: .atomic)
     }
 
     public func deleteBundle(name: String) throws {
@@ -77,7 +79,7 @@ public final class SkillBundleManager: Sendable {
 
         let url = bundleFile(paths: paths)
         let data = try JSONEncoder().encode(current)
-        try data.write(to: url, atomically: true)
+        try data.write(to: url, options: .atomic)
     }
 
     public func getBundle(name: String) -> SkillBundle? {
