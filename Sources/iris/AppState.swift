@@ -54,6 +54,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var mainAgentSandbox: SandboxPref? = nil
     var isSubagent: Bool = false
     var goalContract: GoalContract? = nil
+    var lastGoalCompletionReport: JSONValue? = nil
 
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
@@ -68,7 +69,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +85,7 @@ struct Conversation: Identifiable, Codable, Hashable {
         mainAgentSandbox = try container.decodeIfPresent(SandboxPref.self, forKey: .mainAgentSandbox)
         isSubagent = try container.decodeIfPresent(Bool.self, forKey: .isSubagent) ?? false
         goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
+        lastGoalCompletionReport = try container.decodeIfPresent(JSONValue.self, forKey: .lastGoalCompletionReport)
         // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
         // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
         if goalContract == nil, let legacy = activeGoal {
@@ -617,6 +619,14 @@ class AppState {
             conversations[idx].goalIterationCount = 0
             saveConversations()
         }
+    }
+
+    /// Records the optional per-criterion self-report from a `goal_complete` call.
+    /// Must be called BEFORE `clearGoal` so the contract is still present for context.
+    func recordCompletionSelfReport(for conversationId: UUID, statusJSON: JSONValue?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalCompletionReport = statusJSON
+        saveConversations()
     }
 
     /// Stores a draft contract on the conversation without locking or touching `activeGoal`.

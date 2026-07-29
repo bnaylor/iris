@@ -341,7 +341,8 @@ actor IrisEngine {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion.")
+                    "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion."),
+                    "criteria_status": Schema(type: "ARRAY", description: "Per-criterion self-report against the goal contract. Each element is an object {criterion, status: met|not_met|cannot_verify, evidence}. Self-report shown to the user as UNVERIFIED — do not overstate.")
                 ],
                 required: ["summary"]
             )
@@ -754,7 +755,9 @@ actor IrisEngine {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
+            let statusReport = functionCall.args["criteria_status"]
             await MainActor.run {
+                localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
                 localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
                 localState?.onSubagentComplete[conversationId] = nil
