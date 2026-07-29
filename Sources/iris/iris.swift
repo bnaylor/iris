@@ -650,7 +650,13 @@ actor IrisEngine {
                         return conv.activeGoal != nil
                     }
                     guard stillActive else { return }
-                    await self.processInput("Continue working on your goal. What is your next step? If finished, call goal_complete.", source: "System", conversationId: conversationId)
+                    let oracle = await MainActor.run { () -> String in
+                        localState?.conversations.first(where: { $0.id == conversationId })?.goalContract?.oracleText() ?? ""
+                    }
+                    let reprompt = oracle.isEmpty
+                        ? "Continue working on your goal. What is your next step? If finished, call goal_complete."
+                        : "\(oracle)\n\nContinue working toward the objective above. What is your next step? If every criterion is satisfied, call goal_complete."
+                    await self.processInput(reprompt, source: "System", conversationId: conversationId)
                 }
             }
         }
