@@ -406,6 +406,17 @@ actor IrisEngine {
                 required: ["objective", "criteria"]
             )
         ))
+        toolsList.append(FunctionDeclaration(
+            name: "amend_goal_contract",
+            description: "Change the LOCKED goal contract's criteria when the work reveals they were wrong. A `rationale` is mandatory — criteria never change silently. The change is logged and shown to the user.",
+            parameters: Schema(type: "OBJECT", properties: [
+                "action": Schema(type: "STRING", description: "add | remove | update"),
+                "criterion": Schema(type: "STRING", description: "The criterion text to add, or the existing text to remove/update."),
+                "kind": Schema(type: "STRING", description: "executable | qualitative | humanJudged (for add/update)."),
+                "check": Schema(type: "STRING", description: "Runnable command/test, only for executable."),
+                "rationale": Schema(type: "STRING", description: "One line: why the criteria must change.")
+            ], required: ["action", "criterion", "rationale"])
+        ))
 
         // Offer an optional `intent` on every tool so the model can attach a one-line
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
@@ -768,6 +779,17 @@ actor IrisEngine {
                 await processInput(reflectionNotice, source: "System", conversationId: conversationId)
             }
             result = "Goal marked as complete. Summary: \(summary)"
+        } else if functionCall.name == "amend_goal_contract" {
+            let action = functionCall.args["action"]?.stringValue ?? "add"
+            let text = functionCall.args["criterion"]?.stringValue ?? ""
+            let kind = functionCall.args["kind"]?.stringValue ?? "qualitative"
+            let check = functionCall.args["check"]?.stringValue
+            let rationale = functionCall.args["rationale"]?.stringValue ?? ""
+            let ok = await MainActor.run {
+                localState?.amendGoalContract(for: conversationId, action: action, criterionText: text, kind: kind, check: check, rationale: rationale) ?? false
+            }
+            result = ok ? "Goal contract amended (\(action): \(text)). Logged with rationale."
+                        : "Amend rejected — a non-empty rationale is required to change locked criteria."
         } else {
             var needsApproval = false
             var details = ""

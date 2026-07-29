@@ -649,6 +649,32 @@ class AppState {
         saveConversations()
     }
 
+    /// The only sanctioned edit path for a LOCKED contract. Returns false if rejected
+    /// (blank rationale) or no contract. `action` is "add" | "remove" | "update".
+    @discardableResult
+    func amendGoalContract(for conversationId: UUID, action: String, criterionText: String,
+                           kind: String, check: String?, rationale: String) -> Bool {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }),
+              var contract = conversations[idx].goalContract else { return false }
+        let ck = CriterionKind(rawValue: kind) ?? .qualitative
+        let ok = contract.applyCriteriaEdit(rationale: rationale) { criteria in
+            switch action {
+            case "remove": criteria.removeAll { $0.text == criterionText }
+            case "update":
+                if let i = criteria.firstIndex(where: { $0.text == criterionText }) {
+                    criteria[i].kind = ck; criteria[i].check = ck == .executable ? check : nil
+                }
+            default: // "add"
+                criteria.append(Criterion(text: criterionText, kind: ck, check: ck == .executable ? check : nil))
+            }
+        }
+        if ok {
+            conversations[idx].goalContract = contract
+            saveConversations()
+        }
+        return ok
+    }
+
     /// Sends the goal-loop kickoff message for a conversation whose contract is already locked.
     /// Called by `GoalContractPanel` after the user approves the draft.
     func sendGoalKickoff(for conversationId: UUID) {
