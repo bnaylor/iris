@@ -27,6 +27,10 @@ actor IrisEngine {
         self.client = client
         systemPrompt = nil
     }
+
+    func invalidateSystemPrompt() {
+        systemPrompt = nil
+    }
     
     @discardableResult
     private func ensureSystemPrompt() async -> Content {

@@ -341,23 +341,32 @@ class AppState {
             cancelTasks(for: convId)
             appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
             return
-        } else if trimmed == "/skills" {
-            // Handled deterministically in-app — never sent to the model, which would otherwise
-            // improvise its own summary.
-            Task { [weak self] in
-                let skills = await SkillManager.shared.listSkills()
-                guard let self else { return }
-                let body: String
-                if skills.isEmpty {
-                    body = "No skills are currently registered."
-                } else {
-                    let list = skills
-                        .map { "- **\($0.name)** — \($0.description)" }
-                        .joined(separator: "\n")
-                    body = "**Registered skills (\(skills.count))**\n\n\(list)"
-                }
-                self.emitCommandOutput(body, format: .markdown, to: convId)
-            }
+        } else if trimmed == "/skills" || trimmed.hasPrefix("/skills ") {
+            handleSkillsCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/rules" || trimmed.hasPrefix("/rules ") {
+            handleRulesCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/model" || trimmed.hasPrefix("/model ") {
+            handleModelCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/mcp" || trimmed.hasPrefix("/mcp ") {
+            handleMcpCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/facts" || trimmed.hasPrefix("/facts ") {
+            handleFactsCommand(trimmed, convId: convId)
+            return
+        } else if trimmed == "/tokens" || trimmed == "/stats" {
+            handleTokensCommand(convId: convId)
+            return
+        } else if trimmed == "/new" {
+            createNewConversation()
+            return
+        } else if trimmed == "/clear" {
+            handleClearCommand(convId: convId)
+            return
+        } else if trimmed == "/update" {
+            handleUpdateCommand(convId: convId)
             return
         } else if trimmed == "/sandbox" || trimmed.hasPrefix("/sandbox ") {
             handleSandboxCommand(trimmed, convId: convId)
@@ -662,6 +671,173 @@ class AppState {
                 print("Failed to decode conversations: \(error)")
                 UserDefaults.standard.set(data, forKey: "iris_conversations_backup_\(Date().timeIntervalSince1970)")
             }
+        }
+    }
+
+    // MARK: - Slash Command Handlers
+
+    private func handleSkillsCommand(_ trimmed: String, convId: UUID) {
+        let args = trimmed.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { [weak self] in
+            guard let self = self else { return }
+            if args.hasPrefix("reload") {
+                let skillArg = args.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
+                await self.engine.invalidateSystemPrompt()
+                let skills = await SkillManager.shared.listSkills()
+                let body = skillArg.isEmpty
+                    ? "Skill definitions reloaded from disk (\(skills.count) active). System prompt cache invalidated."
+                    : "Reloaded skill '\(skillArg)'. System prompt cache invalidated."
+                self.emitCommandOutput(body, format: .markdown, to: convId)
+            } else if args.hasPrefix("show ") || args.hasPrefix("view ") {
+                let name = String(args.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if let body = await SkillManager.shared.readSkillBody(name: name) {
+                    self.emitCommandOutput("### Skill: \(name)\n\n\(body)", format: .markdown, to: convId)
+                } else {
+                    self.emitCommandOutput("Skill '\(name)' not found.", format: .markdown, to: convId)
+                }
+            } else {
+                let skills = await SkillManager.shared.listSkills()
+                let body: String
+                if skills.isEmpty {
+                    body = "No skills are currently registered."
+                } else {
+                    let list = skills.map { "- **\($0.name)** — \($0.description)" }.joined(separator: "\n")
+                    body = "**Registered skills (\(skills.count))**\n\n\(list)"
+                }
+                self.emitCommandOutput(body, format: .markdown, to: convId)
+            }
+        }
+    }
+
+    private func handleRulesCommand(_ trimmed: String, convId: UUID) {
+        let args = trimmed.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { [weak self] in
+            guard let self = self else { return }
+            if args == "reload" {
+                await self.engine.invalidateSystemPrompt()
+                self.emitCommandOutput("Custom rules reloaded from `~/.iris/rules/`. System prompt cache invalidated.", format: .markdown, to: convId)
+            } else {
+                let custom = await SkillManager.shared.loadCustomRules()
+                let body = custom.isEmpty
+                    ? "No custom rules found in `~/.iris/rules/`."
+                    : "**Active Custom Rules:**\n\(custom)"
+                self.emitCommandOutput(body, format: .markdown, to: convId)
+            }
+        }
+    }
+
+    private func handleModelCommand(_ trimmed: String, convId: UUID) {
+        let arg = trimmed.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let config = ConfigManager.shared
+        if arg.isEmpty {
+            let fast = config.getModel(for: .fast)
+            let medium = config.getModel(for: .medium)
+            let heavy = config.getModel(for: .heavy)
+            let body = """
+            **Active Model Configuration**
+
+            - **Fast Tier:** `\(fast)`
+            - **Medium Tier (Default):** `\(medium)`
+            - **Heavy Tier:** `\(heavy)`
+            """
+            emitCommandOutput(body, format: .markdown, to: convId)
+        } else {
+            Task { [weak self] in
+                guard let self = self else { return }
+                let newModel: String
+                if arg == "fast" {
+                    newModel = config.getModel(for: .fast)
+                } else if arg == "medium" {
+                    newModel = config.getModel(for: .medium)
+                } else if arg == "heavy" {
+                    newModel = config.getModel(for: .heavy)
+                } else {
+                    newModel = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    config.defaultModel = newModel
+                }
+                await self.engine.invalidateSystemPrompt()
+                self.emitCommandOutput("Active default model updated to **\(newModel)**.", format: .markdown, to: convId)
+            }
+        }
+    }
+
+    private func handleMcpCommand(_ trimmed: String, convId: UUID) {
+        let arg = trimmed.dropFirst(4).trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { [weak self] in
+            guard let self = self else { return }
+            if arg == "reload" {
+                await MCPManager.shared.reloadServers()
+                let servers = await MCPManager.shared.getServerNames()
+                self.emitCommandOutput("MCP servers reloaded (\(servers.count) connected: \(servers.joined(separator: ", "))).", format: .markdown, to: convId)
+            } else {
+                let servers = await MCPManager.shared.getServerNames()
+                let body = servers.isEmpty
+                    ? "No MCP servers connected."
+                    : "**Connected MCP Servers (\(servers.count)):**\n" + servers.map { "- \($0)" }.joined(separator: "\n")
+                self.emitCommandOutput(body, format: .markdown, to: convId)
+            }
+        }
+    }
+
+    private func handleFactsCommand(_ trimmed: String, convId: UUID) {
+        let args = trimmed.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
+        if args.hasPrefix("probe ") {
+            let entity = String(args.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let facts = (try? FactStoreManager.shared.probe(entity: entity)) ?? []
+            let body = facts.isEmpty
+                ? "No facts found for entity '\(entity)'."
+                : "**Facts for Entity '\(entity)':**\n\n" + facts.map { "- \($0.content)" }.joined(separator: "\n")
+            emitCommandOutput(body, format: .markdown, to: convId)
+        } else if args.hasPrefix("search ") {
+            let query = String(args.dropFirst(7)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let facts = (try? FactStoreManager.shared.search(query: query, limit: 10)) ?? []
+            let body = facts.isEmpty
+                ? "No facts found matching '\(query)'."
+                : "**Facts matching '\(query)':**\n\n" + facts.map { "- \($0.content)" }.joined(separator: "\n")
+            emitCommandOutput(body, format: .markdown, to: convId)
+        } else {
+            let facts = (try? FactStoreManager.shared.search(query: "", limit: 10)) ?? []
+            let body = facts.isEmpty
+                ? "FactStore is empty."
+                : "**Recent Facts in FactStore (\(facts.count)):**\n\n" + facts.map { "- \($0.content)" }.joined(separator: "\n")
+            emitCommandOutput(body, format: .markdown, to: convId)
+        }
+    }
+
+    private func handleTokensCommand(convId: UUID) {
+        let usage = conversations.first(where: { $0.id == convId })?.tokenUsage ?? TokenUsage()
+        let body = """
+        **Token Usage for Current Conversation**
+
+        - **Prompt Tokens:** \(usage.promptTokenCount)
+        - **Candidate Tokens:** \(usage.candidatesTokenCount)
+        - **Total Tokens Used:** \(usage.totalTokenCount)
+        """
+        emitCommandOutput(body, format: .markdown, to: convId)
+    }
+
+    private func handleClearCommand(convId: UUID) {
+        if let idx = conversations.firstIndex(where: { $0.id == convId }) {
+            conversations[idx].messages.removeAll()
+            saveConversations()
+            emitCommandOutput("Conversation cleared.", format: .markdown, to: convId)
+        }
+    }
+
+    private func handleUpdateCommand(convId: UUID) {
+        Task { [weak self] in
+            guard let self = self else { return }
+            let result = await UpdateManager.shared.checkForUpdates()
+            let body: String
+            switch result {
+            case .updateAvailable(let release):
+                body = "🎉 **Update available:** [\(release.name)](\(release.htmlUrl))\n\n\(release.body)"
+            case .upToDate:
+                body = "Iris is up to date (v\(Constants.appVersion))."
+            case .error(let err):
+                body = "Failed to check for updates: \(err)"
+            }
+            self.emitCommandOutput(body, format: .markdown, to: convId)
         }
     }
 }

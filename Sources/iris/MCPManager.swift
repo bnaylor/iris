@@ -40,6 +40,22 @@ actor MCPManager {
             }
         }
     }
+
+    func stopServers() async {
+        for (_, server) in servers {
+            server.process.terminate()
+        }
+        servers.removeAll()
+    }
+
+    func reloadServers() async {
+        await stopServers()
+        await startServers()
+    }
+
+    func getServerNames() async -> [String] {
+        return Array(servers.keys).sorted()
+    }
     
     private func startServer(name: String, config: MCPServerConfig) async throws {
         let process = Process()
