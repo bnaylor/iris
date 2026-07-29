@@ -65,4 +65,33 @@ struct SkillCreationTests {
         let skillFolder = paths.skillsDir.appendingPathComponent("temp-skill")
         #expect(!FileManager.default.fileExists(atPath: skillFolder.path))
     }
+
+    @Test("updateSkill modifies body/description while preserving skill name")
+    func testUpdateSkill() async throws {
+        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("iris-skill-update-\(UUID().uuidString)")
+        let paths = IrisPaths(root: tempRoot)
+        try paths.ensureDirectories()
+
+        _ = await ToolExecutor.shared.createSkill(
+            name: "k8s-pod-debug",
+            description: "Initial description",
+            body: "Original body",
+            paths: paths
+        )
+
+        let updateResult = await ToolExecutor.shared.updateSkill(
+            name: "k8s-pod-debug",
+            description: "Updated description",
+            body: "Updated body content with new steps",
+            paths: paths
+        )
+
+        #expect(updateResult.contains("Successfully updated skill"))
+
+        let skillFile = paths.skillsDir.appendingPathComponent("k8s-pod-debug/SKILL.md")
+        let content = try String(contentsOf: skillFile, encoding: .utf8)
+        #expect(content.contains("description: Updated description"))
+        #expect(content.contains("Updated body content with new steps"))
+    }
 }
