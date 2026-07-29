@@ -353,9 +353,13 @@ private struct CompletionReportItem: Identifiable {
 /// after a goal finishes (the contract itself is cleared on completion, so this must not
 /// depend on `goalContract`). Always labeled UNVERIFIED — never a verified affordance.
 struct CompletionReportChip: View {
+    var state: AppState
+    let conversationId: UUID
     let report: JSONValue
     var body: some View {
-        CompletionReportSection(report: report)
+        CompletionReportSection(report: report, onDismiss: {
+            state.dismissCompletionReport(for: conversationId)
+        })
             .padding(12)
             .background(.thinMaterial)
             .clipShape(.rect(cornerRadius: 10))
@@ -371,6 +375,8 @@ struct CompletionReportChip: View {
 /// Renders the model's per-criterion self-report as explicitly UNVERIFIED.
 struct CompletionReportSection: View {
     let report: JSONValue
+    /// When set, a ✕ appears in the header to dismiss the report chip.
+    var onDismiss: (() -> Void)? = nil
 
     private var items: [CompletionReportItem] {
         guard case .array(let elements) = report else { return [] }
@@ -403,6 +409,16 @@ struct CompletionReportSection: View {
                     .font(.caption2)
                     .bold()
                     .foregroundStyle(.secondary)
+                if let onDismiss {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss completion report")
+                }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)

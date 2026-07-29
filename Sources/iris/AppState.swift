@@ -626,6 +626,15 @@ class AppState {
         saveConversations()
     }
 
+    /// Dismisses the completion self-report chip (the ✕). Independent of `clearGoal` so the
+    /// report survives a goal_complete but the user can still put it away without starting a
+    /// new goal.
+    func dismissCompletionReport(for conversationId: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalCompletionReport = nil
+        saveConversations()
+    }
+
     /// Stores a draft contract on the conversation without locking or touching `activeGoal`.
     /// Called by the `propose_goal_contract` tool handler so the user can review before approval.
     func setDraftContract(for conversationId: UUID, _ draft: GoalContract) {
