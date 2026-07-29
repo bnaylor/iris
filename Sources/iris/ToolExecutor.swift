@@ -61,6 +61,43 @@ struct ToolExecutor {
                 ],
                 required: ["query"]
             )
+        ),
+        FunctionDeclaration(
+            name: "create_skill",
+            description: "Create a reusable procedural skill in the local skill library (~/.iris/memory/skills/<name>/SKILL.md).",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "name": Schema(type: "STRING", description: "Short kebab-case skill identifier (e.g. gke-deployment-debug)"),
+                    "description": Schema(type: "STRING", description: "High-signal summary of what this skill does and when to trigger it"),
+                    "body": Schema(type: "STRING", description: "Full Markdown body containing numbered steps, exact commands, pitfalls, and verification steps")
+                ],
+                required: ["name", "description", "body"]
+            )
+        ),
+        FunctionDeclaration(
+            name: "update_skill",
+            description: "Update an existing skill in the local skill library (~/.iris/memory/skills/<name>/SKILL.md).",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "name": Schema(type: "STRING", description: "Skill identifier to update"),
+                    "description": Schema(type: "STRING", description: "Updated description (optional if unchanged)"),
+                    "body": Schema(type: "STRING", description: "Updated Markdown body or additional procedures (optional if description updated)")
+                ],
+                required: ["name"]
+            )
+        ),
+        FunctionDeclaration(
+            name: "delete_skill",
+            description: "Delete a skill from the local skill library (~/.iris/memory/skills/<name>/SKILL.md).",
+            parameters: Schema(
+                type: "OBJECT",
+                properties: [
+                    "name": Schema(type: "STRING", description: "The skill identifier to delete")
+                ],
+                required: ["name"]
+            )
         )
         ]
         
@@ -93,6 +130,23 @@ struct ToolExecutor {
         case "search_web":
             guard let query = args["query"]?.stringValue else { return "Error: Missing query" }
             return await searchWeb(query: query)
+        case "create_skill":
+            guard let name = args["name"]?.stringValue,
+                  let description = args["description"]?.stringValue,
+                  let body = args["body"]?.stringValue ?? args["content"]?.stringValue else {
+                return "Error: Missing name, description, or body for create_skill"
+            }
+            return await createSkill(name: name, description: description, body: body)
+        case "update_skill":
+            guard let name = args["name"]?.stringValue else {
+                return "Error: Missing name for update_skill"
+            }
+            let description = args["description"]?.stringValue
+            let body = args["body"]?.stringValue ?? args["content"]?.stringValue
+            return await updateSkill(name: name, description: description, body: body)
+        case "delete_skill":
+            guard let name = args["name"]?.stringValue else { return "Error: Missing name for delete_skill" }
+            return await deleteSkill(name: name)
         case let n where n.hasPrefix("google_tasks_"):
             return await GoogleTasksManager.shared.execute(name: name, args: args)
         case let n where n.hasPrefix("google_calendar_") || n.hasPrefix("google_docs_") || n.hasPrefix("google_drive_") || n.hasPrefix("google_sheets_") || n.hasPrefix("gmail_"):
@@ -299,6 +353,122 @@ except Exception as e:
             return String(data: data, encoding: .utf8) ?? "Error decoding output"
         } catch {
             return "Error executing search script: \(error)"
+        }
+    }
+
+    func createSkill(name: String, description: String, body: String, paths: IrisPaths = .default) async -> String {
+        let cleanName = name.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "_", with: "-")
+        
+        let skillFolder = paths.skillsDir.appendingPathComponent(cleanName)
+        let skillFile = skillFolder.appendingPathComponent("SKILL.md")
+        
+        let isoFormatter = ISO8601DateFormatter()
+        let timestamp = isoFormatter.string(from: Date())
+        
+        let okfContent = """
+        ---
+        name: \(cleanName)
+        description: \(description)
+        type: skill
+        timestamp: \(timestamp)
+        ---
+
+        \(body.trimmingCharacters(in: .whitespacesAndNewlines))
+        """
+        
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(at: skillFolder, withIntermediateDirectories: true)
+            try okfContent.write(to: skillFile, atomically: true, encoding: .utf8)
+            await AppState.shared.invalidateEnginePrompt()
+            return "Successfully saved skill '\(cleanName)' to \(skillFile.path). System prompt cache updated."
+        } catch {
+            return "Error saving skill '\(cleanName)': \(error.localizedDescription)"
+        }
+    }
+
+    func updateSkill(name: String, description: String?, body: String?, paths: IrisPaths = .default) async -> String {
+        let cleanName = name.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "_", with: "-")
+        
+        let skillFolder = paths.skillsDir.appendingPathComponent(cleanName)
+        let skillFile = skillFolder.appendingPathComponent("SKILL.md")
+        let fileManager = FileManager.default
+        
+        guard fileManager.fileExists(atPath: skillFile.path) else {
+            let desc = description ?? "No description provided."
+            let content = body ?? "No procedure steps provided."
+            return await createSkill(name: cleanName, description: desc, body: content, paths: paths)
+        }
+        
+        var existingDesc = "No description provided."
+        var existingBody = ""
+        
+        if let existingContent = try? String(contentsOf: skillFile, encoding: .utf8) {
+            let lines = existingContent.components(separatedBy: .newlines)
+            var inFrontmatter = false
+            var bodyLines: [String] = []
+            
+            for line in lines {
+                if line == "---" {
+                    inFrontmatter = !inFrontmatter
+                    continue
+                }
+                if inFrontmatter {
+                    if line.starts(with: "description:") {
+                        existingDesc = String(line.dropFirst("description:".count)).trimmingCharacters(in: .whitespaces)
+                    }
+                } else {
+                    bodyLines.append(line)
+                }
+            }
+            existingBody = bodyLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        let finalDesc = description ?? existingDesc
+        let finalBody = body ?? existingBody
+        
+        let isoFormatter = ISO8601DateFormatter()
+        let timestamp = isoFormatter.string(from: Date())
+        
+        let okfContent = """
+        ---
+        name: \(cleanName)
+        description: \(finalDesc)
+        type: skill
+        timestamp: \(timestamp)
+        ---
+
+        \(finalBody)
+        """
+        
+        do {
+            try okfContent.write(to: skillFile, atomically: true, encoding: .utf8)
+            await AppState.shared.invalidateEnginePrompt()
+            return "Successfully updated skill '\(cleanName)' in \(skillFile.path). System prompt cache updated."
+        } catch {
+            return "Error updating skill '\(cleanName)': \(error.localizedDescription)"
+        }
+    }
+
+    func deleteSkill(name: String, paths: IrisPaths = .default) async -> String {
+        let cleanName = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let skillFolder = paths.skillsDir.appendingPathComponent(cleanName)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: skillFolder.path) else {
+            return "Skill '\(cleanName)' not found."
+        }
+        do {
+            try fileManager.removeItem(at: skillFolder)
+            await AppState.shared.invalidateEnginePrompt()
+            return "Successfully deleted skill '\(cleanName)'. System prompt cache updated."
+        } catch {
+            return "Error deleting skill '\(cleanName)': \(error.localizedDescription)"
         }
     }
 }

@@ -82,6 +82,18 @@ use the Open Knowledge Format (OKF): a YAML frontmatter block at the top of the 
 (delimited by ---) containing type, title, description, tags, and timestamp. Use standard
 Markdown links to cross-link related memory files into a navigable knowledge graph.
 
+## Skill Creation & Self-Improvement Impulse
+
+You have native `create_skill(name, description, body)`, `update_skill(name, description, body)`, and `delete_skill(name)` tools to manage procedural skills in `~/.iris/memory/skills/<name>/SKILL.md`.
+
+**When to proactively call `create_skill` or `update_skill`:**
+1. **Multi-Step Workflows:** You executed a complex 5+ step workflow or command sequence that succeeded.
+2. **Error Resolution & Edge Cases:** You encountered and overcame a non-obvious build, tool, dependency, or OS error — or found an edge case missing from an existing skill (use `update_skill` to patch it).
+3. **User Corrections & Preferences:** The user explained, corrected, or demonstrated a specific workflow procedure they expect you to follow in future sessions.
+4. **Reusable Recipes & Stale Updates:** You discovered a non-trivial deployment/testing recipe or found that an existing skill's steps are stale or incomplete.
+
+Do not create skills for simple one-off answers or trivial edits. When creating or updating a skill, provide clear numbered steps, exact terminal commands, potential pitfalls, and verification steps.
+
 ## Artifacts & Design Docs
 
 When generating artifacts, research notes, design docs, or reviews, do not store them in opaque
