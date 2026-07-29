@@ -62,6 +62,18 @@ swift run
 ### Global Hotkey ⌨️
 Iris runs in the background and can be summoned instantly over any other app by pressing **`Cmd + Shift + Space`** (configurable in Settings).
 
+### Slash Commands ⚡
+
+Iris supports in-app slash commands typed directly into the composer. Deterministic commands run instantly in-app without invoking the LLM (zero token cost):
+
+*   **Harness & Models:** `/model [tier|name]` (inspect/switch active model), `/mcp [reload]` (inspect/reconnect MCP servers), `/tokens` (view token usage).
+*   **Skills & Rules:** `/skills [reload|show <name>]` (list, reload, or view SKILL.md body), `/rules [reload]` (inspect/reload custom rules from `~/.iris/rules/`).
+*   **Memory & Facts:** `/facts [search <q>|probe <e>]` (query SQLite FactStore).
+*   **Session Control:** `/new` (fresh chat), `/clear` (clear current buffer), `/stop` (cancel active goal/subagents), `/update` (check for GitHub releases).
+*   **Autonomous Workflows:** `/goal <desc>` (autonomous execution loop), `/reflect` (memory reflection), `/vibecop init` (generate security rules).
+
+See [docs/slash_commands.md](docs/slash_commands.md) for the full command reference.
+
 ### Google Workspace Integration 🔐
 In the settings window, you can enter your Google OAuth Client ID and Secret, and click **Connect to Google**. Iris will spin up a local listener, redirect you to Google for consent, and seamlessly exchange your authorization code for valid access and refresh tokens.
 
