@@ -359,14 +359,17 @@ private struct CompletionReportSection: View {
 
     private var items: [CompletionReportItem] {
         guard case .array(let elements) = report else { return [] }
-        return elements.compactMap { element in
+        // Index-prefixed id keeps ForEach identity stable even if the model echoes the
+        // same criterion text twice (a duplicate bare-text id trips a SwiftUI warning
+        // and can drop rows).
+        return elements.enumerated().compactMap { index, element in
             guard case .object(let obj) = element else { return nil }
             let criterion = obj["criterion"]?.stringValue ?? ""
             let status    = obj["status"]?.stringValue    ?? ""
             let evidence  = obj["evidence"]?.stringValue  ?? ""
             guard !criterion.isEmpty else { return nil }
             return CompletionReportItem(
-                id: criterion,
+                id: "\(index)-\(criterion)",
                 criterion: criterion,
                 status: status,
                 evidence: evidence
