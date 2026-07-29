@@ -189,6 +189,279 @@ struct GoalContractPanel: View {
     }
 }
 
+// MARK: - Locked-run views
+
+/// Compact read-only chip shown while a goal contract is locked and running.
+struct LockedContractChip: View {
+    let conversation: Conversation
+
+    var body: some View {
+        if let contract = conversation.goalContract {
+            VStack(alignment: .leading, spacing: 0) {
+                chipHeader
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        lockedObjective(contract.objective)
+                        lockedCriteria(contract.criteria)
+                        if !contract.changeLog.isEmpty {
+                            changeLogSection(contract.changeLog)
+                        }
+                    }
+                    .padding(12)
+                }
+                .frame(maxHeight: 280)
+                .scrollIndicators(.hidden)
+                if let report = conversation.lastGoalCompletionReport {
+                    Divider()
+                    CompletionReportSection(report: report)
+                }
+            }
+            .background(.thinMaterial)
+            .clipShape(.rect(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+        }
+    }
+
+    private var chipHeader: some View {
+        HStack {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(Color.irisIndigo)
+                .font(.caption)
+                .accessibilityHidden(true)
+            Text("GOAL CONTRACT · LOCKED")
+                .font(.caption2)
+                .bold()
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("Read-only")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func lockedObjective(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Objective", systemImage: "target")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.body)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(.rect(cornerRadius: 6))
+        }
+    }
+
+    private func lockedCriteria(_ criteria: [Criterion]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Done when…", systemImage: "list.bullet.clipboard")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            ForEach(criteria) { criterion in
+                LockedCriterionRow(criterion: criterion)
+            }
+        }
+    }
+
+    private func changeLogSection(_ entries: [ContractChange]) -> some View {
+        let identified = entries.map { IdentifiedChange(change: $0) }
+        return VStack(alignment: .leading, spacing: 6) {
+            Label("Amendments", systemImage: "clock.arrow.2.circlepath")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            ForEach(identified) { identified in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(identified.change.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(identified.change.rationale)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.irisIndigo.opacity(0.06))
+                .clipShape(.rect(cornerRadius: 6))
+            }
+        }
+    }
+}
+
+private struct LockedCriterionRow: View {
+    let criterion: Criterion
+
+    private var kindLabel: String {
+        switch criterion.kind {
+        case .executable: return "executable"
+        case .qualitative: return "qualitative"
+        case .humanJudged: return "human-judged"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(kindLabel)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(Color.irisIndigo)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color.irisIndigo.opacity(0.10))
+                    .clipShape(.rect(cornerRadius: 3))
+                Text(criterion.text)
+                    .font(.body)
+            }
+            if criterion.kind == .executable, let check = criterion.check {
+                Text(check)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.05))
+                    .clipShape(.rect(cornerRadius: 4))
+                    .padding(.leading, 2)
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(.rect(cornerRadius: 6))
+    }
+}
+
+/// Pairs a stable UUID with a `ContractChange` so `ForEach` has a fixed identity
+/// even if two amendments share the same timestamp.
+private struct IdentifiedChange: Identifiable {
+    let id = UUID()
+    let change: ContractChange
+}
+
+/// Model for a parsed completion-report line, giving ForEach a stable identity.
+private struct CompletionReportItem: Identifiable {
+    let id: String   // criterion text — unique within a single report
+    let criterion: String
+    let status: String
+    let evidence: String
+}
+
+/// Renders the model's per-criterion self-report as explicitly UNVERIFIED.
+private struct CompletionReportSection: View {
+    let report: JSONValue
+
+    private var items: [CompletionReportItem] {
+        guard case .array(let elements) = report else { return [] }
+        return elements.compactMap { element in
+            guard case .object(let obj) = element else { return nil }
+            let criterion = obj["criterion"]?.stringValue ?? ""
+            let status    = obj["status"]?.stringValue    ?? ""
+            let evidence  = obj["evidence"]?.stringValue  ?? ""
+            guard !criterion.isEmpty else { return nil }
+            return CompletionReportItem(
+                id: criterion,
+                criterion: criterion,
+                status: status,
+                evidence: evidence
+            )
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+                    .accessibilityHidden(true)
+                Text("COMPLETION SELF-REPORT · UNVERIFIED")
+                    .font(.caption2)
+                    .bold()
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+
+            if items.isEmpty {
+                Text("No criterion statuses found in report.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 12)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(items) { item in
+                        CompletionReportItemRow(item: item)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+
+            Text("Independent verification arrives with the drift evaluator (not yet built).")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+        }
+    }
+}
+
+private struct CompletionReportItemRow: View {
+    let item: CompletionReportItem
+
+    private var statusIcon: String {
+        // Intentionally neutral for all statuses — never a green checkmark.
+        switch item.status {
+        case "met": return "circle.dashed"
+        case "not_met": return "circle.dashed"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private var statusLabel: String {
+        switch item.status {
+        case "met": return "self-reported met"
+        case "not_met": return "self-reported not met"
+        case "cannot_verify": return "self-reported: cannot verify"
+        default: return item.status
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: statusIcon)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .accessibilityLabel(statusLabel)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.criterion)
+                        .font(.body)
+                    Text("self-reported · unverified")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if !item.evidence.isEmpty {
+                Text(item.evidence)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 18)
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(.rect(cornerRadius: 6))
+    }
+}
+
 // MARK: - Subviews
 
 private struct CriterionRow: View {

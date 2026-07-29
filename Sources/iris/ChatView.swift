@@ -224,6 +224,11 @@ struct ChatView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
+                    if conv.goalContract?.state == .locked {
+                        LockedContractChip(conversation: conv)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     SpectrumLine(active: state.isThinking)
 
                     messageInputBar
