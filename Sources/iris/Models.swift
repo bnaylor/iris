@@ -85,6 +85,71 @@ struct Schema: Codable {
     var properties: [String: Schema]?
     var required: [String]?
     var description: String?
+
+    /// Element schema for `type: "ARRAY"`. Gemini rejects an array property that omits this
+    /// (HTTP 400 "items: missing field"), so every ARRAY schema MUST set it.
+    ///
+    /// Backed by a single-element array: a value type can't store `Schema?` inline (infinite
+    /// size), but `Array` boxes its contents on the heap — the same indirection `properties`
+    /// already relies on. Exposed as a scalar and encoded as a single `items` object.
+    private var itemsStorage: [Schema]?
+    var items: Schema? {
+        get { itemsStorage?.first }
+        set { itemsStorage = newValue.map { [$0] } }
+    }
+
+    init(type: String,
+         properties: [String: Schema]? = nil,
+         required: [String]? = nil,
+         description: String? = nil,
+         items: Schema? = nil) {
+        self.type = type
+        self.properties = properties
+        self.required = required
+        self.description = description
+        self.items = items
+    }
+
+    enum CodingKeys: String, CodingKey { case type, properties, required, description, items }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decode(String.self, forKey: .type)
+        properties = try c.decodeIfPresent([String: Schema].self, forKey: .properties)
+        required = try c.decodeIfPresent([String].self, forKey: .required)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        items = try c.decodeIfPresent(Schema.self, forKey: .items)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encodeIfPresent(properties, forKey: .properties)
+        try c.encodeIfPresent(required, forKey: .required)
+        try c.encodeIfPresent(description, forKey: .description)
+        try c.encodeIfPresent(items, forKey: .items)
+    }
+
+    /// Recursively collects the paths of any `ARRAY` schema missing `items`. Gemini rejects
+    /// such a schema (HTTP 400 "items: missing field"), so this must return empty for every
+    /// tool actually sent. Empty result = valid.
+    func arrayItemsViolations(path: String) -> [String] {
+        var out: [String] = []
+        if type.uppercased() == "ARRAY" && items == nil { out.append(path) }
+        if let items { out += items.arrayItemsViolations(path: "\(path)[]") }
+        if let properties {
+            for (key, sub) in properties { out += sub.arrayItemsViolations(path: "\(path).\(key)") }
+        }
+        return out
+    }
+}
+
+extension Array where Element == FunctionDeclaration {
+    /// Every `ARRAY` property (at any depth) across these tools that is missing `items`.
+    /// Non-empty means Gemini will reject the request.
+    func arrayItemsViolations() -> [String] {
+        flatMap { $0.parameters?.arrayItemsViolations(path: $0.name) ?? [] }
+    }
 }
 
 struct GeminiResponse: Codable {

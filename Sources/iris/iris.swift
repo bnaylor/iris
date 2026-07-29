@@ -342,7 +342,11 @@ actor IrisEngine {
                 type: "OBJECT",
                 properties: [
                     "summary": Schema(type: "STRING", description: "A detailed summary of what was accomplished and final conclusion."),
-                    "criteria_status": Schema(type: "ARRAY", description: "Per-criterion self-report against the goal contract. Each element is an object {criterion, status: met|not_met|cannot_verify, evidence}. Self-report shown to the user as UNVERIFIED — do not overstate.")
+                    "criteria_status": Schema(type: "ARRAY", description: "Per-criterion self-report against the goal contract. Self-report shown to the user as UNVERIFIED — do not overstate.", items: Schema(type: "OBJECT", properties: [
+                        "criterion": Schema(type: "STRING", description: "The criterion text being reported on."),
+                        "status": Schema(type: "STRING", description: "met | not_met | cannot_verify"),
+                        "evidence": Schema(type: "STRING", description: "Brief evidence or reasoning for the status.")
+                    ], required: ["criterion", "status"]))
                 ],
                 required: ["summary"]
             )
@@ -398,10 +402,14 @@ actor IrisEngine {
                 type: "OBJECT",
                 properties: [
                     "objective": Schema(type: "STRING", description: "One-line restatement of the goal."),
-                    "criteria": Schema(type: "ARRAY", description: "Definition of done. Each item: {text, kind: executable|qualitative|humanJudged, check?}. `check` is a runnable command/test, only for executable."),
-                    "out_of_scope": Schema(type: "ARRAY", description: "Explicit non-goals."),
-                    "stop_before": Schema(type: "ARRAY", description: "Irreversible / authorization boundaries to stop and ask before (e.g. force-push, merge, delete, spend)."),
-                    "assumptions": Schema(type: "ARRAY", description: "Anything you inferred that the user should confirm.")
+                    "criteria": Schema(type: "ARRAY", description: "Definition of done.", items: Schema(type: "OBJECT", properties: [
+                        "text": Schema(type: "STRING", description: "The criterion — what 'done' looks like."),
+                        "kind": Schema(type: "STRING", description: "executable | qualitative | humanJudged"),
+                        "check": Schema(type: "STRING", description: "A runnable command/test. ONLY for executable criteria.")
+                    ], required: ["text", "kind"])),
+                    "out_of_scope": Schema(type: "ARRAY", description: "Explicit non-goals.", items: Schema(type: "STRING")),
+                    "stop_before": Schema(type: "ARRAY", description: "Irreversible / authorization boundaries to stop and ask before (e.g. force-push, merge, delete, spend).", items: Schema(type: "STRING")),
+                    "assumptions": Schema(type: "ARRAY", description: "Anything you inferred that the user should confirm.", items: Schema(type: "STRING"))
                 ],
                 required: ["objective", "criteria"]
             )
@@ -422,6 +430,12 @@ actor IrisEngine {
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
         // future tool is covered automatically.
         toolsList = ToolIntent.augment(toolsList)
+
+        // Guard the Gemini array-schema contract: an ARRAY property missing `items` is rejected
+        // with HTTP 400. Fires in debug/test builds (the engine-exercising tests run this path),
+        // so a future tool that forgets `items` trips here instead of at runtime against the API.
+        assert(toolsList.arrayItemsViolations().isEmpty,
+               "Tool ARRAY schema(s) missing `items` (Gemini will reject): \(toolsList.arrayItemsViolations())")
 
         let toolSelectionDecision = await HookManager.shared.fireBeforeToolSelection(tools: toolsList, useSandbox: hooksSandbox)
         if case .block(let reason) = toolSelectionDecision {
