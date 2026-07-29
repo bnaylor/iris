@@ -212,10 +212,6 @@ struct LockedContractChip: View {
                 }
                 .frame(maxHeight: 280)
                 .scrollIndicators(.hidden)
-                if let report = conversation.lastGoalCompletionReport {
-                    Divider()
-                    CompletionReportSection(report: report)
-                }
             }
             .background(.thinMaterial)
             .clipShape(.rect(cornerRadius: 10))
@@ -353,8 +349,27 @@ private struct CompletionReportItem: Identifiable {
     let evidence: String
 }
 
+/// Renders the model's per-criterion completion self-report as a standalone chip, shown
+/// after a goal finishes (the contract itself is cleared on completion, so this must not
+/// depend on `goalContract`). Always labeled UNVERIFIED — never a verified affordance.
+struct CompletionReportChip: View {
+    let report: JSONValue
+    var body: some View {
+        CompletionReportSection(report: report)
+            .padding(12)
+            .background(.thinMaterial)
+            .clipShape(.rect(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+    }
+}
+
 /// Renders the model's per-criterion self-report as explicitly UNVERIFIED.
-private struct CompletionReportSection: View {
+struct CompletionReportSection: View {
     let report: JSONValue
 
     private var items: [CompletionReportItem] {

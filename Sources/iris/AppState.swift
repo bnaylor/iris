@@ -378,10 +378,7 @@ class AppState {
             }
             return
         } else if trimmed.hasPrefix("/stop") {
-            if let idx = conversations.firstIndex(where: { $0.id == convId }) {
-                conversations[idx].activeGoal = nil
-                saveConversations()
-            }
+            clearGoal(for: convId)
             cancelTasks(for: convId)
             appendMessage(role: .system, content: "Goal mode cancelled.", to: convId)
             return
@@ -633,6 +630,12 @@ class AppState {
     /// Called by the `propose_goal_contract` tool handler so the user can review before approval.
     func setDraftContract(for conversationId: UUID, _ draft: GoalContract) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        // Never replace a locked contract with a fresh draft — locked criteria change ONLY
+        // through amend_goal_contract (with a rationale). A stray propose_goal_contract during
+        // a running goal is ignored.
+        if conversations[idx].goalContract?.isLocked == true { return }
+        // Starting a new goal clears any prior completion report so it doesn't linger.
+        conversations[idx].lastGoalCompletionReport = nil
         conversations[idx].goalContract = draft
         saveConversations()
     }

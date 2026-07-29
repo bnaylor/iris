@@ -229,6 +229,11 @@ struct ChatView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
+                    if let report = conv.lastGoalCompletionReport {
+                        CompletionReportChip(report: report)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     SpectrumLine(active: state.isThinking)
 
                     messageInputBar
