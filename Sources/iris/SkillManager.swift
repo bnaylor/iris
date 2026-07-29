@@ -119,4 +119,17 @@ struct SkillManager {
         let name = explicitName ?? title ?? folderName
         return SkillInfo(name: name, description: description, folderName: folderName)
     }
+
+    /// Reads and returns the full `SKILL.md` content for a skill by name or folder name.
+    func readSkillBody(name: String, paths: IrisPaths = .default) async -> String? {
+        let skills = await listSkills(paths: paths)
+        let normalized = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let skill = skills.first(where: {
+            $0.name.lowercased() == normalized || $0.folderName.lowercased() == normalized
+        }) else {
+            return nil
+        }
+        let skillPath = "\(paths.skillsDir.path)/\(skill.folderName)/SKILL.md"
+        return try? String(contentsOfFile: skillPath, encoding: .utf8)
+    }
 }
