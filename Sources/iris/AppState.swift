@@ -897,33 +897,39 @@ class AppState {
         let arg = trimmed.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let config = ConfigManager.shared
         if arg.isEmpty {
-            let fast = config.getModel(for: .fast)
+            let easy = config.getModel(for: .easy)
             let medium = config.getModel(for: .medium)
-            let heavy = config.getModel(for: .heavy)
+            let hard = config.getModel(for: .hard)
             let body = """
             **Active Model Configuration**
 
-            - **Fast Tier:** `\(fast)`
+            - **Easy Tier:** `\(easy)`
             - **Medium Tier (Default):** `\(medium)`
-            - **Heavy Tier:** `\(heavy)`
+            - **Hard Tier:** `\(hard)`
             """
             emitCommandOutput(body, format: .markdown, to: convId)
         } else {
             Task { [weak self] in
                 guard let self = self else { return }
-                let newModel: String
-                if arg == "fast" {
-                    newModel = config.getModel(for: .fast)
+                let newTier: ModelTier?
+                if arg == "easy" || arg == "fast" {
+                    newTier = .easy
                 } else if arg == "medium" {
-                    newModel = config.getModel(for: .medium)
-                } else if arg == "heavy" {
-                    newModel = config.getModel(for: .heavy)
+                    newTier = .medium
+                } else if arg == "hard" || arg == "heavy" {
+                    newTier = .hard
                 } else {
-                    newModel = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    config.defaultModel = newModel
+                    newTier = nil
                 }
-                await self.engine.invalidateSystemPrompt()
-                self.emitCommandOutput("Active default model updated to **\(newModel)**.", format: .markdown, to: convId)
+
+                if let tier = newTier {
+                    let modelName = config.getModel(for: tier)
+                    await self.engine.invalidateSystemPrompt()
+                    self.emitCommandOutput("Active model tier selected: **\(tier.rawValue.capitalized)** (`\(modelName)`).", format: .markdown, to: convId)
+                } else {
+                    let customModel = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.emitCommandOutput("Custom model '\(customModel)' received. Model configurations are mapped per-tier (`easy`, `medium`, `hard`) in Iris Settings.", format: .markdown, to: convId)
+                }
             }
         }
     }
