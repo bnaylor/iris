@@ -810,35 +810,29 @@ class AppState {
     private func handleModelCommand(_ trimmed: String, convId: UUID) {
         let arg = trimmed.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let config = ConfigManager.shared
+        // User-facing tier labels are fast/medium/heavy; the internal ModelTier is
+        // easy/medium/hard.
         if arg.isEmpty {
-            let fast = config.getModel(for: .fast)
+            let fast = config.getModel(for: .easy)
             let medium = config.getModel(for: .medium)
-            let heavy = config.getModel(for: .heavy)
+            let heavy = config.getModel(for: .hard)
             let body = """
             **Active Model Configuration**
 
             - **Fast Tier:** `\(fast)`
             - **Medium Tier (Default):** `\(medium)`
             - **Heavy Tier:** `\(heavy)`
+
+            _Configure the model for each tier in Settings → Models._
             """
             emitCommandOutput(body, format: .markdown, to: convId)
         } else {
-            Task { [weak self] in
-                guard let self = self else { return }
-                let newModel: String
-                if arg == "fast" {
-                    newModel = config.getModel(for: .fast)
-                } else if arg == "medium" {
-                    newModel = config.getModel(for: .medium)
-                } else if arg == "heavy" {
-                    newModel = config.getModel(for: .heavy)
-                } else {
-                    newModel = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    config.defaultModel = newModel
-                }
-                await self.engine.invalidateSystemPrompt()
-                self.emitCommandOutput("Active default model updated to **\(newModel)**.", format: .markdown, to: convId)
-            }
+            // Switching the active model from chat isn't wired up: the per-tier models
+            // are the only model source, and there's no per-conversation override yet.
+            // Emit an honest message rather than pretending the switch took effect.
+            emitCommandOutput(
+                "Switching the active model from chat isn't supported yet — the per-tier models are configured in **Settings → Models**. Run `/model` with no argument to view them.",
+                format: .markdown, to: convId)
         }
     }
 
