@@ -84,6 +84,9 @@ struct SkillCurationAdvancementsTests {
         let reportFile = paths.memoryDir.appendingPathComponent("curator/REPORT.md")
         #expect(FileManager.default.fileExists(atPath: reportFile.path))
 
+        let trashDir = paths.memoryDir.appendingPathComponent("trash/skills")
+        #expect(FileManager.default.fileExists(atPath: trashDir.path))
+
         let reportContent = try String(contentsOf: reportFile, encoding: .utf8)
         #expect(reportContent.contains("Iris Skill Curator Report"))
         #expect(reportContent.contains("corrupt-skill"))

@@ -23,7 +23,11 @@ public final class JourneyManager: Sendable {
 
     private init() {}
 
-    public func buildTimeline(paths: IrisPaths = .default) async -> [JourneyItem] {
+    public func buildTimeline() async -> [JourneyItem] {
+        await buildTimeline(paths: .default)
+    }
+
+    func buildTimeline(paths: IrisPaths) async -> [JourneyItem] {
         var items: [JourneyItem] = []
         let fileManager = FileManager.default
         let isoFormatter = ISO8601DateFormatter()

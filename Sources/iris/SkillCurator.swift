@@ -14,9 +14,14 @@ public final class SkillCurator: Sendable {
 
     private init() {}
 
-    public func curateSkills(paths: IrisPaths = .default) async -> CurationReport {
+    public func curateSkills() async -> CurationReport {
+        await curateSkills(paths: .default)
+    }
+
+    func curateSkills(paths: IrisPaths) async -> CurationReport {
         let fileManager = FileManager.default
         let skillsDir = paths.skillsDir
+        let trashDir = paths.memoryDir.appendingPathComponent("trash/skills")
         var totalScanned = 0
         var validCount = 0
         var prunedNames: [String] = []
@@ -27,6 +32,7 @@ public final class SkillCurator: Sendable {
         }
 
         var skillDescriptions: [String: String] = [:]
+        let timestampPrefix = Int(Date().timeIntervalSince1970)
 
         for folder in skillFolders {
             guard !folder.hasPrefix(".") else { continue }
@@ -36,17 +42,19 @@ public final class SkillCurator: Sendable {
 
             guard fileManager.fileExists(atPath: skillFile.path),
                   let content = try? String(contentsOf: skillFile, encoding: .utf8) else {
-                // Empty or missing SKILL.md -> Prune corrupt folder
-                try? fileManager.removeItem(at: skillFolder)
+                // Quarantined (soft-delete) to trash directory instead of hard removal
+                quarantineFolder(skillFolder, folderName: folder, timestamp: timestampPrefix, trashDir: trashDir, fileManager: fileManager)
                 prunedNames.append(folder)
+                recommendations.append("Quarantined corrupt skill '\(folder)' to trash. Run `/skills new \(folder)` to scaffold a replacement.")
                 continue
             }
 
             let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedContent.count < 30 {
-                // Corrupt/empty skill -> Prune
-                try? fileManager.removeItem(at: skillFolder)
+                // Quarantined (soft-delete) to trash directory
+                quarantineFolder(skillFolder, folderName: folder, timestamp: timestampPrefix, trashDir: trashDir, fileManager: fileManager)
                 prunedNames.append(folder)
+                recommendations.append("Quarantined empty skill '\(folder)' to trash. Run `/skills new \(folder)` to scaffold a replacement.")
                 continue
             }
 
@@ -55,7 +63,7 @@ public final class SkillCurator: Sendable {
 
             // Check for duplicates/overlap
             if let existingFolder = skillDescriptions[info.description] {
-                recommendations.append("Overlap detected between '\(folder)' and '\(existingFolder)': consider consolidating.")
+                recommendations.append("Overlap detected between '\(folder)' and '\(existingFolder)': consider consolidating into an umbrella skill via `create_skill`.")
             } else {
                 skillDescriptions[info.description] = folder
             }
@@ -111,6 +119,12 @@ public final class SkillCurator: Sendable {
         try fileManager.createDirectory(at: curatorDir, withIntermediateDirectories: true)
         let md = formatReportMarkdown(report)
         try md.write(to: reportFile, atomically: true, encoding: .utf8)
+    }
+
+    private func quarantineFolder(_ source: URL, folderName: String, timestamp: Int, trashDir: URL, fileManager: FileManager) {
+        try? fileManager.createDirectory(at: trashDir, withIntermediateDirectories: true)
+        let target = trashDir.appendingPathComponent("\(timestamp)_\(folderName)")
+        try? fileManager.moveItem(at: source, to: target)
     }
 
     private func parseSkillInfo(content: String, folderName: String) -> (name: String, description: String) {
