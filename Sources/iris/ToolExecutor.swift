@@ -172,11 +172,11 @@ struct ToolExecutor {
             let outputPipe = Pipe()
             let errorPipe = Pipe()
             if useSandbox {
-                guard SandboxingManager.shared.isContainerInstalled else {
+                guard let containerPath = SandboxingManager.shared.containerBinaryPath else {
                     continuation.resume(returning: "Error: sandboxing is on but the container runtime isn't installed. Open Iris Settings → Sandboxing to install it, or turn sandboxing off.")
                     return
                 }
-                process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
+                process.executableURL = URL(fileURLWithPath: containerPath)
                 var containerArgs = ["run", "--rm", ConfigManager.shared.sandboxImage, "bash", "-c", command]
                 if let cwd = cwd {
                     let expandedPath = (cwd as NSString).expandingTildeInPath

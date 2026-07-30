@@ -152,11 +152,11 @@ struct HookManager {
             let errorPipe = Pipe()
 
             if useSandbox {
-                guard SandboxingManager.shared.isContainerInstalled else {
+                guard let containerPath = SandboxingManager.shared.containerBinaryPath else {
                     continuation.resume(returning: .block(reason: "Sandboxing enabled but container missing for hook execution."))
                     return
                 }
-                process.executableURL = URL(fileURLWithPath: "/usr/local/bin/container")
+                process.executableURL = URL(fileURLWithPath: containerPath)
                 process.arguments = ["run", "--rm", ConfigManager.shared.sandboxImage, "bash", "-c", hook.command]
             } else {
                 process.executableURL = URL(fileURLWithPath: "/bin/zsh")
