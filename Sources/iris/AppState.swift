@@ -863,12 +863,37 @@ class AppState {
     
     private var saveTask: Task<Void, Never>? = nil
     
+    /// The conversations that belong on disk: durable, user-facing ones only. Sub-process
+    /// (subagent / drift-evaluator) scratch conversations are ephemeral and must never persist.
+    nonisolated static func durableConversations(_ all: [Conversation]) -> [Conversation] {
+        all.filter { !$0.isSubagent }
+    }
+
+    /// Repairs a decoded conversation list at load time: drops any ephemeral sub-process
+    /// conversations left by an older build, and settles any drift evaluation still marked
+    /// `.verifying` to `.failed` (its evaluator died with the app and will never report).
+    nonisolated static func sanitizeLoaded(_ decoded: [Conversation]) -> [Conversation] {
+        var loaded = durableConversations(decoded)
+        for i in loaded.indices where loaded[i].lastGoalEvaluation?.status == .verifying {
+            loaded[i].lastGoalEvaluation?.status = .failed
+            loaded[i].lastGoalEvaluation?.completedAt = Date()
+        }
+        return loaded
+    }
+
     private func saveConversations() {
         saveTask?.cancel()
         saveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
             guard !Task.isCancelled else { return }
-            if let data = try? JSONEncoder().encode(conversations) {
+            // Sub-processes (subagents, the drift evaluator) run in ephemeral scratch
+            // conversations. Persisting them let an orphan survive a mid-run quit and resurrect
+            // on the next launch as a normal main-principal conversation carrying a stale
+            // `activeGoal` — but WITHOUT its restricted toolset — so it would hunt for tools it
+            // no longer has (e.g. `submit_evaluation`). Only durable, user-facing conversations
+            // are persisted; the main goal's state rides along on those and survives restart.
+            let durable = Self.durableConversations(conversations)
+            if let data = try? JSONEncoder().encode(durable) {
                 UserDefaults.standard.set(data, forKey: "iris_conversations")
             }
         }
@@ -885,8 +910,9 @@ class AppState {
         if let data = UserDefaults.standard.data(forKey: "iris_conversations") {
             do {
                 let decoded = try JSONDecoder().decode([Conversation].self, from: data)
-                self.conversations = decoded
-                self.selectedConversationId = decoded.last?.id
+                let loaded = Self.sanitizeLoaded(decoded)
+                self.conversations = loaded
+                self.selectedConversationId = loaded.last?.id
             } catch {
                 print("Failed to decode conversations: \(error)")
                 UserDefaults.standard.set(data, forKey: "iris_conversations_backup_\(Date().timeIntervalSince1970)")
