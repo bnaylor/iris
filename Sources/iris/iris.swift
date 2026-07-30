@@ -124,6 +124,7 @@ actor IrisEngine {
         switch principal {
         case .main: return "Main agent"
         case .subagent: return "Subagent (\(roleLabel ?? "subagent"))"
+        case .evaluator: return "Evaluator"
         }
     }
 
@@ -430,6 +431,11 @@ actor IrisEngine {
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
         // future tool is covered automatically.
         toolsList = ToolIntent.augment(toolsList)
+
+        // The evaluator gets a mutation-free surface: read + run + submit_evaluation only (#9).
+        if principal == .evaluator {
+            toolsList = EvaluatorToolset.restrict(toolsList)
+        }
 
         // Guard the Gemini array-schema contract: an ARRAY property missing `items` is rejected
         // with HTTP 400. Fires in debug/test builds (the engine-exercising tests run this path),

@@ -6,10 +6,11 @@ public enum SandboxPref: String, Codable, Sendable {
     case sandboxed
 }
 
-/// Who is running: the user-facing main agent, or an isolated subagent.
+/// Who is running: the user-facing main agent, an isolated subagent, or a goal-drift evaluator.
 public enum Principal: Sendable {
     case main
     case subagent
+    case evaluator
 }
 
 /// The routing outcome for one command.
@@ -32,7 +33,7 @@ public enum SandboxPolicy {
 
         let intended: SandboxPref
         switch principal {
-        case .subagent:
+        case .subagent, .evaluator:
             intended = .sandboxed
         case .main:
             intended = perConversation ?? perWorkspace ?? globalDefault
