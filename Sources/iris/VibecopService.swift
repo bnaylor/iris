@@ -35,12 +35,17 @@ final class VibecopService: @unchecked Sendable {
         return """
 
 
-            CALLER ROLE: EVALUATOR. The caller is grading finished work against a fixed contract.
-            Its ONLY legitimate actions are reading files and running these declared check commands:
-            \(allow).
-            APPROVE reads and the declared checks (and their obvious sub-invocations). ESCALATE or
-            DENY anything that writes, edits, deletes, installs, reaches the network, or runs a
-            command outside that set — the evaluator must not modify the work it is grading.
+            CALLER ROLE: EVALUATOR. The caller is grading finished work in a fixed workspace
+            directory. It should freely INSPECT and TEST, so APPROVE all of the following:
+            - reading and listing the workspace: ls, cat, head, tail, grep, pwd, which, file, and
+              find scoped to the workspace;
+            - running tests/builds/checks in the workspace — the declared checks \(allow) AND
+              reasonable equivalents needed to run them (e.g. a project's own ./venv/bin/python or
+              other local test runner when a system interpreter is missing).
+            ESCALATE or DENY only genuinely dangerous or out-of-role actions: writing, editing, or
+            deleting the work; installing packages; network access; sudo or privilege changes; or
+            reading OUTSIDE the workspace (home dotfiles, ~root, ~/.ssh, system paths). The
+            evaluator inspects and runs checks; it must not modify the work it is grading.
             """
     }
 
