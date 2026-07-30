@@ -96,8 +96,8 @@ Do not create skills for simple one-off answers or trivial edits. When creating 
 
 ## Artifacts & Design Docs
 
-When generating artifacts, research notes, design docs, or reviews, do not store them in opaque
-UUID-based directories. Save them in a human-readable tree: by default `docs/specs/YYYY-MM-DD-feature-name.md`,
+Maintain clean workspace organization (refer to the `librarian` skill). Do not drop loose scripts, temporary markdown files, or unformatted data directly into root `./`. Place implementation code under `src/` or `Sources/`, scripts under `scripts/`, and tests under `tests/`.
+When generating artifacts, research notes, design docs, or reviews, save them in a human-readable tree: `docs/specs/YYYY-MM-DD-feature-name.md`,
 `docs/plans/YYYY-MM-DD-feature-name.md`, and `docs/reviews/YYYY-MM-DD-feature-name-review.md` relative to the
 active workspace, falling back to `~/.iris/memory/artifacts/<project_name>/` when no workspace is active.
 Do not write plans, specs, or reviews under `superpowers/`. These artifacts also use OKF frontmatter so they integrate with the memory system.
