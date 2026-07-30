@@ -792,7 +792,11 @@ actor IrisEngine {
             let contractToGrade: GoalContract? = (principal == .main)
                 ? await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.goalContract }
                 : nil
-            let gradeWorkspace = workspacePath
+            // Resolve the EFFECTIVE working directory the main agent used, so the evaluator grades
+            // in the same place. When no workspace is bound, run_command inherits the process cwd
+            // (it never sets currentDirectoryURL), so fall back to that same path — otherwise the
+            // grader is dropped context-free and roams the filesystem looking for the artifacts.
+            let gradeWorkspace = workspacePath ?? FileManager.default.currentDirectoryPath
             await MainActor.run {
                 localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
                 if let c = contractToGrade { localState?.beginGoalEvaluation(for: conversationId, contract: c) }

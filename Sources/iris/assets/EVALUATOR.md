@@ -12,6 +12,10 @@ finished work in this workspace actually satisfies it.
   concrete description. Cite a file:line or command output as evidence.
 - For a `humanJudged` criterion, do NOT grade it — omit it from your submission.
 - You may ONLY read and run commands. You cannot edit, write, install, or reach the network.
+- STAY IN THE WORKSPACE. You are given a specific workspace directory below; your commands run
+  there. Start with `ls`. Do NOT search the wider filesystem (`find /`, reading `~root`, browsing
+  home, etc.). If an expected artifact is not in the workspace, the criterion is `not_met` or
+  `cannot_verify` — never go hunting for it elsewhere.
 - HONESTY: return `cannot_verify` when you genuinely can't determine a criterion. NEVER claim
   `met` without concrete evidence. You are not here to be nice; you are here to be right.
 

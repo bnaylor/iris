@@ -11,17 +11,22 @@ final class GoalEvaluator: @unchecked Sendable {
     func evaluate(contract: GoalContract, workspace: String?, originatingConversationId originId: UUID,
                   app: AppState, client: any LLMClientProtocol = LLMClient()) async {
 
+        // The directory the grader inspects. Callers resolve this to the main agent's effective
+        // working directory (its bound workspace, or the process cwd it actually ran in), so the
+        // grader never has to guess where the work is.
+        let workspaceDir = workspace ?? FileManager.default.currentDirectoryPath
+
         let evalId = UUID()
         await MainActor.run {
             app.createNewConversation(id: evalId, isSubagent: true)
             app.updateConversationTitle(id: evalId, title: "Evaluator")
-            if let ws = workspace { app.setWorkspace(for: evalId, path: ws) }
+            app.setWorkspace(for: evalId, path: workspaceDir)   // its run_command runs here
         }
 
         // Fresh engine, evaluator principal. It never sees the working transcript.
         let checks = contract.criteria.compactMap { $0.kind == .executable ? $0.check : nil }
         let engine = IrisEngine(state: app, tier: .hard, principal: .evaluator, roleLabel: "evaluator", client: client, evaluatorChecks: checks)
-        let prompt = Self.systemPrompt(for: contract)
+        let prompt = Self.systemPrompt(for: contract, workspaceDir: workspaceDir)
         await engine.setSystemPrompt(text: prompt)
 
         // Resolve on submit_evaluation: reconcile against the contract's criteria and write graded.
@@ -44,7 +49,7 @@ final class GoalEvaluator: @unchecked Sendable {
 
         // Kick the grader loop; its activeGoal makes it auto-reprompt until it calls submit_evaluation.
         await MainActor.run { app.setGoal(for: evalId, goal: "Evaluate the completed work against the contract above, then call submit_evaluation.") }
-        await engine.processInput("Begin your evaluation. Inspect the workspace, run the checks, then call submit_evaluation.",
+        await engine.processInput("Begin your evaluation. The completed work is in `\(workspaceDir)` (your commands already run there). Start with `ls` to see what's present, inspect within that directory, run the checks, then call submit_evaluation. Do not search the wider filesystem — if an expected artifact isn't in the workspace, that criterion is not_met or cannot_verify.",
                                   source: "System", conversationId: evalId)
 
         // Safety net: if the loop ended without submit_evaluation, mark the evaluation failed.
@@ -69,7 +74,7 @@ final class GoalEvaluator: @unchecked Sendable {
         }
     }
 
-    private static func systemPrompt(for contract: GoalContract) -> String {
+    private static func systemPrompt(for contract: GoalContract, workspaceDir: String) -> String {
         let base: String
         if let url = Bundle.module.url(forResource: "EVALUATOR", withExtension: "md"),
            let contents = try? String(contentsOf: url, encoding: .utf8),
@@ -78,7 +83,10 @@ final class GoalEvaluator: @unchecked Sendable {
         } else {
             base = fallbackPrompt
         }
-        var s = base + "\n\n## The locked contract you are grading\nObjective: \(contract.objective)\n\nCriteria (grade each by its id):\n"
+        var s = base
+        s += "\n\n## Workspace\nThe completed work is in this directory:\n`\(workspaceDir)`\n"
+        s += "Your `run_command` calls already execute there. Confine your inspection to this directory — start with `ls`. NEVER search the wider filesystem (no `find /`, no reading files outside this directory, no `~root`/home snooping). If an expected artifact is not present here, the relevant criterion is `not_met` or `cannot_verify` — do not go hunting for it elsewhere.\n"
+        s += "\n## The locked contract you are grading\nObjective: \(contract.objective)\n\nCriteria (grade each by its id):\n"
         for c in contract.criteria {
             let checkNote = (c.kind == .executable) ? " — run this check: `\(c.check ?? "")`" : ""
             let kindNote = (c.kind == .humanJudged) ? " — HUMAN-JUDGED: do NOT grade this; omit it." : ""
