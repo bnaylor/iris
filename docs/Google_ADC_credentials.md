@@ -49,12 +49,14 @@ gcloud auth application-default login \
   --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language"
 ```
 
-#### Path B: GCP Vertex AI (`aiplatform.googleapis.com`) via ADC
-Vertex AI endpoints accept the standard `cloud-platform` scope:
+#### Path B: GCP Vertex AI (`aiplatform.googleapis.com`) via ADC — *(Vertex-Only)*
+Vertex AI endpoints accept the standard `cloud-platform` scope.
 
 ```bash
 gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform"
 ```
+
+> ⚠️ **Important Caveat**: Path B is **Vertex AI ONLY**. It will **NOT** work with Iris's default out-of-the-box configuration (which hits Google AI Studio at `generativelanguage.googleapis.com` and will return `HTTP 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT`). You **MUST** override **Gemini Base URL** in Iris Settings with your project's Vertex AI endpoint (`https://aiplatform.googleapis.com/...`) to use Path B.
 
 ---
 
