@@ -5,6 +5,11 @@ struct VibecopDecision: Codable {
     var reason: String
 }
 
+enum VibecopCallerRole: Sendable {
+    case agent
+    case evaluator
+}
+
 final class VibecopService: @unchecked Sendable {
     static let shared = VibecopService()
     
@@ -25,7 +30,27 @@ final class VibecopService: @unchecked Sendable {
     }
     """
     
-    func evaluateAction(toolName: String, details: String, workspace: String?, inSandbox: Bool = false) async throws -> VibecopDecision {
+    static func evaluatorLayerText(allowedCommands: [String]) -> String {
+        let allow = allowedCommands.isEmpty ? "(none declared)" : allowedCommands.map { "`\($0)`" }.joined(separator: ", ")
+        return """
+
+
+            CALLER ROLE: EVALUATOR. The caller is grading finished work in a fixed workspace
+            directory. It should freely INSPECT and TEST, so APPROVE all of the following:
+            - reading and listing the workspace: ls, cat, head, tail, grep, pwd, which, file, and
+              find scoped to the workspace;
+            - running tests/builds/checks in the workspace — the declared checks \(allow) AND
+              reasonable equivalents needed to run them (e.g. a project's own ./venv/bin/python or
+              other local test runner when a system interpreter is missing).
+            ESCALATE or DENY only genuinely dangerous or out-of-role actions: writing, editing, or
+            deleting the work; installing packages; network access; sudo or privilege changes; or
+            reading OUTSIDE the workspace (home dotfiles, ~root, ~/.ssh, system paths). The
+            evaluator inspects and runs checks; it must not modify the work it is grading.
+            """
+    }
+
+    func evaluateAction(toolName: String, details: String, workspace: String?, inSandbox: Bool = false,
+                        callerRole: VibecopCallerRole = .agent, allowedCommands: [String] = []) async throws -> VibecopDecision {
         guard ConfigManager.shared.enableVibecop else {
             return VibecopDecision(decision: "APPROVE", reason: "Vibecop is disabled in settings.")
         }
@@ -61,6 +86,10 @@ final class VibecopService: @unchecked Sendable {
             genuinely risky actions: outbound network connections to new/unknown hosts, attempts
             to escape the container or escalate privilege, or reaching host-bridged resources.
             """
+        }
+
+        if callerRole == .evaluator {
+            prompt += VibecopService.evaluatorLayerText(allowedCommands: allowedCommands)
         }
 
         prompt += "\n\nProposed Action:\nTool: \(toolName)\nDetails: \(details)"

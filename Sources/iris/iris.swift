@@ -11,6 +11,7 @@ actor IrisEngine {
     var modelTier: ModelTier
     let principal: Principal
     let roleLabel: String?
+    let evaluatorChecks: [String]
 
     /// Conversations already shown the "no sandbox runtime" fallback notice (deduped).
     private var warnedNoRuntime: Set<UUID> = []
@@ -19,12 +20,13 @@ actor IrisEngine {
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
 
-    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil, client: any LLMClientProtocol = LLMClient()) {
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil, client: any LLMClientProtocol = LLMClient(), evaluatorChecks: [String] = []) {
         self.state = state
         self.modelTier = tier
         self.principal = principal
         self.roleLabel = roleLabel
         self.client = client
+        self.evaluatorChecks = evaluatorChecks
         systemPrompt = nil
     }
 
@@ -124,6 +126,7 @@ actor IrisEngine {
         switch principal {
         case .main: return "Main agent"
         case .subagent: return "Subagent (\(roleLabel ?? "subagent"))"
+        case .evaluator: return "Evaluator"
         }
     }
 
@@ -430,6 +433,11 @@ actor IrisEngine {
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
         // future tool is covered automatically.
         toolsList = ToolIntent.augment(toolsList)
+
+        // The evaluator gets a mutation-free surface: read + run + submit_evaluation only (#9).
+        if principal == .evaluator {
+            toolsList = EvaluatorToolset.restrict(toolsList)
+        }
 
         // Guard the Gemini array-schema contract: an ARRAY property missing `items` is rejected
         // with HTTP 400. Fires in debug/test builds (the engine-exercising tests run this path),
@@ -781,11 +789,32 @@ actor IrisEngine {
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
             let statusReport = functionCall.args["criteria_status"]
+            let contractToGrade: GoalContract? = (principal == .main)
+                ? await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.goalContract }
+                : nil
+            // Resolve the EFFECTIVE working directory the main agent used, so the evaluator grades
+            // in the same place. When no workspace is bound, run_command inherits the process cwd
+            // (it never sets currentDirectoryURL), so fall back to that same path — otherwise the
+            // grader is dropped context-free and roams the filesystem looking for the artifacts.
+            let gradeWorkspace = workspacePath ?? FileManager.default.currentDirectoryPath
             await MainActor.run {
                 localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
+                if let c = contractToGrade { localState?.beginGoalEvaluation(for: conversationId, contract: c) }
                 localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
                 localState?.onSubagentComplete[conversationId] = nil
+            }
+            if let c = contractToGrade {
+                // Non-blocking: grade in the background; the verdict fills in the chip when ready.
+                // Pass the engine's own client so tests drive the grader with a scripted client
+                // (in production this is the real LLMClient). `client` here is this IrisEngine's
+                // stored client property (from init(...client:)) — capture it into a local first
+                // since the detached task can't touch actor-isolated state.
+                let graderClient = self.client
+                let graderApp = localState
+                if let graderApp {
+                    Task.detached { await GoalEvaluator.shared.evaluate(contract: c, workspace: gradeWorkspace, originatingConversationId: conversationId, app: graderApp, client: graderClient) }
+                }
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             if principal == .main {
@@ -793,6 +822,14 @@ actor IrisEngine {
                 await processInput(reflectionNotice, source: "System", conversationId: conversationId)
             }
             result = "Goal marked as complete. Summary: \(summary)"
+        } else if functionCall.name == "submit_evaluation" {
+            let payload = functionCall.args["evaluations"]
+            await MainActor.run {
+                localState?.onEvaluationComplete[conversationId]?(JSONValue.object(["evaluations": payload ?? .null]))
+                localState?.onEvaluationComplete[conversationId] = nil
+                localState?.clearGoal(for: conversationId)   // end the evaluator's own loop (mirrors goal_complete)
+            }
+            result = "Evaluation submitted."
         } else if functionCall.name == "amend_goal_contract" {
             let action = functionCall.args["action"]?.stringValue ?? "add"
             let text = functionCall.args["criterion"]?.stringValue ?? ""
@@ -819,7 +856,9 @@ actor IrisEngine {
             if needsApproval {
                 let approved = await localState?.requestApproval(
                     toolName: functionCall.name, details: details, workspace: workspacePath,
-                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox) ?? false
+                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox,
+                    callerRole: principal == .evaluator ? .evaluator : .agent,
+                    allowedCommands: evaluatorChecks) ?? false
                 if approved {
                     result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
                 } else {

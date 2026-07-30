@@ -55,6 +55,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var isSubagent: Bool = false
     var goalContract: GoalContract? = nil
     var lastGoalCompletionReport: JSONValue? = nil
+    var lastGoalEvaluation: GoalEvaluation? = nil
 
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
@@ -69,7 +70,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport, lastGoalEvaluation
     }
 
     init(from decoder: Decoder) throws {
@@ -86,6 +87,7 @@ struct Conversation: Identifiable, Codable, Hashable {
         isSubagent = try container.decodeIfPresent(Bool.self, forKey: .isSubagent) ?? false
         goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
         lastGoalCompletionReport = try container.decodeIfPresent(JSONValue.self, forKey: .lastGoalCompletionReport)
+        lastGoalEvaluation = try container.decodeIfPresent(GoalEvaluation.self, forKey: .lastGoalEvaluation)
         // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
         // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
         if goalContract == nil, let legacy = activeGoal {
@@ -142,6 +144,11 @@ class AppState {
     var isCheckingForUpdates = false
     var updateCheckStatusMessage: String?
     var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
+
+    /// Fired by the `submit_evaluation` handler in the EVALUATOR's own conversation; the closure
+    /// (registered by GoalEvaluator) reconciles the verdict and writes it to the ORIGINATING
+    /// conversation. Keyed by the evaluator conversation id. Mirrors `onSubagentComplete`.
+    var onEvaluationComplete: [UUID: @Sendable (JSONValue?) -> Void] = [:]
 
     /// Reference count of in-flight "thinking" work. `isThinking` is derived from this.
     private var thinkingCount = 0
@@ -632,6 +639,33 @@ class AppState {
     func dismissCompletionReport(for conversationId: UUID) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
         conversations[idx].lastGoalCompletionReport = nil
+        conversations[idx].lastGoalEvaluation = nil
+        saveConversations()
+    }
+
+    /// Captures the locked contract's criteria as a fresh `.verifying` evaluation BEFORE the goal
+    /// is cleared, so the async grader has a snapshot to grade against (spec §3.2). Returns the
+    /// snapshot contract for the grader.
+    @discardableResult
+    func beginGoalEvaluation(for conversationId: UUID, contract: GoalContract) -> GoalContract {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return contract }
+        let pending = GoalEvaluation(
+            status: .verifying,
+            criteria: contract.criteria.map {
+                CriterionVerdict(criterionId: $0.id, criterionText: $0.text, kind: $0.kind,
+                                 verdict: $0.kind == .humanJudged ? .humanPending : .cannotVerify,
+                                 evidence: "", method: $0.kind == .executable ? .check : ($0.kind == .qualitative ? .judge : .human))
+            },
+            startedAt: Date(), completedAt: nil)
+        conversations[idx].lastGoalEvaluation = pending
+        saveConversations()
+        return contract
+    }
+
+    /// Writes a finished evaluation onto the originating conversation (marks it graded/failed).
+    func recordEvaluation(for conversationId: UUID, _ evaluation: GoalEvaluation) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalEvaluation = evaluation
         saveConversations()
     }
 
@@ -643,8 +677,9 @@ class AppState {
         // through amend_goal_contract (with a rationale). A stray propose_goal_contract during
         // a running goal is ignored.
         if conversations[idx].goalContract?.isLocked == true { return }
-        // Starting a new goal clears any prior completion report so it doesn't linger.
+        // Starting a new goal clears any prior completion report and evaluation so they don't linger.
         conversations[idx].lastGoalCompletionReport = nil
+        conversations[idx].lastGoalEvaluation = nil
         conversations[idx].goalContract = draft
         saveConversations()
     }
@@ -716,7 +751,8 @@ class AppState {
     
     func requestApproval(toolName: String, details: String, workspace: String? = nil,
                          conversationId: UUID? = nil, origin: String = "Main agent",
-                         inSandbox: Bool = false) async -> Bool {
+                         inSandbox: Bool = false, callerRole: VibecopCallerRole = .agent,
+                         allowedCommands: [String] = []) async -> Bool {
         // Fast path: deterministic permissions.
         if PermissionManager.shared.isAllowed(toolName: toolName, details: details, workspace: workspace) {
             return true
@@ -744,7 +780,7 @@ class AppState {
             }
             
             let decision = try await withTimeout(seconds: timeout) {
-                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox)
+                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox, callerRole: callerRole, allowedCommands: allowedCommands)
             }
             if decision.decision == "APPROVE" { return true }
             if decision.decision == "DENY" { return false }
@@ -827,12 +863,43 @@ class AppState {
     
     private var saveTask: Task<Void, Never>? = nil
     
+    /// The conversations that belong on disk: durable, user-facing ones only. Sub-process
+    /// (subagent / drift-evaluator) scratch conversations are ephemeral and must never persist.
+    nonisolated static func durableConversations(_ all: [Conversation]) -> [Conversation] {
+        all.filter { !$0.isSubagent }
+    }
+
+    /// Repairs a decoded conversation list at load time: drops any ephemeral sub-process
+    /// conversations left by an older build, and clears the transient goal-completion surfacing
+    /// (`lastGoalCompletionReport` / `lastGoalEvaluation`).
+    ///
+    /// That surfacing drives the completion "drift chip" above the composer — a per-session,
+    /// dismissable affordance, not durable history. Resurrecting last session's chip on the next
+    /// launch is both semantically wrong and the trigger for a window-blanking render bug when the
+    /// chip auto-appears at startup, so we drop it on load. (The grader is ephemeral anyway, so a
+    /// `.verifying` evaluation could never resolve across a restart.)
+    nonisolated static func sanitizeLoaded(_ decoded: [Conversation]) -> [Conversation] {
+        var loaded = durableConversations(decoded)
+        for i in loaded.indices {
+            loaded[i].lastGoalCompletionReport = nil
+            loaded[i].lastGoalEvaluation = nil
+        }
+        return loaded
+    }
+
     private func saveConversations() {
         saveTask?.cancel()
         saveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
             guard !Task.isCancelled else { return }
-            if let data = try? JSONEncoder().encode(conversations) {
+            // Sub-processes (subagents, the drift evaluator) run in ephemeral scratch
+            // conversations. Persisting them let an orphan survive a mid-run quit and resurrect
+            // on the next launch as a normal main-principal conversation carrying a stale
+            // `activeGoal` — but WITHOUT its restricted toolset — so it would hunt for tools it
+            // no longer has (e.g. `submit_evaluation`). Only durable, user-facing conversations
+            // are persisted; the main goal's state rides along on those and survives restart.
+            let durable = Self.durableConversations(conversations)
+            if let data = try? JSONEncoder().encode(durable) {
                 UserDefaults.standard.set(data, forKey: "iris_conversations")
             }
         }
@@ -849,8 +916,9 @@ class AppState {
         if let data = UserDefaults.standard.data(forKey: "iris_conversations") {
             do {
                 let decoded = try JSONDecoder().decode([Conversation].self, from: data)
-                self.conversations = decoded
-                self.selectedConversationId = decoded.last?.id
+                let loaded = Self.sanitizeLoaded(decoded)
+                self.conversations = loaded
+                self.selectedConversationId = loaded.last?.id
             } catch {
                 print("Failed to decode conversations: \(error)")
                 UserDefaults.standard.set(data, forKey: "iris_conversations_backup_\(Date().timeIntervalSince1970)")
