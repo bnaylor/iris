@@ -18,7 +18,7 @@ protocol ContainerRuntime: Sendable {
 }
 
 struct CLIContainerRuntime: ContainerRuntime {
-    private let binary = "/usr/local/bin/container"
+    private var binary: String { SandboxingManager.shared.containerBinaryPath ?? "/usr/local/bin/container" }
 
     private func runCLI(_ args: [String]) async throws -> (stdout: String, stderr: String, exitCode: Int32) {
         try await withCheckedThrowingContinuation { cont in

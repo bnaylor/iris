@@ -9,15 +9,21 @@ final class SandboxingManager: @unchecked Sendable {
     
     private static let containerSearchPaths: [String] = [
         "/usr/local/bin/container",     // Default installer location
+        "/opt/homebrew/bin/container",  // Homebrew on Apple Silicon
     ]
 
-    var isContainerInstalled: Bool {
+    /// The first existing container binary path, or nil if not installed.
+    var containerBinaryPath: String? {
         for path in Self.containerSearchPaths {
             if FileManager.default.fileExists(atPath: path) {
-                return true
+                return path
             }
         }
-        return false
+        return nil
+    }
+
+    var isContainerInstalled: Bool {
+        containerBinaryPath != nil
     }
     
     func installContainer(completion: @escaping @MainActor (Bool, String?) -> Void) {
@@ -70,15 +76,15 @@ final class SandboxingManager: @unchecked Sendable {
     /// Starts the container system daemon and automatically approves kernel image download ("y").
     @discardableResult
     func startContainerSystem() async -> (success: Bool, message: String?) {
-        guard isContainerInstalled else {
-            return (false, "Apple container runtime is not installed at /usr/local/bin/container.")
+        guard let binaryPath = containerBinaryPath else {
+            return (false, "Apple container runtime is not installed.")
         }
         
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/sh")
-                process.arguments = ["-c", "echo 'y' | /usr/local/bin/container system start"]
+                process.arguments = ["-c", "echo 'y' | \(binaryPath) system start"]
                 
                 let pipe = Pipe()
                 process.standardOutput = pipe
