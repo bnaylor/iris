@@ -7,23 +7,18 @@ final class SandboxingManager: @unchecked Sendable {
     
     private init() {}
     
+    private static let containerSearchPaths: [String] = [
+        "/usr/local/bin/container",     // Default installer location
+        "/opt/homebrew/bin/container",  // Homebrew on Apple Silicon
+    ]
+
     var isContainerInstalled: Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        task.arguments = ["container"]
-        
-        // Also check /usr/local/bin/container since which might not pick it up if not in path
-        if FileManager.default.fileExists(atPath: "/usr/local/bin/container") {
-            return true
+        for path in Self.containerSearchPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return true
+            }
         }
-        
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
-        }
+        return false
     }
     
     func installContainer(completion: @escaping @MainActor (Bool, String?) -> Void) {
