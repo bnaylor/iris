@@ -35,13 +35,21 @@ gcloud services enable aiplatform.googleapis.com
 
 ### 2. Authenticate ADC with Required Scopes
 
-Run the following command in your terminal. **Crucially, you must include both the `cloud-platform` and `generative-language` scopes**:
+Run the following command in your terminal using the standard `cloud-platform` scope:
 
 ```bash
-gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language"
+gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform"
 ```
 
-> ⚠️ **Important**: Standard `gcloud auth application-default login` without `--scopes` only requests default GCP scopes, which causes `HTTP 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT` errors when calling `generativelanguage.googleapis.com`.
+> 💡 **Why `cloud-platform`?**
+> Google Cloud ADC relies on the `cloud-platform` scope (`https://www.googleapis.com/auth/cloud-platform`), which grants access to both Vertex AI (`aiplatform.googleapis.com`) and GCP Gemini endpoints.
+>
+> ⚠️ **Note on `Error 400: invalid_scope`**: Passing `https://www.googleapis.com/auth/generative-language` directly to `gcloud auth application-default login` fails with `Error 400: invalid_scope` because `gcloud`'s built-in OAuth client ID restricts non-GCP scopes. If you need `generative-language` scope specifically for AI Studio OAuth, you must provide your own OAuth client secrets file:
+> ```bash
+> gcloud auth application-default login \
+>   --client-id-file=client_secret.json \
+>   --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language"
+> ```
 
 ---
 
@@ -95,6 +103,7 @@ Iris handles ADC internally via `ADCCredentialManager.swift` and `LLMClient.swif
 
 | Error | Cause | Solution |
 | :--- | :--- | :--- |
+| `Error 400: invalid_scope` | `generative-language` scope requested with gcloud default client ID | Authenticate with `gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform"`, or supply `--client-id-file=client_secret.json` if using custom OAuth. |
 | `HTTP 401: ACCESS_TOKEN_TYPE_UNSUPPORTED` | `gcloud auth` user token used instead of ADC token | Run `gcloud auth application-default login` (do not rely on standard `gcloud auth login`). |
 | `HTTP 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT` | ADC credentials missing the `generative-language` scope | Re-authenticate using: `gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language"` |
 | `HTTP 403: Quota project missing / PERMISSION_DENIED` | No GCP project associated with ADC request | Set project via `gcloud config set project <PROJECT_ID>` or export `GOOGLE_CLOUD_QUOTA_PROJECT=<PROJECT_ID>`. |
