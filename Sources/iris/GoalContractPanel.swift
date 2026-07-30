@@ -362,18 +362,24 @@ struct CompletionReportChip: View {
     /// Optional grader evaluation; when present the chip shows the two-column drift view.
     var evaluation: GoalEvaluation? = nil
     var body: some View {
-        CompletionReportSection(report: report, onDismiss: {
-            state.dismissCompletionReport(for: conversationId)
-        }, evaluation: evaluation)
-            .padding(12)
-            .background(.thinMaterial)
-            .clipShape(.rect(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 4)
+        // Bound the chip's height (like GoalContractPanel/LockedContractChip do). Unbounded, it
+        // was the only goal chip without a height cap, and an unbounded subview in the composer's
+        // VStack could collapse the surrounding layout — the window blanked the instant this chip
+        // appeared at goal_complete (#62).
+        ScrollView {
+            CompletionReportSection(report: report, onDismiss: {
+                state.dismissCompletionReport(for: conversationId)
+            }, evaluation: evaluation)
+        }
+        .frame(maxHeight: 320)
+        .background(.thinMaterial)
+        .clipShape(.rect(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 4)
     }
 }
 
