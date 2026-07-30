@@ -18,9 +18,12 @@ struct SandboxingManagerTests {
         let installed = SandboxingManager.shared.isContainerInstalled
         // Both must agree: path is non-nil iff installed is true
         #expect((path != nil) == installed)
-        // If installed, path must be one of the known search paths
+        // If installed, path must match the first existing search path (order matters)
         if let path {
-            #expect(path.hasSuffix("/container"), "Path should end in /container: \(path)")
+            let expected = SandboxingManager.containerSearchPaths.first {
+                FileManager.default.fileExists(atPath: $0)
+            }
+            #expect(path == expected, "Resolved path \(path) should match first existing search path \(expected ?? "nil")")
         }
     }
 

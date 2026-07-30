@@ -7,7 +7,7 @@ final class SandboxingManager: @unchecked Sendable {
     
     private init() {}
     
-    private static let containerSearchPaths: [String] = [
+    static let containerSearchPaths: [String] = [
         "/usr/local/bin/container",     // Default installer location
         "/opt/homebrew/bin/container",  // Homebrew on Apple Silicon
     ]
