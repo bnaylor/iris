@@ -12,9 +12,10 @@ Agents frequently drop new files, temporary scripts, and unformatted documents d
 
 ## Core Rules & Hygiene
 
-### 1. Repository Management & Clones
-- Always clone or initialize source repositories under `~/src/<repo-name>` or `~/work/<repo-name>`.
-- Never initialize git repositories directly in `$HOME` or random temporary root folders.
+### 1. Active Workspace vs. Standalone Clones
+- **Active Workspace Context:** When a conversation has an active workspace set, treat that workspace root as your project root. All relative path operations (`src/`, `docs/`, `scripts/`, `tests/`) MUST be rooted within that active workspace.
+- **External Repositories & Clones:** When cloning or initializing a brand-new external repository, place it under `~/src/<repo-name>` or `~/work/<repo-name>`.
+- **No `$HOME` Pollution:** Never create git repositories, loose scripts, or dump files directly in `$HOME`.
 
 ### 2. Workspace Subdirectory Structure
 Keep workspace root directories clean. Organize files into dedicated subdirectories based on their function:

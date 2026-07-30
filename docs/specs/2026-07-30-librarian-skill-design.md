@@ -9,7 +9,8 @@
 Agents naturally default to dropping new files, scripts, or temporary documentation into the root `./` directory of whichever workspace they are currently in. This creates workspace pollution ("ants in the workspace") and obscures project structure.
 
 The **Librarian Skill** is a shipped default skill seeded into every Iris installation at `~/.iris/memory/skills/librarian/SKILL.md`. It teaches Iris structured workspace hygiene:
-- Cloning repositories into structured locations (`~/src/<repo-name>`).
+- Cloning external repositories into structured locations (`~/src/<repo-name>`).
+- Respecting active workspace contexts: when a workspace is active, all file paths (`src/`, `docs/`, `scripts/`, `tests/`) are relative to that workspace root.
 - Placing code, scripts, documentation, and tests in sensible subdirectories (`src/`, `docs/`, `scripts/`, `assets/`, `tests/`).
 - Adhering to layout conventions for specs (`docs/specs/YYYY-MM-DD-*.md`), plans (`docs/plans/YYYY-MM-DD-*.md`), and reviews (`docs/reviews/YYYY-MM-DD-*.md`).
 - Avoiding loose files in `$HOME` or root workspace directories.
