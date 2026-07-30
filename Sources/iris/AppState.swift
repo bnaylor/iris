@@ -639,7 +639,27 @@ class AppState {
     func dismissCompletionReport(for conversationId: UUID) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
         conversations[idx].lastGoalCompletionReport = nil
+        conversations[idx].lastGoalEvaluation = nil
         saveConversations()
+    }
+
+    /// Captures the locked contract's criteria as a fresh `.verifying` evaluation BEFORE the goal
+    /// is cleared, so the async grader has a snapshot to grade against (spec §3.2). Returns the
+    /// snapshot contract for the grader.
+    @discardableResult
+    func beginGoalEvaluation(for conversationId: UUID, contract: GoalContract) -> GoalContract {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return contract }
+        let pending = GoalEvaluation(
+            status: .verifying,
+            criteria: contract.criteria.map {
+                CriterionVerdict(criterionId: $0.id, criterionText: $0.text, kind: $0.kind,
+                                 verdict: $0.kind == .humanJudged ? .humanPending : .cannotVerify,
+                                 evidence: "", method: $0.kind == .executable ? .check : ($0.kind == .qualitative ? .judge : .human))
+            },
+            startedAt: Date(), completedAt: nil)
+        conversations[idx].lastGoalEvaluation = pending
+        saveConversations()
+        return contract
     }
 
     /// Writes a finished evaluation onto the originating conversation (marks it graded/failed).
@@ -657,8 +677,9 @@ class AppState {
         // through amend_goal_contract (with a rationale). A stray propose_goal_contract during
         // a running goal is ignored.
         if conversations[idx].goalContract?.isLocked == true { return }
-        // Starting a new goal clears any prior completion report so it doesn't linger.
+        // Starting a new goal clears any prior completion report and evaluation so they don't linger.
         conversations[idx].lastGoalCompletionReport = nil
+        conversations[idx].lastGoalEvaluation = nil
         conversations[idx].goalContract = draft
         saveConversations()
     }

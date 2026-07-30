@@ -787,11 +787,25 @@ actor IrisEngine {
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
             let statusReport = functionCall.args["criteria_status"]
+            let contractToGrade: GoalContract? = (principal == .main)
+                ? await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.goalContract }
+                : nil
+            let gradeWorkspace = workspacePath
             await MainActor.run {
                 localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
+                if let c = contractToGrade { localState?.beginGoalEvaluation(for: conversationId, contract: c) }
                 localState?.clearGoal(for: conversationId)
                 localState?.onSubagentComplete[conversationId]?(summary)
                 localState?.onSubagentComplete[conversationId] = nil
+            }
+            if let c = contractToGrade {
+                // Non-blocking: grade in the background; the verdict fills in the chip when ready.
+                // Pass the engine's own client so tests drive the grader with a scripted client
+                // (in production this is the real LLMClient). `client` here is this IrisEngine's
+                // stored client property (from init(...client:)) — capture it into a local first
+                // since the detached task can't touch actor-isolated state.
+                let graderClient = self.client
+                Task.detached { await GoalEvaluator.shared.evaluate(contract: c, workspace: gradeWorkspace, originatingConversationId: conversationId, client: graderClient) }
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             if principal == .main {
