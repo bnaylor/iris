@@ -105,5 +105,5 @@ Iris handles ADC internally via `ADCCredentialManager.swift` and `LLMClient.swif
 | :--- | :--- | :--- |
 | `Error 400: invalid_scope` | `generative-language` scope requested with gcloud default client ID | Authenticate with `gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform"`, or supply `--client-id-file=client_secret.json` if using custom OAuth. |
 | `HTTP 401: ACCESS_TOKEN_TYPE_UNSUPPORTED` | `gcloud auth` user token used instead of ADC token | Run `gcloud auth application-default login` (do not rely on standard `gcloud auth login`). |
-| `HTTP 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT` | ADC credentials missing the `generative-language` scope | Re-authenticate using: `gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language"` |
+| `HTTP 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT` | ADC credentials missing required GCP scope | Re-authenticate using: `gcloud auth application-default login --scopes="https://www.googleapis.com/auth/cloud-platform"` |
 | `HTTP 403: Quota project missing / PERMISSION_DENIED` | No GCP project associated with ADC request | Set project via `gcloud config set project <PROJECT_ID>` or export `GOOGLE_CLOUD_QUOTA_PROJECT=<PROJECT_ID>`. |
