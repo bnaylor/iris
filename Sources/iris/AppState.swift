@@ -870,13 +870,19 @@ class AppState {
     }
 
     /// Repairs a decoded conversation list at load time: drops any ephemeral sub-process
-    /// conversations left by an older build, and settles any drift evaluation still marked
-    /// `.verifying` to `.failed` (its evaluator died with the app and will never report).
+    /// conversations left by an older build, and clears the transient goal-completion surfacing
+    /// (`lastGoalCompletionReport` / `lastGoalEvaluation`).
+    ///
+    /// That surfacing drives the completion "drift chip" above the composer — a per-session,
+    /// dismissable affordance, not durable history. Resurrecting last session's chip on the next
+    /// launch is both semantically wrong and the trigger for a window-blanking render bug when the
+    /// chip auto-appears at startup, so we drop it on load. (The grader is ephemeral anyway, so a
+    /// `.verifying` evaluation could never resolve across a restart.)
     nonisolated static func sanitizeLoaded(_ decoded: [Conversation]) -> [Conversation] {
         var loaded = durableConversations(decoded)
-        for i in loaded.indices where loaded[i].lastGoalEvaluation?.status == .verifying {
-            loaded[i].lastGoalEvaluation?.status = .failed
-            loaded[i].lastGoalEvaluation?.completedAt = Date()
+        for i in loaded.indices {
+            loaded[i].lastGoalCompletionReport = nil
+            loaded[i].lastGoalEvaluation = nil
         }
         return loaded
     }

@@ -27,30 +27,28 @@ struct EphemeralSubprocessPersistenceTests {
         #expect(loaded.map { $0.isSubagent } == [false])   // only the durable one survives
     }
 
-    @Test("sanitizeLoaded settles a still-verifying evaluation to failed")
-    func loadSettlesVerifying() {
+    @Test("sanitizeLoaded clears the transient completion-chip surfacing on load")
+    func loadClearsCompletionSurfacing() {
         var main = conv("main", isSubagent: false)
         main.lastGoalEvaluation = GoalEvaluation(
             status: .verifying,
             criteria: [CriterionVerdict(criterionId: UUID(), criterionText: "c", kind: .qualitative,
                                         verdict: .cannotVerify, evidence: "", method: .judge)],
             startedAt: Date(timeIntervalSince1970: 100), completedAt: nil)
+        main.lastGoalCompletionReport = .array([.object(["criterion": .string("c"), "status": .string("met")])])
         let loaded = AppState.sanitizeLoaded([main])
-        #expect(loaded.first?.lastGoalEvaluation?.status == .failed)
-        #expect(loaded.first?.lastGoalEvaluation?.completedAt != nil)
+        #expect(loaded.first?.lastGoalEvaluation == nil)          // chip surfacing dropped
+        #expect(loaded.first?.lastGoalCompletionReport == nil)
     }
 
-    @Test("sanitizeLoaded leaves a graded evaluation untouched")
-    func loadKeepsGraded() {
+    @Test("sanitizeLoaded preserves the conversation itself and its goal state")
+    func loadKeepsConversation() {
         var main = conv("main", isSubagent: false)
-        let done = Date(timeIntervalSince1970: 200)
-        main.lastGoalEvaluation = GoalEvaluation(
-            status: .graded,
-            criteria: [CriterionVerdict(criterionId: UUID(), criterionText: "c", kind: .executable,
-                                        verdict: .met, evidence: "exit 0", method: .check)],
-            startedAt: Date(timeIntervalSince1970: 100), completedAt: done)
+        main.activeGoal = "ship it"
+        main.lastGoalCompletionReport = .array([.object(["criterion": .string("c"), "status": .string("met")])])
         let loaded = AppState.sanitizeLoaded([main])
-        #expect(loaded.first?.lastGoalEvaluation?.status == .graded)
-        #expect(loaded.first?.lastGoalEvaluation?.completedAt == done)
+        #expect(loaded.count == 1)                                 // conversation survives
+        #expect(loaded.first?.activeGoal == "ship it")             // durable goal state intact
+        #expect(loaded.first?.lastGoalCompletionReport == nil)     // only the chip surfacing cleared
     }
 }
