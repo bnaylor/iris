@@ -356,7 +356,9 @@ private struct CompletionReportItem: Identifiable {
 struct CompletionReportChip: View {
     var state: AppState
     let conversationId: UUID
-    let report: JSONValue
+    /// Self-report JSON from `goal_complete`'s `criteria_status`. May be nil when the model
+    /// omitted `criteria_status` but the grader evaluation is still present.
+    let report: JSONValue?
     /// Optional grader evaluation; when present the chip shows the two-column drift view.
     var evaluation: GoalEvaluation? = nil
     var body: some View {
@@ -380,14 +382,17 @@ struct CompletionReportChip: View {
 ///   left  = self-report (neutral, never green)
 ///   right = grader verdict (colored) + evidence, with a ⚠ drift badge on disagreement.
 struct CompletionReportSection: View {
-    let report: JSONValue
+    /// Self-report JSON. May be nil when the model omitted `criteria_status` but an
+    /// evaluation is present. The gate in ChatView guarantees at least one of `report`
+    /// and `evaluation` is non-nil.
+    let report: JSONValue?
     /// When set, a ✕ appears in the header to dismiss the report chip.
     var onDismiss: (() -> Void)? = nil
     /// Optional grader result. When nil the section falls back to single-column self-report.
     var evaluation: GoalEvaluation? = nil
 
     private var items: [CompletionReportItem] {
-        guard case .array(let elements) = report else { return [] }
+        guard let report, case .array(let elements) = report else { return [] }
         // Index-prefixed id keeps ForEach identity stable even if the model echoes the
         // same criterion text twice (a duplicate bare-text id trips a SwiftUI warning
         // and can drop rows).
@@ -463,7 +468,8 @@ struct CompletionReportSection: View {
                             DriftCriterionRow(
                                 verdict: verdict,
                                 selfReportStatus: selfReportStatus(for: verdict.criterionText),
-                                evaluationStatus: evaluation.status
+                                evaluationStatus: evaluation.status,
+                                reportPresent: report != nil
                             )
                         }
                     }
@@ -506,25 +512,35 @@ private struct DriftCriterionRow: View {
     let selfReportStatus: String
     /// Overall evaluation status — used to decide whether to show a verifying spinner.
     let evaluationStatus: EvaluationStatus
+    /// False when the self-report JSON was entirely absent (model omitted `criteria_status`).
+    /// When false and selfReportStatus is empty, the left column shows a "not reported" placeholder.
+    var reportPresent: Bool = true
 
     /// True when the self-report says the criterion is met but the grader disagrees.
     private var hasDrift: Bool {
         verdict.verdict == .notMet && selfReportStatus == "met"
     }
 
+    /// Whether to show the "not reported" placeholder: report was absent AND no status was matched.
+    private var isNotReported: Bool {
+        !reportPresent && selfReportStatus.isEmpty
+    }
+
     private var selfReportIcon: String {
         // Always neutral — never a green checkmark.
+        if isNotReported { return "minus.circle" }
         switch selfReportStatus {
         case "met":         return "circle.dashed"
-        case "not_met":     return "circle.dashed"
+        case "not_met":     return "circle.slash"
         default:            return "questionmark.circle"
         }
     }
 
     private var selfReportAccessibilityLabel: String {
+        if isNotReported { return "not reported" }
         switch selfReportStatus {
         case "met":         return "self-reported met (unverified)"
-        case "not_met":     return "self-reported not met"
+        case "not_met":     return "self-reported not met (unverified)"
         case "cannot_verify": return "self-reported: cannot verify"
         default:            return "self-report unknown"
         }

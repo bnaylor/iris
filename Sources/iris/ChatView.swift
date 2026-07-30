@@ -229,11 +229,11 @@ struct ChatView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    if let report = conv.lastGoalCompletionReport {
+                    if conv.lastGoalCompletionReport != nil || conv.lastGoalEvaluation != nil {
                         CompletionReportChip(
                             state: state,
                             conversationId: conv.id,
-                            report: report,
+                            report: conv.lastGoalCompletionReport,
                             evaluation: conv.lastGoalEvaluation
                         )
                         .transition(.move(edge: .bottom).combined(with: .opacity))
