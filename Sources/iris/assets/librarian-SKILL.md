@@ -31,6 +31,8 @@ Store design artifacts and reviews strictly in date-prefixed kebab-case files un
 - **Implementation Plans**: `docs/plans/YYYY-MM-DD-feature-name.md`
 - **Peer & Architecture Reviews**: `docs/reviews/YYYY-MM-DD-feature-name-review.md`
 
+*Note on Directory Trees:* Ensure parent subdirectories (`docs/specs/`, `docs/plans/`, `docs/reviews/`, `scripts/`, `tests/`) are created or verified before writing files. `write_file` creates parent directories automatically; for shell operations, run `mkdir -p <dir>` first.
+
 ### 4. No Loose Root Files ("No Ants")
 - Do NOT write generic temporary scripts (`test.py`, `script.sh`, `temp.md`, `foo.txt`) into root `./`.
 - If a temporary script is necessary for verification, write it under `scripts/` or a workspace-scoped `tmp/` directory, and clean it up when completed.

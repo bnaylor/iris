@@ -40,7 +40,7 @@ struct LibrarianSkillTests {
         let skills = await SkillManager.shared.listSkills(paths: paths)
         let librarian = skills.first { $0.folderName == "librarian" || $0.name == "librarian" }
         #expect(librarian != nil)
-        #expect(librarian?.description.contains("file and workspace organization") == true)
+        #expect(librarian?.description.contains("Organizes workspace files") == true)
 
         let body = await SkillManager.shared.readSkillBody(name: "librarian", paths: paths)
         #expect(body != nil)
