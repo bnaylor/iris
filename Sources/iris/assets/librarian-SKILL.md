@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Basic file and workspace organization guidelines. Enforces clean directory structures, sensible naming, and repository hygiene across workspaces.
+description: Organizes workspace files, enforces clean directory structures, and maintains repository hygiene. Use whenever creating new files or scripts, setting up project directories (src/, docs/, scripts/, tests/), writing design specs or implementation plans, or cloning external repositories.
 type: skill
 timestamp: 2026-07-30T00:00:00Z
 ---
