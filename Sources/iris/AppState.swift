@@ -145,6 +145,11 @@ class AppState {
     var updateCheckStatusMessage: String?
     var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
 
+    /// Fired by the `submit_evaluation` handler in the EVALUATOR's own conversation; the closure
+    /// (registered by GoalEvaluator) reconciles the verdict and writes it to the ORIGINATING
+    /// conversation. Keyed by the evaluator conversation id. Mirrors `onSubagentComplete`.
+    var onEvaluationComplete: [UUID: @Sendable (JSONValue?) -> Void] = [:]
+
     /// Reference count of in-flight "thinking" work. `isThinking` is derived from this.
     private var thinkingCount = 0
     /// Tracked UI-initiated tasks so they can be cancelled (e.g. when a conversation is deleted).
@@ -634,6 +639,13 @@ class AppState {
     func dismissCompletionReport(for conversationId: UUID) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
         conversations[idx].lastGoalCompletionReport = nil
+        saveConversations()
+    }
+
+    /// Writes a finished evaluation onto the originating conversation (marks it graded/failed).
+    func recordEvaluation(for conversationId: UUID, _ evaluation: GoalEvaluation) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].lastGoalEvaluation = evaluation
         saveConversations()
     }
 

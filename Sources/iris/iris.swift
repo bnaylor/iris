@@ -799,6 +799,14 @@ actor IrisEngine {
                 await processInput(reflectionNotice, source: "System", conversationId: conversationId)
             }
             result = "Goal marked as complete. Summary: \(summary)"
+        } else if functionCall.name == "submit_evaluation" {
+            let payload = functionCall.args["evaluations"]
+            await MainActor.run {
+                localState?.onEvaluationComplete[conversationId]?(JSONValue.object(["evaluations": payload ?? .null]))
+                localState?.onEvaluationComplete[conversationId] = nil
+                localState?.clearGoal(for: conversationId)   // end the evaluator's own loop (mirrors goal_complete)
+            }
+            result = "Evaluation submitted."
         } else if functionCall.name == "amend_goal_contract" {
             let action = functionCall.args["action"]?.stringValue ?? "add"
             let text = functionCall.args["criterion"]?.stringValue ?? ""
