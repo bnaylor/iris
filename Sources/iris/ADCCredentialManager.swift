@@ -29,7 +29,7 @@ actor ADCCredentialManager {
             return gcloudToken
         }
         
-        throw APIError(message: "Application Default Credentials (ADC) token not found. Please run 'gcloud auth application-default login --scopes=\"https://www.googleapis.com/auth/cloud-platform\"' in terminal.")
+        throw APIError(message: "Application Default Credentials (ADC) token not found. Please run 'gcloud auth application-default login --scopes=\"https://www.googleapis.com/auth/cloud-platform\"' (or with --client-id-file for generative-language scope) in terminal.")
     }
     
     func getQuotaProject() async -> String? {
