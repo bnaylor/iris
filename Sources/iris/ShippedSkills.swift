@@ -23,6 +23,8 @@ enum ShippedSkills {
                      target: paths.skillsDir.appendingPathComponent("sandbox-usage/SKILL.md")),
             SeedItem(content: bundledText("google-workspace-SKILL"),
                      target: paths.skillsDir.appendingPathComponent("google-workspace/SKILL.md")),
+            SeedItem(content: bundledText("librarian-SKILL"),
+                     target: paths.skillsDir.appendingPathComponent("librarian/SKILL.md")),
         ], ensuring: paths)
     }
 
