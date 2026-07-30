@@ -20,7 +20,8 @@ final class GoalEvaluator: @unchecked Sendable {
         }
 
         // Fresh engine, evaluator principal. It never sees the working transcript.
-        let engine = IrisEngine(state: app, tier: .hard, principal: .evaluator, roleLabel: "evaluator", client: client)
+        let checks = contract.criteria.compactMap { $0.kind == .executable ? $0.check : nil }
+        let engine = IrisEngine(state: app, tier: .hard, principal: .evaluator, roleLabel: "evaluator", client: client, evaluatorChecks: checks)
         let prompt = Self.systemPrompt(for: contract)
         await engine.setSystemPrompt(text: prompt)
 

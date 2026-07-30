@@ -751,7 +751,8 @@ class AppState {
     
     func requestApproval(toolName: String, details: String, workspace: String? = nil,
                          conversationId: UUID? = nil, origin: String = "Main agent",
-                         inSandbox: Bool = false) async -> Bool {
+                         inSandbox: Bool = false, callerRole: VibecopCallerRole = .agent,
+                         allowedCommands: [String] = []) async -> Bool {
         // Fast path: deterministic permissions.
         if PermissionManager.shared.isAllowed(toolName: toolName, details: details, workspace: workspace) {
             return true
@@ -779,7 +780,7 @@ class AppState {
             }
             
             let decision = try await withTimeout(seconds: timeout) {
-                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox)
+                try await VibecopService.shared.evaluateAction(toolName: toolName, details: details, workspace: workspace, inSandbox: inSandbox, callerRole: callerRole, allowedCommands: allowedCommands)
             }
             if decision.decision == "APPROVE" { return true }
             if decision.decision == "DENY" { return false }

@@ -11,6 +11,7 @@ actor IrisEngine {
     var modelTier: ModelTier
     let principal: Principal
     let roleLabel: String?
+    let evaluatorChecks: [String]
 
     /// Conversations already shown the "no sandbox runtime" fallback notice (deduped).
     private var warnedNoRuntime: Set<UUID> = []
@@ -19,12 +20,13 @@ actor IrisEngine {
     // Since AppState owns IrisEngine, we can pass it when we start or process.
     private weak var state: AppState?
 
-    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil, client: any LLMClientProtocol = LLMClient()) {
+    init(state: AppState, tier: ModelTier = .medium, principal: Principal = .main, roleLabel: String? = nil, client: any LLMClientProtocol = LLMClient(), evaluatorChecks: [String] = []) {
         self.state = state
         self.modelTier = tier
         self.principal = principal
         self.roleLabel = roleLabel
         self.client = client
+        self.evaluatorChecks = evaluatorChecks
         systemPrompt = nil
     }
 
@@ -847,7 +849,9 @@ actor IrisEngine {
             if needsApproval {
                 let approved = await localState?.requestApproval(
                     toolName: functionCall.name, details: details, workspace: workspacePath,
-                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox) ?? false
+                    conversationId: conversationId, origin: approvalOrigin, inSandbox: useSandbox,
+                    callerRole: principal == .evaluator ? .evaluator : .agent,
+                    allowedCommands: evaluatorChecks) ?? false
                 if approved {
                     result = await executeToolWithHooks(name: functionCall.name, args: functionCall.args, cwd: workspacePath, conversationId: conversationId, useSandbox: useSandbox)
                 } else {

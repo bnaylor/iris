@@ -5,6 +5,11 @@ struct VibecopDecision: Codable {
     var reason: String
 }
 
+enum VibecopCallerRole: Sendable {
+    case agent
+    case evaluator
+}
+
 final class VibecopService: @unchecked Sendable {
     static let shared = VibecopService()
     
@@ -25,7 +30,22 @@ final class VibecopService: @unchecked Sendable {
     }
     """
     
-    func evaluateAction(toolName: String, details: String, workspace: String?, inSandbox: Bool = false) async throws -> VibecopDecision {
+    static func evaluatorLayerText(allowedCommands: [String]) -> String {
+        let allow = allowedCommands.isEmpty ? "(none declared)" : allowedCommands.map { "`\($0)`" }.joined(separator: ", ")
+        return """
+
+
+            CALLER ROLE: EVALUATOR. The caller is grading finished work against a fixed contract.
+            Its ONLY legitimate actions are reading files and running these declared check commands:
+            \(allow).
+            APPROVE reads and the declared checks (and their obvious sub-invocations). ESCALATE or
+            DENY anything that writes, edits, deletes, installs, reaches the network, or runs a
+            command outside that set — the evaluator must not modify the work it is grading.
+            """
+    }
+
+    func evaluateAction(toolName: String, details: String, workspace: String?, inSandbox: Bool = false,
+                        callerRole: VibecopCallerRole = .agent, allowedCommands: [String] = []) async throws -> VibecopDecision {
         guard ConfigManager.shared.enableVibecop else {
             return VibecopDecision(decision: "APPROVE", reason: "Vibecop is disabled in settings.")
         }
@@ -61,6 +81,10 @@ final class VibecopService: @unchecked Sendable {
             genuinely risky actions: outbound network connections to new/unknown hosts, attempts
             to escape the container or escalate privilege, or reaching host-bridged resources.
             """
+        }
+
+        if callerRole == .evaluator {
+            prompt += VibecopService.evaluatorLayerText(allowedCommands: allowedCommands)
         }
 
         prompt += "\n\nProposed Action:\nTool: \(toolName)\nDetails: \(details)"
