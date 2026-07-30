@@ -807,7 +807,10 @@ actor IrisEngine {
                 // stored client property (from init(...client:)) — capture it into a local first
                 // since the detached task can't touch actor-isolated state.
                 let graderClient = self.client
-                Task.detached { await GoalEvaluator.shared.evaluate(contract: c, workspace: gradeWorkspace, originatingConversationId: conversationId, client: graderClient) }
+                let graderApp = localState
+                if let graderApp {
+                    Task.detached { await GoalEvaluator.shared.evaluate(contract: c, workspace: gradeWorkspace, originatingConversationId: conversationId, app: graderApp, client: graderClient) }
+                }
             }
             await pushToUI(role: .agent, text: summary, conversationId: conversationId)
             if principal == .main {

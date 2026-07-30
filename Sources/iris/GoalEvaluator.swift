@@ -9,8 +9,7 @@ final class GoalEvaluator: @unchecked Sendable {
     /// `client` is injectable so tests can drive the grader with a `ScriptedLLMClient` instead of
     /// hitting the network.
     func evaluate(contract: GoalContract, workspace: String?, originatingConversationId originId: UUID,
-                  client: any LLMClientProtocol = LLMClient()) async {
-        let app = await MainActor.run { AppState.shared }
+                  app: AppState, client: any LLMClientProtocol = LLMClient()) async {
 
         let evalId = UUID()
         await MainActor.run {
@@ -49,10 +48,12 @@ final class GoalEvaluator: @unchecked Sendable {
                                   source: "System", conversationId: evalId)
 
         // Safety net: if the loop ended without submit_evaluation, mark the evaluation failed.
-        let stillVerifying = await MainActor.run { () -> Bool in
-            app.conversations.first { $0.id == originId }?.lastGoalEvaluation?.status == .verifying
-        }
-        if stillVerifying {
+        // Gate on the callback slot: submit_evaluation nils it synchronously on the MainActor at
+        // submit time, so a non-nil slot here means the grader never submitted.
+        await MainActor.run {
+            guard app.onEvaluationComplete[evalId] != nil else { return }
+            // Grader did not submit — record a failed evaluation.
+            let originalStartedAt = app.conversations.first { $0.id == originId }?.lastGoalEvaluation?.startedAt ?? Date()
             let failed = GoalEvaluation(
                 status: .failed,
                 criteria: contract.criteria.map {
@@ -61,11 +62,10 @@ final class GoalEvaluator: @unchecked Sendable {
                                      evidence: "Evaluator ended without submitting a verdict.",
                                      method: $0.kind == .executable ? .check : ($0.kind == .qualitative ? .judge : .human))
                 },
-                startedAt: Date(), completedAt: Date())
-            await MainActor.run {
-                app.recordEvaluation(for: originId, failed)
-                app.onEvaluationComplete[evalId] = nil
-            }
+                startedAt: originalStartedAt, completedAt: Date())
+            app.recordEvaluation(for: originId, failed)
+            app.onEvaluationComplete[evalId] = nil
+            app.deleteConversation(evalId)
         }
     }
 
