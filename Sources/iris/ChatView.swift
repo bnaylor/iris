@@ -230,8 +230,13 @@ struct ChatView: View {
                     }
 
                     if let report = conv.lastGoalCompletionReport {
-                        CompletionReportChip(state: state, conversationId: conv.id, report: report)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        CompletionReportChip(
+                            state: state,
+                            conversationId: conv.id,
+                            report: report,
+                            evaluation: conv.lastGoalEvaluation
+                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
                     SpectrumLine(active: state.isThinking)

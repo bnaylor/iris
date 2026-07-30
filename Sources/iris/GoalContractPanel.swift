@@ -352,14 +352,17 @@ private struct CompletionReportItem: Identifiable {
 /// Renders the model's per-criterion completion self-report as a standalone chip, shown
 /// after a goal finishes (the contract itself is cleared on completion, so this must not
 /// depend on `goalContract`). Always labeled UNVERIFIED — never a verified affordance.
+/// When `evaluation` is provided the chip expands to a two-column drift view.
 struct CompletionReportChip: View {
     var state: AppState
     let conversationId: UUID
     let report: JSONValue
+    /// Optional grader evaluation; when present the chip shows the two-column drift view.
+    var evaluation: GoalEvaluation? = nil
     var body: some View {
         CompletionReportSection(report: report, onDismiss: {
             state.dismissCompletionReport(for: conversationId)
-        })
+        }, evaluation: evaluation)
             .padding(12)
             .background(.thinMaterial)
             .clipShape(.rect(cornerRadius: 10))
@@ -373,10 +376,15 @@ struct CompletionReportChip: View {
 }
 
 /// Renders the model's per-criterion self-report as explicitly UNVERIFIED.
+/// When `evaluation` is present each row shows a two-column drift layout:
+///   left  = self-report (neutral, never green)
+///   right = grader verdict (colored) + evidence, with a ⚠ drift badge on disagreement.
 struct CompletionReportSection: View {
     let report: JSONValue
     /// When set, a ✕ appears in the header to dismiss the report chip.
     var onDismiss: (() -> Void)? = nil
+    /// Optional grader result. When nil the section falls back to single-column self-report.
+    var evaluation: GoalEvaluation? = nil
 
     private var items: [CompletionReportItem] {
         guard case .array(let elements) = report else { return [] }
@@ -398,6 +406,23 @@ struct CompletionReportSection: View {
         }
     }
 
+    /// Best-effort lookup of the self-report status for a given criterion text.
+    /// Matches by lowercased text prefix (the self-report text may not be verbatim).
+    private func selfReportStatus(for criterionText: String) -> String {
+        let needle = criterionText.lowercased()
+        // Exact match first, then prefix/contains.
+        if let exact = items.first(where: { $0.criterion.lowercased() == needle }) {
+            return exact.status
+        }
+        if let partial = items.first(where: {
+            needle.contains($0.criterion.lowercased()) ||
+            $0.criterion.lowercased().contains(needle)
+        }) {
+            return partial.status
+        }
+        return ""
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -405,7 +430,9 @@ struct CompletionReportSection: View {
                     .foregroundStyle(.orange)
                     .font(.caption)
                     .accessibilityHidden(true)
-                Text("COMPLETION SELF-REPORT · UNVERIFIED")
+                Text(evaluation != nil
+                     ? "COMPLETION REPORT · SELF-REPORT vs GRADER"
+                     : "COMPLETION SELF-REPORT · UNVERIFIED")
                     .font(.caption2)
                     .bold()
                     .foregroundStyle(.secondary)
@@ -423,28 +450,217 @@ struct CompletionReportSection: View {
             .padding(.horizontal, 12)
             .padding(.top, 10)
 
-            if items.isEmpty {
-                Text("No criterion statuses found in report.")
+            if let evaluation {
+                // Two-column drift view — spine is the grader's criteria list.
+                if evaluation.criteria.isEmpty {
+                    Text("No criteria in evaluation.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 12)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(evaluation.criteria) { verdict in
+                            DriftCriterionRow(
+                                verdict: verdict,
+                                selfReportStatus: selfReportStatus(for: verdict.criterionText),
+                                evaluationStatus: evaluation.status
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
+            } else {
+                // Fallback: single-column self-report (no grader result yet).
+                if items.isEmpty {
+                    Text("No criterion statuses found in report.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 12)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(items) { item in
+                            CompletionReportItemRow(item: item)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
+
+                Text("Independent verification arrives with the drift evaluator (not yet built).")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 12)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(items) { item in
-                        CompletionReportItemRow(item: item)
-                    }
-                }
-                .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
             }
-
-            Text("Independent verification arrives with the drift evaluator (not yet built).")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
         }
     }
 }
+
+// MARK: - Drift criterion row (two-column: self-report LEFT, grader RIGHT)
+
+/// A single row in the drift view. Shows criterion text + kind badge, then a left column
+/// with the neutral self-report icon, and a right column with the grader's colored verdict.
+/// A ⚠ drift badge appears when the self-report claims met but the grader says notMet.
+private struct DriftCriterionRow: View {
+    let verdict: CriterionVerdict
+    /// Raw status string from the agent's self-report JSON ("met"/"not_met"/…), or "" if unknown.
+    let selfReportStatus: String
+    /// Overall evaluation status — used to decide whether to show a verifying spinner.
+    let evaluationStatus: EvaluationStatus
+
+    /// True when the self-report says the criterion is met but the grader disagrees.
+    private var hasDrift: Bool {
+        verdict.verdict == .notMet && selfReportStatus == "met"
+    }
+
+    private var selfReportIcon: String {
+        // Always neutral — never a green checkmark.
+        switch selfReportStatus {
+        case "met":         return "circle.dashed"
+        case "not_met":     return "circle.dashed"
+        default:            return "questionmark.circle"
+        }
+    }
+
+    private var selfReportAccessibilityLabel: String {
+        switch selfReportStatus {
+        case "met":         return "self-reported met (unverified)"
+        case "not_met":     return "self-reported not met"
+        case "cannot_verify": return "self-reported: cannot verify"
+        default:            return "self-report unknown"
+        }
+    }
+
+    private var kindLabel: String {
+        switch verdict.kind {
+        case .executable:  return "exec"
+        case .qualitative: return "qual"
+        case .humanJudged: return "human"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Header: criterion text + kind badge + optional drift badge.
+            HStack(alignment: .top, spacing: 6) {
+                Text(verdict.criterionText)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Text(kindLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(.rect(cornerRadius: 3))
+                if hasDrift {
+                    Label("drift", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.orange)
+                        .labelStyle(.titleAndIcon)
+                        .accessibilityLabel("Drift detected: self-report disagrees with grader")
+                }
+            }
+
+            // Two-column verdict row.
+            HStack(alignment: .top, spacing: 8) {
+                // LEFT — self-report (neutral)
+                HStack(spacing: 4) {
+                    Image(systemName: selfReportIcon)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(selfReportAccessibilityLabel)
+                    Text("self")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // RIGHT — grader verdict (colored)
+                graderColumn
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 2)
+
+            // Grader evidence (shown below the two-column row when present and graded).
+            if evaluationStatus == .graded, !verdict.evidence.isEmpty {
+                Text(verdict.evidence)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 1)
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(.rect(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private var graderColumn: some View {
+        switch evaluationStatus {
+        case .verifying:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Grader verifying")
+                Text("verifying…")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        case .graded, .failed:
+            HStack(spacing: 4) {
+                switch verdict.verdict {
+                case .met:
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .accessibilityLabel("Grader: met")
+                case .notMet:
+                    Image(systemName: "xmark.octagon.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Grader: not met")
+                case .cannotVerify:
+                    Image(systemName: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Grader: cannot verify")
+                case .humanPending:
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Awaiting human judgment")
+                }
+                verdictLabel
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var verdictLabel: some View {
+        switch verdict.verdict {
+        case .met:
+            Text("met")
+                .font(.caption2)
+                .foregroundStyle(.green)
+        case .notMet:
+            Text("not met")
+                .font(.caption2)
+                .foregroundStyle(.red)
+        case .cannotVerify:
+            Text("cannot verify")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        case .humanPending:
+            Text("your call")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Single-column self-report row (used when no evaluation is available)
 
 private struct CompletionReportItemRow: View {
     let item: CompletionReportItem
