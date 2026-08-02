@@ -13,8 +13,17 @@ struct SettingsView: View {
     @State private var updateCheckStatusMessage: String?
     
     @State private var vibecopTestStatus: String?
+    @State private var isTestingVibecopModel = false
     @State private var tier2TestStatus: String?
     @State private var tier3TestStatus: String?
+    
+    // Ollama model discovery state
+    @State private var ollamaDaemonRunning: Bool? = nil  // nil = unchecked
+    @State private var ollamaInstalledModels: [String] = []
+    @State private var isProbingOllama = false
+    @State private var isPullingOllamaModel = false
+    @State private var ollamaPullProgress: String?
+    @State private var ollamaPullError: String?
     
     var body: some View {
         TabView {
@@ -175,24 +184,181 @@ struct SettingsView: View {
                                         .font(.caption)
                                         .foregroundColor(.green)
                                     
-                                    Button("Test Model") {
-                                        Task {
-                                            do {
-                                                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                vibecopTestStatus = "✅ Success"
-                                            } catch {
-                                                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                    if isTestingVibecopModel {
+                                        ProgressView().scaleEffect(0.6)
+                                        Text("Testing…").font(.caption).foregroundColor(.secondary)
+                                    } else if let status = vibecopTestStatus {
+                                        Text(status).font(.caption)
+                                            .foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                        if status.starts(with: "❌") {
+                                            Button("Retry") {
+                                                vibecopTestStatus = nil
+                                                isTestingVibecopModel = true
+                                                Task {
+                                                    do {
+                                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                        vibecopTestStatus = "✅ Model tested successfully"
+                                                    } catch {
+                                                        vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                                    }
+                                                    isTestingVibecopModel = false
+                                                }
+                                            }
+                                            .buttonStyle(.link)
+                                            .font(.caption)
+                                        }
+                                    } else {
+                                        Button("Test Model") {
+                                            isTestingVibecopModel = true
+                                            Task {
+                                                do {
+                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                    vibecopTestStatus = "✅ Model tested successfully"
+                                                } catch {
+                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                                }
+                                                isTestingVibecopModel = false
                                             }
                                         }
+                                        .buttonStyle(.link)
+                                        .font(.caption)
                                     }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
+                                }
+                            }
+                        } else if config.vibecopEngine == "ollama" {
+                            // Ollama-specific: probe daemon, then list models, offer pull
+                            HStack {
+                                if isProbingOllama && ollamaDaemonRunning == nil {
+                                    ProgressView().scaleEffect(0.6)
+                                    Text("Checking Ollama daemon…").font(.caption).foregroundColor(.secondary)
+                                } else if ollamaDaemonRunning == false {
+                                    Text("Ollama daemon not running").font(.caption).foregroundColor(.red)
+                                } else if ollamaInstalledModels.isEmpty {
+                                    Text("No models installed").font(.caption).foregroundColor(.secondary)
+                                } else {
+                                    Picker("Ollama Model", selection: $config.vibecopModel) {
+                                        ForEach(ollamaInstalledModels, id: \.self) { name in
+                                            Text(name).tag(name)
+                                        }
+                                    }
+                                }
+                                
+                                Button {
+                                    Task { await probeOllamaModels() }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Refresh installed Ollama models")
+                                .disabled(isProbingOllama)
+                            }
+                            .onAppear {
+                                if ollamaDaemonRunning == nil && !isProbingOllama {
+                                    Task { await probeOllamaModels() }
+                                }
+                            }
+                            
+                            // Daemon-down banner
+                            if ollamaDaemonRunning == false {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("⚠️ The Ollama daemon is not reachable at localhost:11434.")
+                                        .font(.caption).foregroundColor(.orange)
+                                    Text("Start it with: ollama serve")
+                                        .font(.caption).monospaced().foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            
+                            // Offer to pull the default model if not installed
+                            if ollamaDaemonRunning == true {
+                                let defaultModel = "gemma4:12b"
+                                if !ollamaInstalledModels.contains(defaultModel) {
+                                    HStack {
+                                        if isPullingOllamaModel {
+                                            ProgressView().scaleEffect(0.6)
+                                            if let progress = ollamaPullProgress {
+                                                Text(progress).font(.caption).foregroundColor(.secondary)
+                                            }
+                                        } else {
+                                            Button("Pull \(defaultModel)") {
+                                                Task { await pullOllamaDefaultModel(defaultModel) }
+                                            }
+                                            .disabled(isProbingOllama)
+                                            Text("Recommended for Vibecop — small, fast, capable.")
+                                                .font(.caption).foregroundColor(.secondary)
+                                        }
+                                    }
                                     
-                                    if let status = vibecopTestStatus {
-                                        Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    if let error = ollamaPullError {
+                                        Text("Error: \(error)").font(.caption).foregroundColor(.red)
+                                    }
+                                }
+                            }
+                            
+                            HStack {
+                                if ollamaDaemonRunning == false {
+                                    Text("⏳ Waiting for Ollama daemon…").font(.caption).foregroundColor(.secondary)
+                                } else if ollamaInstalledModels.contains(config.vibecopModel) {
+                                    Text("✅ Model is available in Ollama.")
+                                        .foregroundColor(.green)
+                                        .font(.caption)
+                                } else if !config.vibecopModel.isEmpty && !ollamaInstalledModels.isEmpty {
+                                    Text("⚠️ \"\(config.vibecopModel)\" not found in Ollama.")
+                                        .foregroundColor(.orange)
+                                        .font(.caption)
+                                }
+                                
+                                if ollamaDaemonRunning == true {
+                                    if isTestingVibecopModel {
+                                        ProgressView().scaleEffect(0.6)
+                                        Text("Testing…").font(.caption).foregroundColor(.secondary)
+                                    } else if let status = vibecopTestStatus {
+                                        Text(status).font(.caption)
+                                            .foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                        if status.starts(with: "❌") {
+                                            Button("Retry") {
+                                                vibecopTestStatus = nil
+                                                isTestingVibecopModel = true
+                                                Task {
+                                                    do {
+                                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                        vibecopTestStatus = "✅ Model tested successfully"
+                                                    } catch {
+                                                        vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                                    }
+                                                    isTestingVibecopModel = false
+                                                }
+                                            }
+                                            .buttonStyle(.link)
+                                            .font(.caption)
+                                        }
+                                    } else {
+                                        Button("Test Model") {
+                                            isTestingVibecopModel = true
+                                            Task {
+                                                do {
+                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                    vibecopTestStatus = "✅ Model tested successfully"
+                                                } catch {
+                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                                }
+                                                isTestingVibecopModel = false
+                                            }
+                                        }
+                                        .buttonStyle(.link)
+                                        .font(.caption)
                                     }
                                 }
                             }
@@ -204,25 +370,51 @@ struct SettingsView: View {
                                 Text("✅ Assuming model is ready via external daemon.")
                                     .foregroundColor(.green)
                                     .font(.caption)
-                                    
-                                Button("Test Model") {
-                                    Task {
-                                        do {
-                                            let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                            let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                            let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                            _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                            vibecopTestStatus = "✅ Success"
-                                        } catch {
-                                            vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                
+                                if isTestingVibecopModel {
+                                    ProgressView().scaleEffect(0.6)
+                                    Text("Testing…").font(.caption).foregroundColor(.secondary)
+                                } else if let status = vibecopTestStatus {
+                                    Text(status).font(.caption)
+                                        .foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    if status.starts(with: "❌") {
+                                        Button("Retry") {
+                                            vibecopTestStatus = nil
+                                            isTestingVibecopModel = true
+                                            Task {
+                                                do {
+                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                    vibecopTestStatus = "✅ Model tested successfully"
+                                                } catch {
+                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                                }
+                                                isTestingVibecopModel = false
+                                            }
+                                        }
+                                        .buttonStyle(.link)
+                                        .font(.caption)
+                                    }
+                                } else {
+                                    Button("Test Model") {
+                                        isTestingVibecopModel = true
+                                        Task {
+                                            do {
+                                                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                                                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                                                vibecopTestStatus = "✅ Model tested successfully"
+                                            } catch {
+                                                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+                                            }
+                                            isTestingVibecopModel = false
                                         }
                                     }
-                                }
-                                .buttonStyle(.link)
-                                .font(.caption)
-                                
-                                if let status = vibecopTestStatus {
-                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                    .buttonStyle(.link)
+                                    .font(.caption)
                                 }
                             }
                         }
@@ -640,6 +832,62 @@ struct SettingsView: View {
                 case .error(let msg):
                     self.updateCheckStatusMessage = "Failed to check for updates: \(msg)"
                 }
+            }
+        }
+    }
+    
+    // MARK: - Ollama Helpers
+    
+    private func probeOllamaModels() async {
+        isProbingOllama = true
+        ollamaPullError = nil
+        ollamaDaemonRunning = nil  // reset while probing
+        
+        let reachable = await OllamaEngine.isDaemonReachable()
+        await MainActor.run {
+            self.ollamaDaemonRunning = reachable
+        }
+        
+        guard reachable else {
+            await MainActor.run {
+                self.ollamaInstalledModels = []
+                self.isProbingOllama = false
+            }
+            return
+        }
+        
+        let models = await OllamaEngine.listInstalledModels()
+        await MainActor.run {
+            self.ollamaInstalledModels = models
+            self.isProbingOllama = false
+            // If the current config model isn't in the list and we got results, default to first
+            if !models.isEmpty, !models.contains(config.vibecopModel) {
+                config.vibecopModel = models.first!
+            }
+        }
+    }
+    
+    private func pullOllamaDefaultModel(_ name: String) async {
+        isPullingOllamaModel = true
+        ollamaPullError = nil
+        ollamaPullProgress = "Starting pull of \(name)…"
+        do {
+            try await OllamaEngine.pullModel(name: name) { progress in
+                Task { @MainActor in
+                    self.ollamaPullProgress = progress
+                }
+            }
+            await MainActor.run {
+                self.isPullingOllamaModel = false
+                self.ollamaPullProgress = nil
+                // Refresh the model list after pull
+                Task { await probeOllamaModels() }
+            }
+        } catch {
+            await MainActor.run {
+                self.isPullingOllamaModel = false
+                self.ollamaPullProgress = nil
+                self.ollamaPullError = error.localizedDescription
             }
         }
     }
