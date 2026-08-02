@@ -229,6 +229,13 @@ struct ChatView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
+                    // Top-level pause panel (resume controls). Gated here in ChatView — the same
+                    // pattern as CompletionReportChip below, which re-renders reliably on state change.
+                    if conv.goalContract?.checkpointStatus == .pausedForReview {
+                        CheckpointPauseChip(state: state, conversation: conv)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     // While paused at a checkpoint, the LockedContractChip's pause section already
                     // shows the self-report + verdict, so suppress the standalone chip to avoid a
                     // duplicate. It reappears for a terminal goal_complete (checkpointStatus != paused).
