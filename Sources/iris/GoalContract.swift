@@ -13,6 +13,17 @@ struct Criterion: Codable, Identifiable, Equatable, Sendable {
     var check: String?   // command/test for .executable; nil otherwise
 }
 
+struct Milestone: Codable, Identifiable, Equatable, Sendable {
+    var id = UUID()
+    var title: String
+    var criterionIds: [UUID]
+}
+
+enum CheckpointStatus: String, Codable, Sendable, Equatable {
+    case running          // loop active (or no ladder)
+    case pausedForReview  // reached a checkpoint; auto-reprompt suppressed, awaiting the human
+}
+
 struct ContractChange: Codable, Equatable, Sendable {
     var date: Date = Date()
     var rationale: String
@@ -30,11 +41,64 @@ struct GoalContract: Codable, Equatable, Sendable {
     var stopBefore: [String] = []
     var assumptions: [String] = []
     var changeLog: [ContractChange] = []
+    var milestones: [Milestone] = []          // empty ⇒ no ladder ⇒ today's single-terminal behavior
+    var currentMilestone: Int = 0             // index of the milestone being worked
+    var checkpointStatus: CheckpointStatus = .running
     var state: ContractState = .draft
 
     var isLocked: Bool { state == .locked }
 
     mutating func lock() { state = .locked }
+
+    var hasLadder: Bool { !milestones.isEmpty }
+    var isFinalMilestone: Bool { currentMilestone >= milestones.count - 1 }
+
+    func currentMilestoneCriteria() -> [Criterion] {
+        guard hasLadder, milestones.indices.contains(currentMilestone) else { return criteria }
+        let ids = Set(milestones[currentMilestone].criterionIds)
+        return criteria.filter { ids.contains($0.id) }
+    }
+
+    /// A locked copy whose criteria are the cumulative set across milestones 0...n, with the ladder
+    /// stripped, ready to hand to GoalEvaluator.evaluate() unchanged (spec §6).
+    func projectedContract(throughMilestone n: Int) -> GoalContract {
+        let clamped = max(0, min(n, milestones.count - 1))
+        let ids = Set(milestones.prefix(clamped + 1).flatMap { $0.criterionIds })
+        var copy = self
+        copy.criteria = criteria.filter { ids.contains($0.id) }
+        copy.milestones = []
+        copy.currentMilestone = 0
+        copy.state = .locked
+        return copy
+    }
+
+    /// True iff the ladder is a disjoint cover of `criteria`. An empty ladder is valid (no ladder).
+    func ladderIsValidPartition() -> Bool {
+        guard hasLadder else { return true }
+        let assigned = milestones.flatMap { $0.criterionIds }
+        let assignedSet = Set(assigned)
+        if assigned.count != assignedSet.count { return false }   // a criterion in two milestones
+        return assignedSet == Set(criteria.map { $0.id })          // covering, no stray ids
+    }
+
+    /// Repairs a hand-edited/legacy ladder: drops ids with no criterion, folds any unassigned
+    /// criteria into an implicit final milestone, drops empty milestones, clamps currentMilestone.
+    func normalizedLadder() -> GoalContract {
+        var copy = self
+        guard copy.hasLadder else { copy.currentMilestone = 0; return copy }
+        let realIds = Set(copy.criteria.map { $0.id })
+        for i in copy.milestones.indices {
+            copy.milestones[i].criterionIds = copy.milestones[i].criterionIds.filter { realIds.contains($0) }
+        }
+        let assigned = Set(copy.milestones.flatMap { $0.criterionIds })
+        let unassigned = copy.criteria.map { $0.id }.filter { !assigned.contains($0) }
+        if !unassigned.isEmpty {
+            copy.milestones.append(Milestone(title: "Remaining", criterionIds: unassigned))
+        }
+        copy.milestones.removeAll { $0.criterionIds.isEmpty }
+        copy.currentMilestone = copy.milestones.isEmpty ? 0 : max(0, min(copy.currentMilestone, copy.milestones.count - 1))
+        return copy
+    }
 
     /// The ONLY sanctioned edit to criteria. On a locked contract a non-empty rationale is
     /// mandatory (edit rejected otherwise) and the change is recorded in the change-log.
