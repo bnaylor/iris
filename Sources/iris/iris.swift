@@ -695,7 +695,10 @@ actor IrisEngine {
             return (nil, 0)
         }
         
-        if let _ = activeGoalResult.0 {
+        let pausedForReview = await MainActor.run {
+            localState?.conversations.first(where: { $0.id == conversationId })?.goalContract?.checkpointStatus == .pausedForReview
+        }
+        if let _ = activeGoalResult.0, !pausedForReview {
             if activeGoalResult.1 >= ConfigManager.shared.maxGoalIterations {
                 await softStopWithSummary(conversationId: conversationId,
                                           reason: "reached the \(ConfigManager.shared.maxGoalIterations)-iteration limit")
