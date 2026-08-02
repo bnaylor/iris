@@ -268,7 +268,7 @@ struct LockedContractChip: View {
                             lockedCriteria(contract.criteria)
                         }
                         if contract.checkpointStatus == .pausedForReview {
-                            pauseSection(contract: contract)
+                            pauseEvidence(contract: contract)
                         }
                         if !contract.changeLog.isEmpty {
                             changeLogSection(contract.changeLog)
@@ -277,7 +277,13 @@ struct LockedContractChip: View {
                     .padding(12)
                 }
                 .frame(maxHeight: 340)
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.visible)
+                // Resume controls are pinned OUTSIDE the scroll area so they are always reachable,
+                // even when the checkpoint evidence overflows the chip (mirrors the draft actionBar).
+                if contract.checkpointStatus == .pausedForReview {
+                    Divider()
+                    pauseActionBar(contract: contract)
+                }
             }
             .background(.thinMaterial)
             .clipShape(.rect(cornerRadius: 10))
@@ -335,7 +341,9 @@ struct LockedContractChip: View {
     }
 
     /// The pause-review section: UNVERIFIED self-report + trusted verdict + action buttons.
-    private func pauseSection(contract: GoalContract) -> some View {
+    /// The scrollable half of the pause view: the UNVERIFIED self-report and the trusted grader
+    /// verdict. The resume controls live in `pauseActionBar`, pinned outside the scroll.
+    private func pauseEvidence(contract: GoalContract) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
             // UNVERIFIED self-report
@@ -358,7 +366,13 @@ struct LockedContractChip: View {
                     }
                 }
             }
-            // Steering note
+        }
+    }
+
+    /// The pinned resume controls: a steering field plus Send back / Approve & continue. Always
+    /// visible while paused, regardless of how much evidence is above it.
+    private func pauseActionBar(contract: GoalContract) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("Optional feedback for the agent…", text: $sendBackNote, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
@@ -366,7 +380,6 @@ struct LockedContractChip: View {
                 .padding(6)
                 .background(Color.primary.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-            // Action buttons
             HStack(spacing: 10) {
                 Button("Send back") {
                     let note = sendBackNote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -395,6 +408,7 @@ struct LockedContractChip: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         }
+        .padding(12)
     }
 
     private func lockedObjective(_ text: String) -> some View {

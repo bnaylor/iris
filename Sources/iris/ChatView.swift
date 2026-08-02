@@ -229,7 +229,11 @@ struct ChatView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    if conv.lastGoalCompletionReport != nil || conv.lastGoalEvaluation != nil {
+                    // While paused at a checkpoint, the LockedContractChip's pause section already
+                    // shows the self-report + verdict, so suppress the standalone chip to avoid a
+                    // duplicate. It reappears for a terminal goal_complete (checkpointStatus != paused).
+                    if (conv.lastGoalCompletionReport != nil || conv.lastGoalEvaluation != nil),
+                       conv.goalContract?.checkpointStatus != .pausedForReview {
                         CompletionReportChip(
                             state: state,
                             conversationId: conv.id,
