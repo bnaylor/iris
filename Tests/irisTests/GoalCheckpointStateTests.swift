@@ -53,6 +53,25 @@ struct GoalCheckpointStateTests {
         #expect(conv?.goalContract?.checkpointStatus == .running)
     }
 
+    @Test("resume resets the goal iteration counter")
+    func resumeResetsIterationCounter() {
+        let app = AppState(); let id = UUID(); lockedLadder(on: app, id)
+        // advanceCheckpoint path
+        if let i = app.conversations.firstIndex(where: { $0.id == id }) {
+            app.conversations[i].goalIterationCount = 7
+        }
+        app.setCheckpointPaused(for: id)
+        app.advanceCheckpoint(for: id)
+        #expect(app.conversations.first { $0.id == id }?.goalIterationCount == 0)
+        // holdCheckpoint path
+        if let i = app.conversations.firstIndex(where: { $0.id == id }) {
+            app.conversations[i].goalIterationCount = 5
+        }
+        app.setCheckpointPaused(for: id)
+        app.holdCheckpoint(for: id, feedback: nil)
+        #expect(app.conversations.first { $0.id == id }?.goalIterationCount == 0)
+    }
+
     @Test("setGoalContract normalizes an incomplete ladder on lock")
     func normalizesOnLock() {
         let app = AppState(); let id = UUID()

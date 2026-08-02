@@ -740,6 +740,7 @@ class AppState {
         c.currentMilestone = min(c.currentMilestone + 1, c.milestones.count - 1)
         c.checkpointStatus = .running
         conversations[idx].goalContract = c
+        conversations[idx].goalIterationCount = 0
         saveConversations()
         resumeGoalLoop(for: conversationId, steer: nil)
     }
@@ -750,6 +751,7 @@ class AppState {
               var c = conversations[idx].goalContract else { return }
         c.checkpointStatus = .running
         conversations[idx].goalContract = c
+        conversations[idx].goalIterationCount = 0
         saveConversations()
         resumeGoalLoop(for: conversationId, steer: feedback)
     }
