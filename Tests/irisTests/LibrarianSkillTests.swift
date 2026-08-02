@@ -8,7 +8,7 @@ struct LibrarianSkillTests {
     private func createTempPaths() throws -> (IrisPaths, URL) {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("iris-librarian-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        let paths = IrisPaths(customBaseDir: tempDir)
+        let paths = IrisPaths(root: tempDir)
         try paths.ensureDirectories()
         return (paths, tempDir)
     }

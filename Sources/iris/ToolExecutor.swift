@@ -119,10 +119,10 @@ struct ToolExecutor {
             return await runCommand(command, cwd: cwd, conversationId: conversationId, useSandbox: useSandbox)
         case "read_file":
             guard let path = args["path"]?.stringValue else { return "Error: Missing path" }
-            return await readFile(path)
+            return await readFile(path, cwd: cwd)
         case "write_file":
             guard let path = args["path"]?.stringValue, let content = args["content"]?.stringValue else { return "Error: Missing path or content" }
-            return await writeFile(path, content: content)
+            return await writeFile(path, content: content, cwd: cwd)
         case "register_directory_watcher":
             guard let path = args["path"]?.stringValue, let instructions = args["instructions"]?.stringValue else { return "Error: Missing path or instructions" }
             await WatcherManager.shared.addRule(path: path, instructions: instructions)
@@ -255,8 +255,20 @@ struct ToolExecutor {
         """
     }
 
-    private func readFile(_ path: String) async -> String {
-        let expandedPath = (path as NSString).expandingTildeInPath
+    /// Resolves a tool-supplied path against the bound workspace. Absolute paths and `~` are honored
+    /// as-is; a RELATIVE path is joined onto `cwd` (the conversation's workspace) so it lands in the
+    /// workspace, not the iris process's own working directory. Without a workspace, relative paths
+    /// keep their prior (process-cwd) behavior. This mirrors how `run_command` already uses `cwd`
+    /// and closes the gap where relative `write_file` paths clobbered the iris source tree (#68).
+    static func resolvePath(_ path: String, cwd: String?) -> String {
+        let expanded = (path as NSString).expandingTildeInPath
+        guard !(expanded as NSString).isAbsolutePath, let cwd = cwd else { return expanded }
+        let base = (cwd as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: base).appendingPathComponent(expanded).path
+    }
+
+    private func readFile(_ path: String, cwd: String? = nil) async -> String {
+        let expandedPath = Self.resolvePath(path, cwd: cwd)
         return await Task.detached {
             do {
                 return try String(contentsOfFile: expandedPath, encoding: .utf8)
@@ -265,9 +277,9 @@ struct ToolExecutor {
             }
         }.value
     }
-    
-    private func writeFile(_ path: String, content: String) async -> String {
-        let expandedPath = (path as NSString).expandingTildeInPath
+
+    private func writeFile(_ path: String, content: String, cwd: String? = nil) async -> String {
+        let expandedPath = Self.resolvePath(path, cwd: cwd)
         return await Task.detached {
             do {
                 try content.write(toFile: expandedPath, atomically: true, encoding: .utf8)
