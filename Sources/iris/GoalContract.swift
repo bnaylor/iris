@@ -128,6 +128,20 @@ struct GoalContract: Codable, Equatable, Sendable {
         if !outOfScope.isEmpty { s += "\nOut of scope (do NOT do): \(outOfScope.joined(separator: "; "))\n" }
         if !stopBefore.isEmpty { s += "Stop and ask before: \(stopBefore.joined(separator: "; "))\n" }
         s += "\nChanging these criteria requires the `amend_goal_contract` tool with a rationale — never silently."
+        if hasLadder {
+            let idx = min(max(currentMilestone, 0), milestones.count - 1)
+            let m = milestones[idx]
+            s += "\n## Checkpoint ladder (\(idx + 1) of \(milestones.count))\n"
+            s += "Current checkpoint: \(m.title). Its definition of done is exactly these criteria:\n"
+            for c in currentMilestoneCriteria() { s += "  - \(c.text)\n" }
+            let upcoming = milestones.dropFirst(idx + 1)
+            if !upcoming.isEmpty {
+                s += "Upcoming checkpoints: " + upcoming.map { $0.title }.joined(separator: " → ") + "\n"
+            }
+            s += isFinalMilestone
+                ? "This is the FINAL checkpoint — when its criteria hold, call `goal_complete`.\n"
+                : "When THIS checkpoint's criteria hold, call `reach_checkpoint` (not `goal_complete`) — the run pauses for the user to review before the next checkpoint.\n"
+        }
         return s
     }
 }

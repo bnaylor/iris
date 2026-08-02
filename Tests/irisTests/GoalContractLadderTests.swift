@@ -75,4 +75,17 @@ struct GoalContractLadderTests {
         #expect(!legacyBack.hasLadder)
         #expect(legacyBack.checkpointStatus == .running)
     }
+
+    @Test("oracleText names the current checkpoint and the reach_checkpoint instruction")
+    func oracleLadder() {
+        var c = laddered(); c.lock()
+        let t = c.oracleText()
+        #expect(t.contains("Current checkpoint"))
+        #expect(t.contains("Compile"))                 // current milestone title
+        #expect(t.contains("reach_checkpoint"))
+        #expect(t.contains("goal_complete"))
+        // A no-ladder contract keeps the plain oracle (no checkpoint language).
+        let plain = GoalContract(objective: "x", criteria: [Criterion(text: "y", kind: .qualitative, check: nil)])
+        #expect(!plain.oracleText().contains("Current checkpoint"))
+    }
 }
