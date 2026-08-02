@@ -430,6 +430,28 @@ actor IrisEngine {
             ], required: ["action", "criterion", "rationale"])
         ))
 
+        let ladderContract = await MainActor.run {
+            localState?.conversations.first(where: { $0.id == conversationId })?.goalContract
+        }
+        if principal == .main, let gc = ladderContract, gc.hasLadder, !gc.isFinalMilestone {
+            toolsList.append(FunctionDeclaration(
+                name: "reach_checkpoint",
+                description: "Signal that the CURRENT checkpoint's criteria are satisfied. The run pauses and an independent evaluator grades the work so far; the user then reviews before the next checkpoint. Use goal_complete only at the final checkpoint.",
+                parameters: Schema(
+                    type: "OBJECT",
+                    properties: [
+                        "milestone_summary": Schema(type: "STRING", description: "What you accomplished for this checkpoint."),
+                        "criteria_status": Schema(type: "ARRAY", description: "Per-criterion self-report for this checkpoint. Shown to the user as UNVERIFIED.", items: Schema(type: "OBJECT", properties: [
+                            "criterion": Schema(type: "STRING", description: "The criterion text."),
+                            "status": Schema(type: "STRING", description: "met | not_met | cannot_verify"),
+                            "evidence": Schema(type: "STRING", description: "Brief evidence.")
+                        ], required: ["criterion", "status"]))
+                    ],
+                    required: ["milestone_summary"]
+                )
+            ))
+        }
+
         // Offer an optional `intent` on every tool so the model can attach a one-line
         // rationale the UI shows next to each call (#31). Central + idempotent, so any
         // future tool is covered automatically.
@@ -625,10 +647,15 @@ actor IrisEngine {
                         }
                     }
 
-                    // `goal_complete` returns control to the parent/user, so the turn is over.
-                    // Ending here also prevents an unbounded turn loop if the model keeps
-                    // re-issuing the same tool call.
-                    if toolCalls.contains(where: { $0.name == "goal_complete" }) {
+                    // `goal_complete`, `reach_checkpoint`, and `submit_evaluation` all
+                    // return control to the parent/user (or end the evaluator), so the turn
+                    // is over. Ending here also prevents an unbounded turn loop if the model
+                    // keeps re-issuing the same tool call.
+                    if toolCalls.contains(where: {
+                        $0.name == "goal_complete" ||
+                        $0.name == "reach_checkpoint" ||
+                        $0.name == "submit_evaluation"
+                    }) {
                         turnFinished = true
                     }
 
@@ -823,6 +850,38 @@ actor IrisEngine {
                 await processInput(reflectionNotice, source: "System", conversationId: conversationId)
             }
             result = "Goal marked as complete. Summary: \(summary)"
+        } else if functionCall.name == "reach_checkpoint", principal == .main {
+            let summary = functionCall.args["milestone_summary"]?.stringValue ?? ""
+            let statusReport = functionCall.args["criteria_status"]
+            let contract = await MainActor.run {
+                localState?.conversations.first(where: { $0.id == conversationId })?.goalContract
+            }
+            guard let contract, contract.hasLadder else {
+                result = "No checkpoint ladder is active. Call goal_complete when the goal is finished."
+                return result
+            }
+            if contract.isFinalMilestone {
+                result = "This is the final checkpoint — call `goal_complete` to finish, not `reach_checkpoint`."
+                return result
+            }
+            let projected = contract.projectedContract(throughMilestone: contract.currentMilestone)
+            let gradeWorkspace = workspacePath ?? FileManager.default.currentDirectoryPath
+            await MainActor.run {
+                localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
+                localState?.beginGoalEvaluation(for: conversationId, contract: projected)
+                localState?.setCheckpointPaused(for: conversationId)   // leaves activeGoal set
+            }
+            // Await the grade (unlike goal_complete's detached grade) — the human should see the
+            // verdict before re-engaging. The reprompt guard (Task 6) keeps the loop quiet meanwhile.
+            let graderClient = self.client
+            if let graderApp = localState {
+                await GoalEvaluator.shared.evaluate(contract: projected, workspace: gradeWorkspace,
+                                                    originatingConversationId: conversationId,
+                                                    app: graderApp, client: graderClient)
+            }
+            let ladderPos = "\(contract.currentMilestone + 1) of \(contract.milestones.count)"
+            await pushToUI(role: .agent, text: "Reached checkpoint \(ladderPos): \(summary)\nPaused for your review — approve to continue or send me back.", conversationId: conversationId)
+            result = "Checkpoint \(ladderPos) reached and graded. Paused for user review."
         } else if functionCall.name == "submit_evaluation" {
             let payload = functionCall.args["evaluations"]
             await MainActor.run {
