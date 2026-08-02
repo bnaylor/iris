@@ -12,6 +12,8 @@ struct GoalContractPanel: View {
     @State private var outOfScope: [String]
     @State private var stopBefore: [String]
     @State private var assumptions: [String]
+    /// Milestone ladder being authored. Empty means no checkpoints (single-terminal behavior).
+    @State private var milestones: [Milestone]
 
     init(state: AppState, conversation: Conversation) {
         self.state = state
@@ -30,6 +32,7 @@ struct GoalContractPanel: View {
         _outOfScope = State(initialValue: contract.outOfScope)
         _stopBefore = State(initialValue: contract.stopBefore)
         _assumptions = State(initialValue: contract.assumptions)
+        _milestones = State(initialValue: contract.milestones)
     }
 
     var body: some View {
@@ -101,8 +104,66 @@ struct GoalContractPanel: View {
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
             ForEach($criteria) { $criterion in
-                CriterionRow(criterion: $criterion)
+                CriterionRow(
+                    criterion: $criterion,
+                    milestones: milestones,
+                    selectedMilestoneTitle: milestoneTitle(for: criterion.id),
+                    onMilestoneChange: { newTitle in
+                        assignMilestone(criterionId: criterion.id, toTitle: newTitle)
+                    },
+                    onAddMilestone: { title in
+                        if !milestones.contains(where: { $0.title == title }) {
+                            milestones.append(Milestone(title: title, criterionIds: []))
+                        }
+                        assignMilestone(criterionId: criterion.id, toTitle: title)
+                    }
+                )
             }
+            if !milestones.isEmpty && !draftedContract.ladderIsValidPartition() {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text("Some criteria are unassigned or assigned to multiple milestones.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                .padding(6)
+                .background(Color.orange.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+
+    /// The contract as currently authored in the draft panel (not yet locked).
+    private var draftedContract: GoalContract {
+        GoalContract(
+            objective: objective,
+            criteria: criteria,
+            outOfScope: outOfScope,
+            stopBefore: stopBefore,
+            assumptions: assumptions,
+            milestones: milestones
+        )
+    }
+
+    /// Which milestone title (if any) a criterion is currently assigned to.
+    private func milestoneTitle(for criterionId: UUID) -> String? {
+        milestones.first(where: { $0.criterionIds.contains(criterionId) })?.title
+    }
+
+    /// Rebuild the milestones array so `criterionId` belongs to the milestone with `toTitle`.
+    /// Passing `nil` removes the criterion from whichever milestone currently holds it.
+    /// First-appearance order of milestones is preserved; empty milestones are retained until
+    /// the user explicitly removes them so accidental deselection doesn't destroy the ordering.
+    private func assignMilestone(criterionId: UUID, toTitle: String?) {
+        // Remove from any current milestone.
+        for i in milestones.indices {
+            milestones[i].criterionIds.removeAll { $0 == criterionId }
+        }
+        guard let title = toTitle else { return }
+        if let idx = milestones.firstIndex(where: { $0.title == title }) {
+            milestones[idx].criterionIds.append(criterionId)
         }
     }
 
@@ -147,6 +208,7 @@ struct GoalContractPanel: View {
 
             Spacer()
 
+            let ladderOk = milestones.isEmpty || draftedContract.ladderIsValidPartition()
             Button("Approve & Lock") {
                 approveAndLock()
             }
@@ -155,8 +217,9 @@ struct GoalContractPanel: View {
             .font(.subheadline.bold())
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .background(Color.irisIndigo)
+            .background(ladderOk ? Color.irisIndigo : Color.irisIndigo.opacity(0.4))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+            .disabled(!ladderOk)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -182,7 +245,8 @@ struct GoalContractPanel: View {
             criteria: normalizedCriteria,
             outOfScope: outOfScope,
             stopBefore: stopBefore,
-            assumptions: assumptions
+            assumptions: assumptions,
+            milestones: milestones
         )
         state.setGoalContract(for: conversation.id, edited)
         state.sendGoalKickoff(for: conversation.id)
@@ -193,24 +257,34 @@ struct GoalContractPanel: View {
 
 /// Compact read-only chip shown while a goal contract is locked and running.
 struct LockedContractChip: View {
+    var state: AppState
     let conversation: Conversation
+
+    /// Text the human types before pressing "Send back".
+    @State private var sendBackNote: String = ""
 
     var body: some View {
         if let contract = conversation.goalContract {
             VStack(alignment: .leading, spacing: 0) {
-                chipHeader
+                chipHeader(contract: contract)
                 Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         lockedObjective(contract.objective)
+                        if contract.hasLadder {
+                            ladderSection(contract: contract)
+                        }
                         lockedCriteria(contract.criteria)
+                        if contract.checkpointStatus == .pausedForReview {
+                            pauseSection(contract: contract)
+                        }
                         if !contract.changeLog.isEmpty {
                             changeLogSection(contract.changeLog)
                         }
                     }
                     .padding(12)
                 }
-                .frame(maxHeight: 280)
+                .frame(maxHeight: 340)
                 .scrollIndicators(.hidden)
             }
             .background(.thinMaterial)
@@ -224,23 +298,109 @@ struct LockedContractChip: View {
         }
     }
 
-    private var chipHeader: some View {
+    private func chipHeader(contract: GoalContract) -> some View {
         HStack {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(Color.irisIndigo)
+            Image(systemName: contract.checkpointStatus == .pausedForReview ? "pause.circle.fill" : "lock.fill")
+                .foregroundStyle(contract.checkpointStatus == .pausedForReview ? Color.orange : Color.irisIndigo)
                 .font(.caption)
                 .accessibilityHidden(true)
-            Text("GOAL CONTRACT · LOCKED")
+            Text(contract.checkpointStatus == .pausedForReview ? "GOAL CONTRACT · PAUSED FOR REVIEW" : "GOAL CONTRACT · LOCKED")
                 .font(.caption2)
                 .bold()
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("Read-only")
+            Text(contract.checkpointStatus == .pausedForReview ? "Awaiting your decision" : "Read-only")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Compact vertical ladder: done / current / upcoming rungs.
+    private func ladderSection(contract: GoalContract) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Checkpoints", systemImage: "flag.checkered")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            ForEach(Array(contract.milestones.enumerated()), id: \.element.id) { index, milestone in
+                MilestoneRungRow(
+                    title: milestone.title,
+                    rungState: rungState(index: index, contract: contract)
+                )
+            }
+        }
+    }
+
+    private func rungState(index: Int, contract: GoalContract) -> MilestoneRungState {
+        if index < contract.currentMilestone { return .done }
+        if index == contract.currentMilestone {
+            return contract.checkpointStatus == .pausedForReview ? .pausedCurrent : .current
+        }
+        return .upcoming
+    }
+
+    /// The pause-review section: UNVERIFIED self-report + trusted verdict + action buttons.
+    private func pauseSection(contract: GoalContract) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider()
+            // UNVERIFIED self-report
+            if let report = conversation.lastGoalCompletionReport {
+                CompletionReportSection(report: report, evaluation: nil)
+            }
+            // Trusted verdict (grader), reusing DriftCriterionRow
+            if let evaluation = conversation.lastGoalEvaluation {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("GRADER VERDICT", systemImage: "checkmark.seal")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                    ForEach(evaluation.criteria) { verdict in
+                        DriftCriterionRow(
+                            verdict: verdict,
+                            selfReportStatus: "",
+                            evaluationStatus: evaluation.status,
+                            reportPresent: conversation.lastGoalCompletionReport != nil
+                        )
+                    }
+                }
+            }
+            // Steering note
+            TextField("Optional feedback for the agent…", text: $sendBackNote, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...3)
+                .padding(6)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            // Action buttons
+            HStack(spacing: 10) {
+                Button("Send back") {
+                    let note = sendBackNote.trimmingCharacters(in: .whitespacesAndNewlines)
+                    state.holdCheckpoint(for: conversation.id, feedback: note.isEmpty ? nil : note)
+                    sendBackNote = ""
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
+                .font(.subheadline.bold())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                Spacer()
+
+                Button("Approve & continue") {
+                    state.advanceCheckpoint(for: conversation.id)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .font(.subheadline.bold())
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Color.irisIndigo)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
     }
 
     private func lockedObjective(_ text: String) -> some View {
@@ -739,13 +899,35 @@ private struct CompletionReportItemRow: View {
 private struct CriterionRow: View {
     @Binding var criterion: Criterion
 
+    /// Current milestones from the draft panel — used for the checkpoint picker.
+    let milestones: [Milestone]
+    /// Which milestone title (if any) this criterion is currently assigned to.
+    let selectedMilestoneTitle: String?
+    /// Called when the user picks a different milestone (or nil = unassigned).
+    let onMilestoneChange: (String?) -> Void
+    /// Called when the user types a new milestone title in the "New…" field.
+    let onAddMilestone: (String) -> Void
+
     /// Local mirror of `criterion.check` so we can use a plain `$checkText` binding
     /// instead of a manual `Binding(get:set:)`.
     @State private var checkText: String
+    /// Tracks whether the "New milestone" inline TextField is shown.
+    @State private var showingNewMilestoneField = false
+    @State private var newMilestoneTitle = ""
 
-    init(criterion: Binding<Criterion>) {
+    init(
+        criterion: Binding<Criterion>,
+        milestones: [Milestone],
+        selectedMilestoneTitle: String?,
+        onMilestoneChange: @escaping (String?) -> Void,
+        onAddMilestone: @escaping (String) -> Void
+    ) {
         _criterion = criterion
         _checkText = State(initialValue: criterion.wrappedValue.check ?? "")
+        self.milestones = milestones
+        self.selectedMilestoneTitle = selectedMilestoneTitle
+        self.onMilestoneChange = onMilestoneChange
+        self.onAddMilestone = onAddMilestone
     }
 
     var body: some View {
@@ -781,7 +963,133 @@ private struct CriterionRow: View {
                         criterion.check = new.isEmpty ? nil : new
                     }
             }
+            // Milestone assignment picker (always shown so the user can author the ladder).
+            HStack(spacing: 6) {
+                Menu {
+                    Button("— none —") { onMilestoneChange(nil) }
+                    Divider()
+                    ForEach(milestones) { m in
+                        Button(m.title) { onMilestoneChange(m.title) }
+                    }
+                    Divider()
+                    Button("New checkpoint…") { showingNewMilestoneField = true }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag")
+                            .font(.caption2)
+                        Text(selectedMilestoneTitle ?? "— no checkpoint —")
+                            .font(.caption)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(selectedMilestoneTitle != nil ? Color.irisIndigo : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+            .padding(.leading, 138)
+            if showingNewMilestoneField {
+                HStack(spacing: 6) {
+                    TextField("Checkpoint name", text: $newMilestoneTitle)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .onSubmit {
+                            commitNewMilestone()
+                        }
+                    Button("Add") { commitNewMilestone() }
+                        .buttonStyle(.plain)
+                        .font(.caption.bold())
+                        .foregroundStyle(Color.irisIndigo)
+                    Button("Cancel") {
+                        showingNewMilestoneField = false
+                        newMilestoneTitle = ""
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 138)
+            }
         }
+    }
+
+    private func commitNewMilestone() {
+        let trimmed = newMilestoneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onAddMilestone(trimmed)
+        newMilestoneTitle = ""
+        showingNewMilestoneField = false
+    }
+}
+
+// MARK: - Milestone ladder rung
+
+private enum MilestoneRungState {
+    case done, current, pausedCurrent, upcoming
+}
+
+private struct MilestoneRungRow: View {
+    let title: String
+    let rungState: MilestoneRungState
+
+    private var icon: String {
+        switch rungState {
+        case .done:          return "checkmark.circle.fill"
+        case .current:       return "arrow.right.circle.fill"
+        case .pausedCurrent: return "pause.circle.fill"
+        case .upcoming:      return "circle"
+        }
+    }
+
+    private var iconColor: Color {
+        switch rungState {
+        case .done:          return .green
+        case .current:       return Color.irisIndigo
+        case .pausedCurrent: return .orange
+        case .upcoming:      return Color.primary.opacity(0.25)
+        }
+    }
+
+    private var label: String {
+        switch rungState {
+        case .done:          return "done"
+        case .current:       return "current"
+        case .pausedCurrent: return "paused for review"
+        case .upcoming:      return "upcoming"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(iconColor)
+                .font(.caption)
+                .accessibilityLabel(label)
+            Text(title)
+                .font(rungState == .upcoming ? .caption : .caption.bold())
+                .foregroundStyle(rungState == .upcoming ? .tertiary : .primary)
+            if rungState == .pausedCurrent {
+                Text("· paused for review")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(rungState == .pausedCurrent
+                    ? Color.orange.opacity(0.08)
+                    : Color.primary.opacity(rungState == .upcoming ? 0.02 : 0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 

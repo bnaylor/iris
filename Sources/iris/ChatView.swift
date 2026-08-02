@@ -225,7 +225,7 @@ struct ChatView: View {
                     }
 
                     if conv.goalContract?.state == .locked {
-                        LockedContractChip(conversation: conv)
+                        LockedContractChip(state: state, conversation: conv)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
