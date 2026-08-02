@@ -25,6 +25,14 @@ struct SettingsView: View {
     @State private var ollamaPullProgress: String?
     @State private var ollamaPullError: String?
     
+    // Google Workspace / gcloud state
+    @State private var gcloudAvailable = false
+    @State private var gcloudAccount: String?
+    @State private var gcloudProject: String?
+    @State private var workspaceAPIs: [GCloudHelper.APIInfo] = GCloudHelper.requiredAPIs
+    @State private var isCheckingAPIs = false
+    @State private var showSetupGuide = false
+    
     var body: some View {
         TabView {
             // MARK: - General Tab
@@ -615,8 +623,148 @@ struct SettingsView: View {
             // MARK: - Integrations Tab
             Form {
                 Section(header: Text("Google Workspace (OAuth)").font(.headline)) {
+                    
+                    // ── Setup Guide ──
+                    DisclosureGroup(isExpanded: $showSetupGuide) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            
+                            // ── gcloud CLI path (primary) ──
+                            Group {
+                                Text("Option 1: gcloud CLI (recommended)")
+                                    .font(.subheadline).fontWeight(.semibold)
+                                
+                                VStack(alignment: .leading, spacing: 6) {
+                                    stepText("1", "Check gcloud is installed & authenticated:")
+                                    if gcloudAvailable {
+                                        if let account = gcloudAccount {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                                                Text("Authenticated as \(account)").font(.caption)
+                                            }
+                                        } else {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "xmark.circle.fill").foregroundColor(.orange)
+                                                Text("Not authenticated — run gcloud auth login").font(.caption)
+                                            }
+                                        }
+                                        if let project = gcloudProject {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "folder.fill").foregroundColor(.secondary)
+                                                Text("Project: \(project)").font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                                            Text("gcloud CLI not found on PATH")
+                                                .font(.caption).foregroundColor(.red)
+                                        }
+                                        Text("Install: brew install google-cloud-sdk")
+                                            .font(.caption).monospaced().foregroundColor(.secondary)
+                                    }
+                                    
+                                    stepText("2", "Enable required Google APIs:")
+                                    if isCheckingAPIs {
+                                        HStack { ProgressView().scaleEffect(0.6); Text("Checking…").font(.caption) }
+                                    } else {
+                                        ForEach($workspaceAPIs) { $api in
+                                            HStack {
+                                                Image(systemName: api.enabled ? "checkmark.circle.fill" : "circle")
+                                                    .foregroundColor(api.enabled ? .green : .secondary)
+                                                Text(api.displayName).font(.caption)
+                                                Spacer()
+                                                if !api.enabled && gcloudAvailable {
+                                                    Button("Enable") {
+                                                        Task {
+                                                            isCheckingAPIs = true
+                                                            await GCloudHelper.enableAPI(api.id)
+                                                            await refreshAPIStatus()
+                                                            isCheckingAPIs = false
+                                                        }
+                                                    }
+                                                    .buttonStyle(.link).font(.caption)
+                                                    .disabled(isCheckingAPIs)
+                                                }
+                                            }
+                                        }
+                                        Button("Refresh API status") {
+                                            Task { await refreshAPIStatus() }
+                                        }
+                                        .buttonStyle(.link).font(.caption)
+                                        .disabled(isCheckingAPIs)
+                                    }
+                                    
+                                    stepText("3", "Create an OAuth 2.0 Client ID:")
+                                    Text("Open the Google Cloud Console, create a Desktop-app OAuth client, then paste the Client ID and Secret below.")
+                                        .font(.caption).foregroundColor(.secondary)
+                                    
+                                    Button {
+                                        if let project = gcloudProject {
+                                            let url = URL(string: "https://console.cloud.google.com/apis/credentials?project=\(project)")!
+                                            NSWorkspace.shared.open(url)
+                                        } else {
+                                            NSWorkspace.shared.open(URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.up.forward.square")
+                                            Text("Open Credentials Page")
+                                        }
+                                    }
+                                    .buttonStyle(.link).font(.caption)
+                                    
+                                    stepText("4", "Paste the Client ID and Secret below, then tap Connect to Google.")
+                                }
+                            }
+                            
+                            Divider()
+                            
+                            // ── Web Console path (secondary) ──
+                            Group {
+                                Text("Option 2: Google Cloud Console")
+                                    .font(.subheadline).fontWeight(.semibold)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    bulletText("Go to console.cloud.google.com")
+                                    bulletText("Select or create a project")
+                                    bulletText("Navigate to APIs & Services → Enabled APIs & Services")
+                                    bulletText("Enable: Calendar, People, Drive, Docs, Sheets, Gmail, Tasks")
+                                    bulletText("Go to APIs & Services → Credentials")
+                                    bulletText("Create Credentials → OAuth client ID → Desktop app")
+                                    bulletText("Copy the Client ID and Client Secret below")
+                                }
+                                
+                                Button {
+                                    NSWorkspace.shared.open(URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.up.forward.square")
+                                        Text("Open Google Cloud Console")
+                                    }
+                                }
+                                .buttonStyle(.link).font(.caption)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "book.pages.fill").foregroundColor(.irisIndigo)
+                            Text("Setup Guide").font(.subheadline)
+                            if gcloudAvailable, workspaceAPIs.allSatisfy(\.enabled) {
+                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.caption)
+                            }
+                        }
+                    }
+                    .onAppear {
+                        Task { await refreshGCloudState() }
+                    }
+                    .padding(.bottom, 4)
+                    
+                    // ── Credential fields ──
                     TextField("Client ID", text: $config.googleClientID)
+                        .help("From Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID")
                     SecureField("Client Secret", text: $config.googleClientSecret)
+                        .help("From Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID")
                     
                     Text("These credentials enable external tools for Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks.")
                         .font(.caption)
@@ -626,18 +774,18 @@ struct SettingsView: View {
                         Text("✅ Connected to Google Workspace")
                             .foregroundColor(.green)
                             .font(.caption)
-                    }
-                    
-                    Button("Connect to Google") {
-                        Task {
-                            do {
-                                try await OAuthManager.shared.startOAuthFlow()
-                            } catch {
-                                print("OAuth Error: \(error)")
+                    } else {
+                        Button("Connect to Google") {
+                            Task {
+                                do {
+                                    try await OAuthManager.shared.startOAuthFlow()
+                                } catch {
+                                    print("OAuth Error: \(error)")
+                                }
                             }
                         }
+                        .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
                     }
-                    .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
                 }
                 .padding(.bottom)
             }
@@ -889,6 +1037,58 @@ struct SettingsView: View {
                 self.ollamaPullProgress = nil
                 self.ollamaPullError = error.localizedDescription
             }
+        }
+    }
+    
+    // MARK: - Google Workspace / gcloud Helpers
+    
+    private func refreshGCloudState() async {
+        let available = GCloudHelper.isAvailable
+        await MainActor.run { self.gcloudAvailable = available }
+        guard available else { return }
+        
+        let account = GCloudHelper.activeAccount()
+        let project = GCloudHelper.currentProject()
+        await MainActor.run {
+            self.gcloudAccount = account
+            self.gcloudProject = project
+        }
+        await refreshAPIStatus()
+    }
+    
+    private func refreshAPIStatus() async {
+        guard gcloudAvailable else { return }
+        await MainActor.run { isCheckingAPIs = true }
+        
+        let enabled = GCloudHelper.enabledServices()
+        let updated = GCloudHelper.requiredAPIs.map { api in
+            var copy = api
+            copy.enabled = enabled.contains(api.id)
+            return copy
+        }
+        
+        await MainActor.run {
+            self.workspaceAPIs = updated
+            self.isCheckingAPIs = false
+        }
+    }
+    
+    // MARK: - Setup Guide view helpers
+    
+    @ViewBuilder
+    private func stepText(_ number: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(number).font(.caption).fontWeight(.bold)
+                .frame(width: 16, alignment: .center)
+            Text(text).font(.caption)
+        }
+    }
+    
+    @ViewBuilder
+    private func bulletText(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("•").font(.caption)
+            Text(text).font(.caption)
         }
     }
 }

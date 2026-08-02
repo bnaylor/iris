@@ -79,6 +79,8 @@ See [docs/slash_commands.md](docs/slash_commands.md) for the full command refere
 ### Google Workspace Integration 🔐
 In the settings window, you can enter your Google OAuth Client ID and Secret, and click **Connect to Google**. Iris will spin up a local listener, redirect you to Google for consent, and seamlessly exchange your authorization code for valid access and refresh tokens.
 
+The **Integrations tab** now includes a collapsible **Setup Guide** that walks you through both the `gcloud` CLI path (recommended) and the Google Cloud Console web path. It auto-detects your gcloud installation, authenticated account, and GCP project, and provides a one-click checklist to enable the seven required APIs (Calendar, People, Drive, Docs, Sheets, Gmail, Tasks). See [docs/google_workspace_oauth_setup.md](docs/google_workspace_oauth_setup.md) for the full walkthrough.
+
 Once connected, Iris has native API access to the following Workspace tools directly from Swift:
 *   **Google Calendar**: `google_calendar_list_events`, `google_calendar_create_event`
 *   **Google Docs**: `google_docs_get`
@@ -101,6 +103,7 @@ Iris includes a reimplementation of [**Vibecop**](https://github.com/bnaylor/vib
 *   **Auto-Approval**: If the command is completely routine and safe, Vibecop approves it silently, saving you from prompt fatigue.
 *   **Guardian Mode**: You can run `/vibecop init` in any workspace. The primary agent will analyze your project and generate a custom `.iris/vibecop.md` file. Vibecop uses this as its system prompt, learning what commands are normal *specifically for this project* (e.g., `go build` is safe here, but `npm` should trigger an escalation).
 *   **Escalation**: If the command is destructive, touches restricted paths, or isn't listed in the Guardian config, Vibecop blocks it and escalates to a user confirmation dialog.
+*   **Model Flexibility**: Vibecop supports multiple backends — embedded `llama.cpp`, `MLX` for Apple Silicon, cloud providers, and local **Ollama** daemons. When Ollama is selected, Iris auto-probes the daemon to discover installed models, offers a model picker, and can pull the recommended `gemma4:12b` directly from the UI. A clear warning banner is shown if the Ollama daemon is not reachable.
 
 ## 📦 Project Setup
 
