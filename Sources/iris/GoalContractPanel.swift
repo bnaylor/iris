@@ -112,10 +112,7 @@ struct GoalContractPanel: View {
                         assignMilestone(criterionId: criterion.id, toTitle: newTitle)
                     },
                     onAddMilestone: { title in
-                        if !milestones.contains(where: { $0.title == title }) {
-                            milestones.append(Milestone(title: title, criterionIds: []))
-                        }
-                        assignMilestone(criterionId: criterion.id, toTitle: title)
+                        milestones = MilestoneLadderEditing.addMilestone(milestones, title: title, assigning: criterion.id)
                     }
                 )
             }
@@ -157,14 +154,7 @@ struct GoalContractPanel: View {
     /// First-appearance order of milestones is preserved; empty milestones are retained until
     /// the user explicitly removes them so accidental deselection doesn't destroy the ordering.
     private func assignMilestone(criterionId: UUID, toTitle: String?) {
-        // Remove from any current milestone.
-        for i in milestones.indices {
-            milestones[i].criterionIds.removeAll { $0 == criterionId }
-        }
-        guard let title = toTitle else { return }
-        if let idx = milestones.firstIndex(where: { $0.title == title }) {
-            milestones[idx].criterionIds.append(criterionId)
-        }
+        milestones = MilestoneLadderEditing.assign(milestones, criterionId: criterionId, toTitle: toTitle)
     }
 
     private var listsSection: some View {
@@ -272,9 +262,11 @@ struct LockedContractChip: View {
                     VStack(alignment: .leading, spacing: 14) {
                         lockedObjective(contract.objective)
                         if contract.hasLadder {
+                            // The ladder nests each checkpoint's criteria, so it replaces the flat list.
                             ladderSection(contract: contract)
+                        } else {
+                            lockedCriteria(contract.criteria)
                         }
-                        lockedCriteria(contract.criteria)
                         if contract.checkpointStatus == .pausedForReview {
                             pauseSection(contract: contract)
                         }
@@ -317,27 +309,29 @@ struct LockedContractChip: View {
         .padding(.vertical, 8)
     }
 
-    /// Compact vertical ladder: done / current / upcoming rungs.
+    /// Vertical ladder: each checkpoint rung with ITS criteria nested beneath it, so the ladder
+    /// reads as structure rather than duplicating the flat criteria list (which is why one
+    /// criterion per checkpoint used to look redundant). When a ladder is present this replaces
+    /// the separate "Done when…" list entirely.
     private func ladderSection(contract: GoalContract) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("Checkpoints", systemImage: "flag.checkered")
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
             ForEach(Array(contract.milestones.enumerated()), id: \.element.id) { index, milestone in
-                MilestoneRungRow(
-                    title: milestone.title,
-                    rungState: rungState(index: index, contract: contract)
-                )
+                VStack(alignment: .leading, spacing: 4) {
+                    MilestoneRungRow(
+                        title: milestone.title,
+                        rungState: contract.rungState(forMilestoneAt: index)
+                    )
+                    let ids = Set(milestone.criterionIds)
+                    ForEach(contract.criteria.filter { ids.contains($0.id) }) { criterion in
+                        LockedCriterionRow(criterion: criterion)
+                            .padding(.leading, 22)
+                    }
+                }
             }
         }
-    }
-
-    private func rungState(index: Int, contract: GoalContract) -> MilestoneRungState {
-        if index < contract.currentMilestone { return .done }
-        if index == contract.currentMilestone {
-            return contract.checkpointStatus == .pausedForReview ? .pausedCurrent : .current
-        }
-        return .upcoming
     }
 
     /// The pause-review section: UNVERIFIED self-report + trusted verdict + action buttons.
@@ -1032,10 +1026,7 @@ private struct CriterionRow: View {
 }
 
 // MARK: - Milestone ladder rung
-
-private enum MilestoneRungState {
-    case done, current, pausedCurrent, upcoming
-}
+// `MilestoneRungState` now lives on GoalContract.swift (testable, shared).
 
 private struct MilestoneRungRow: View {
     let title: String

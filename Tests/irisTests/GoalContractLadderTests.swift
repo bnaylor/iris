@@ -88,4 +88,69 @@ struct GoalContractLadderTests {
         let plain = GoalContract(objective: "x", criteria: [Criterion(text: "y", kind: .qualitative, check: nil)])
         #expect(!plain.oracleText().contains("Current checkpoint"))
     }
+
+    @Test("rungState classifies done / current / pausedCurrent / upcoming")
+    func rungStates() {
+        var c = laddered()          // two milestones, currentMilestone == 0, running
+        #expect(c.rungState(forMilestoneAt: 0) == .current)
+        #expect(c.rungState(forMilestoneAt: 1) == .upcoming)
+        c.checkpointStatus = .pausedForReview
+        #expect(c.rungState(forMilestoneAt: 0) == .pausedCurrent)
+        c.checkpointStatus = .running
+        c.currentMilestone = 1
+        #expect(c.rungState(forMilestoneAt: 0) == .done)
+        #expect(c.rungState(forMilestoneAt: 1) == .current)
+    }
+
+    @Test("a locked ladder mid-run round-trips through Codable with position and pause state")
+    func codablePausedMidRun() throws {
+        var c = laddered(); c.lock()
+        c.currentMilestone = 1
+        c.checkpointStatus = .pausedForReview
+        let back = try JSONDecoder().decode(GoalContract.self, from: JSONEncoder().encode(c))
+        #expect(back.currentMilestone == 1)
+        #expect(back.checkpointStatus == .pausedForReview)
+        #expect(back.milestones.map(\.title) == ["Compile", "Verify"])
+        #expect(back == c)
+    }
+}
+
+@Suite("MilestoneLadderEditing")
+struct MilestoneLadderEditingTests {
+    @Test("addMilestone creates the checkpoint and assigns the criterion")
+    func addCreatesAndAssigns() {
+        let c1 = UUID()
+        let m = MilestoneLadderEditing.addMilestone([], title: "A", assigning: c1)
+        #expect(m.map(\.title) == ["A"])
+        #expect(m.first?.criterionIds == [c1])
+    }
+
+    @Test("reassigning a criterion preserves first-appearance order and leaves the old rung empty")
+    func reassignPreservesOrder() {
+        let c1 = UUID()
+        var m = MilestoneLadderEditing.addMilestone([], title: "A", assigning: c1)   // [A:[c1]]
+        m = MilestoneLadderEditing.addMilestone(m, title: "B", assigning: UUID())     // [A:[c1], B:[..]]
+        m = MilestoneLadderEditing.assign(m, criterionId: c1, toTitle: "B")           // move c1 A→B
+        #expect(m.map(\.title) == ["A", "B"])          // order preserved, A retained though now empty
+        #expect(m[0].criterionIds.isEmpty)
+        #expect(m[1].criterionIds.contains(c1))
+    }
+
+    @Test("assigning to nil unassigns from every milestone")
+    func assignNilUnassigns() {
+        let c1 = UUID()
+        var m = MilestoneLadderEditing.addMilestone([], title: "A", assigning: c1)
+        m = MilestoneLadderEditing.assign(m, criterionId: c1, toTitle: nil)
+        #expect(m[0].criterionIds.isEmpty)
+    }
+
+    @Test("a criterion belongs to at most one milestone after assign")
+    func assignIsDisjoint() {
+        let c1 = UUID()
+        var m = MilestoneLadderEditing.addMilestone([], title: "A", assigning: c1)
+        m = MilestoneLadderEditing.addMilestone(m, title: "B", assigning: UUID())
+        m = MilestoneLadderEditing.assign(m, criterionId: c1, toTitle: "B")
+        let count = m.reduce(0) { $0 + ($1.criterionIds.contains(c1) ? 1 : 0) }
+        #expect(count == 1)
+    }
 }

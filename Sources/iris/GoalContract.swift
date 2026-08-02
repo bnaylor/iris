@@ -144,4 +144,44 @@ struct GoalContract: Codable, Equatable, Sendable {
         }
         return s
     }
+
+    /// The display state of the milestone at `index` relative to `currentMilestone`/`checkpointStatus`.
+    /// Extracted from the panel so it is unit-testable without a view harness.
+    func rungState(forMilestoneAt index: Int) -> MilestoneRungState {
+        if index < currentMilestone { return .done }
+        if index == currentMilestone {
+            return checkpointStatus == .pausedForReview ? .pausedCurrent : .current
+        }
+        return .upcoming
+    }
+}
+
+/// The rendered state of one checkpoint rung in the ladder view.
+enum MilestoneRungState: Equatable {
+    case done          // the loop advanced past this milestone
+    case current       // the milestone being worked (running)
+    case pausedCurrent // the current milestone, paused at its checkpoint for review
+    case upcoming      // not yet reached
+}
+
+/// Pure milestone-authoring transforms used by the draft panel. Extracted so the ordering and
+/// partition behaviour can be unit-tested without driving SwiftUI. All functions are value-in,
+/// value-out and preserve first-appearance milestone order.
+enum MilestoneLadderEditing {
+    /// Move `criterionId` to the milestone titled `toTitle` (or unassign it when `toTitle` is nil).
+    /// The criterion is first removed from every milestone, then appended to the target if it exists.
+    static func assign(_ milestones: [Milestone], criterionId: UUID, toTitle: String?) -> [Milestone] {
+        var m = milestones
+        for i in m.indices { m[i].criterionIds.removeAll { $0 == criterionId } }
+        guard let title = toTitle else { return m }
+        if let idx = m.firstIndex(where: { $0.title == title }) { m[idx].criterionIds.append(criterionId) }
+        return m
+    }
+
+    /// Create a milestone titled `title` (if none exists) and assign `criterionId` to it.
+    static func addMilestone(_ milestones: [Milestone], title: String, assigning criterionId: UUID) -> [Milestone] {
+        var m = milestones
+        if !m.contains(where: { $0.title == title }) { m.append(Milestone(title: title, criterionIds: [])) }
+        return assign(m, criterionId: criterionId, toTitle: title)
+    }
 }

@@ -603,7 +603,7 @@ actor IrisEngine {
                                         await self.pushToUI(role: .system, text: "Running tool: \(call.name)", conversationId: conversationId)
                                     }
 
-                                    let result = await self.executeFunctionCall(call, conversationId: conversationId, workspacePath: workspacePath)
+                                    let result = await self.executeFunctionCall(call, conversationId: conversationId, workspacePath: workspacePath, restrictToGoalComplete: restrictToGoalComplete)
                                     return (index, result)
                                 }
                             }
@@ -715,19 +715,30 @@ actor IrisEngine {
                         return conv.activeGoal != nil
                     }
                     guard stillActive else { return }
-                    let oracle = await MainActor.run { () -> String in
-                        localState?.conversations.first(where: { $0.id == conversationId })?.goalContract?.oracleText() ?? ""
+                    let contract = await MainActor.run {
+                        localState?.conversations.first(where: { $0.id == conversationId })?.goalContract
+                    }
+                    let oracle = contract?.oracleText() ?? ""
+                    // Keep the closing instruction consistent with the oracle. With an active ladder
+                    // that hasn't reached its final checkpoint, the next terminal action is
+                    // `reach_checkpoint`, NOT `goal_complete` — otherwise this tail contradicts the
+                    // ladder oracle and steers the model straight past every checkpoint.
+                    let closing: String
+                    if let c = contract, c.hasLadder, !c.isFinalMilestone {
+                        closing = "When the current checkpoint's criteria are satisfied, call `reach_checkpoint` (NOT goal_complete)."
+                    } else {
+                        closing = "If every criterion is satisfied, call goal_complete."
                     }
                     let reprompt = oracle.isEmpty
-                        ? "Continue working on your goal. What is your next step? If finished, call goal_complete."
-                        : "\(oracle)\n\nContinue working toward the objective above. What is your next step? If every criterion is satisfied, call goal_complete."
+                        ? "Continue working on your goal. What is your next step? \(closing)"
+                        : "\(oracle)\n\nContinue working toward the objective above. What is your next step? \(closing)"
                     await self.processInput(reprompt, source: "System", conversationId: conversationId)
                 }
             }
         }
     }
     
-    private func executeFunctionCall(_ functionCall: FunctionCall, conversationId: UUID, workspacePath: String?) async -> String {
+    private func executeFunctionCall(_ functionCall: FunctionCall, conversationId: UUID, workspacePath: String?, restrictToGoalComplete: Bool = false) async -> String {
         let localState = state
         var result = ""
         
@@ -819,6 +830,20 @@ actor IrisEngine {
                 result = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
             }
         } else if functionCall.name == "goal_complete", let summary = functionCall.args["summary"]?.stringValue {
+            // Ladder gate: with an active checkpoint ladder, `goal_complete` is valid ONLY at the
+            // final checkpoint — before then the model must advance through checkpoints via
+            // `reach_checkpoint`, so the terminal tool can't silently skip the ladder. Bypassed under
+            // a soft-stop (`restrictToGoalComplete`): that is an emergency termination (iteration cap
+            // / loop detection) which must be allowed to end the goal regardless of ladder position,
+            // and `reach_checkpoint` isn't even offered in that restricted turn.
+            if principal == .main, !restrictToGoalComplete {
+                let ladder = await MainActor.run {
+                    localState?.conversations.first(where: { $0.id == conversationId })?.goalContract
+                }
+                if let c = ladder, c.hasLadder, !c.isFinalMilestone {
+                    return "You are at checkpoint \(c.currentMilestone + 1) of \(c.milestones.count). Call `reach_checkpoint` to complete the CURRENT checkpoint — `goal_complete` is only valid at the final checkpoint, once every earlier checkpoint has been approved."
+                }
+            }
             let statusReport = functionCall.args["criteria_status"]
             let contractToGrade: GoalContract? = (principal == .main)
                 ? await MainActor.run { localState?.conversations.first(where: { $0.id == conversationId })?.goalContract }
