@@ -400,7 +400,7 @@ actor IrisEngine {
         ))
         toolsList.append(FunctionDeclaration(
             name: "propose_goal_contract",
-            description: "Draft a structured contract for a goal the user is starting. Produce concrete criteria for 'done'. Honesty rules: never invent an `executable` check you cannot actually run; prefer a `qualitative` criterion over a fabricated number; flag taste/direction as `humanJudged`. This proposes a DRAFT for the user to edit and approve — it does not start the loop.",
+            description: "Draft a structured contract for a goal the user is starting. Produce concrete criteria for 'done'. Honesty rules: never invent an `executable` check you cannot actually run; prefer a `qualitative` criterion over a fabricated number; flag taste/direction as `humanJudged`. Optionally group criteria into ordered checkpoints via a per-criterion 'milestone' label; the run pauses at each checkpoint for the user. This proposes a DRAFT for the user to edit and approve — it does not start the loop.",
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
@@ -408,7 +408,8 @@ actor IrisEngine {
                     "criteria": Schema(type: "ARRAY", description: "Definition of done.", items: Schema(type: "OBJECT", properties: [
                         "text": Schema(type: "STRING", description: "The criterion — what 'done' looks like."),
                         "kind": Schema(type: "STRING", description: "executable | qualitative | humanJudged"),
-                        "check": Schema(type: "STRING", description: "A runnable command/test. ONLY for executable criteria.")
+                        "check": Schema(type: "STRING", description: "A runnable command/test. ONLY for executable criteria."),
+                        "milestone": Schema(type: "STRING", description: "Optional. A short checkpoint name; criteria sharing a name form one ordered checkpoint. Omit for a goal with no checkpoints.")
                     ], required: ["text", "kind"])),
                     "out_of_scope": Schema(type: "ARRAY", description: "Explicit non-goals.", items: Schema(type: "STRING")),
                     "stop_before": Schema(type: "ARRAY", description: "Irreversible / authorization boundaries to stop and ask before (e.g. force-push, merge, delete, spend).", items: Schema(type: "STRING")),

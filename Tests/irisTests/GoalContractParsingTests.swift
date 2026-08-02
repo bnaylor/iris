@@ -39,4 +39,32 @@ struct GoalContractParsingTests {
     func noObjective() {
         #expect(GoalContractParsing.contract(from: ["criteria": .array([])]) == nil)
     }
+
+    @Test("per-criterion milestone labels group into an ordered ladder")
+    func parsesMilestones() {
+        let args: [String: JSONValue] = [
+            "objective": .string("Ship it"),
+            "criteria": .array([
+                .object(["text": .string("build green"), "kind": .string("executable"),
+                         "check": .string("swift build"), "milestone": .string("Compile")]),
+                .object(["text": .string("docs updated"), "kind": .string("qualitative"),
+                         "milestone": .string("Verify")]),
+                .object(["text": .string("tests pass"), "kind": .string("executable"),
+                         "check": .string("swift test"), "milestone": .string("Compile")]),
+            ])
+        ]
+        let contract = GoalContractParsing.contract(from: args)
+        #expect(contract?.milestones.map(\.title) == ["Compile", "Verify"])       // first-appearance order
+        #expect(contract?.milestones.first?.criterionIds.count == 2)              // build + tests
+        #expect(contract?.ladderIsValidPartition() == true)
+    }
+
+    @Test("no milestone labels yields no ladder")
+    func parsesNoMilestones() {
+        let args: [String: JSONValue] = [
+            "objective": .string("Ship it"),
+            "criteria": .array([.object(["text": .string("x"), "kind": .string("qualitative")])])
+        ]
+        #expect(GoalContractParsing.contract(from: args)?.hasLadder == false)
+    }
 }
