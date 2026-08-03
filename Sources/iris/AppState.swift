@@ -96,6 +96,7 @@ struct Conversation: Identifiable, Codable, Hashable {
             c.lock()
             goalContract = c
         }
+        if let gc = goalContract { goalContract = gc.normalizedLadder() }
     }
     
     static func == (lhs: Conversation, rhs: Conversation) -> Bool {
@@ -688,7 +689,7 @@ class AppState {
     /// so the existing loop gate (activeGoal != nil) and #16's machinery keep working unchanged.
     func setGoalContract(for conversationId: UUID, _ contract: GoalContract) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
-        var locked = contract
+        var locked = contract.normalizedLadder()
         locked.lock()
         conversations[idx].goalContract = locked
         conversations[idx].activeGoal = locked.objective
@@ -720,6 +721,50 @@ class AppState {
             saveConversations()
         }
         return ok
+    }
+
+    /// Marks the goal as paused at a checkpoint. Leaves `activeGoal` set so the loop gate is intact;
+    /// the engine's auto-reprompt reads `checkpointStatus` and stays quiet (spec §6, §10).
+    func setCheckpointPaused(for conversationId: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }),
+              var c = conversations[idx].goalContract else { return }
+        c.checkpointStatus = .pausedForReview
+        conversations[idx].goalContract = c
+        saveConversations()
+    }
+
+    /// Human approved the checkpoint: advance to the next milestone and resume the loop.
+    func advanceCheckpoint(for conversationId: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }),
+              var c = conversations[idx].goalContract, c.hasLadder else { return }
+        c.currentMilestone = min(c.currentMilestone + 1, c.milestones.count - 1)
+        c.checkpointStatus = .running
+        conversations[idx].goalContract = c
+        conversations[idx].goalIterationCount = 0
+        saveConversations()
+        resumeGoalLoop(for: conversationId, steer: nil)
+    }
+
+    /// Human sent the agent back to keep working the current milestone (no advance).
+    func holdCheckpoint(for conversationId: UUID, feedback: String?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }),
+              var c = conversations[idx].goalContract else { return }
+        c.checkpointStatus = .running
+        conversations[idx].goalContract = c
+        conversations[idx].goalIterationCount = 0
+        saveConversations()
+        resumeGoalLoop(for: conversationId, steer: feedback)
+    }
+
+    /// Re-arms the goal loop after a checkpoint resume by sending a fresh oracle reprompt.
+    private func resumeGoalLoop(for conversationId: UUID, steer: String?) {
+        guard let conv = conversations.first(where: { $0.id == conversationId }),
+              let contract = conv.goalContract else { return }
+        let steerLine = (steer?.isEmpty == false) ? "\n\nHuman feedback at this checkpoint: \(steer!)" : ""
+        let reprompt = "\(contract.oracleText())\(steerLine)\n\nContinue toward the current checkpoint. What is your next step?"
+        runThinkingTask(conversationId: conversationId) { [self] in
+            await engine.processInput(reprompt, source: "System", conversationId: conversationId)
+        }
     }
 
     /// Sends the goal-loop kickoff message for a conversation whose contract is already locked.
