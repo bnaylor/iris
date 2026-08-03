@@ -13,8 +13,25 @@ struct SettingsView: View {
     @State private var updateCheckStatusMessage: String?
     
     @State private var vibecopTestStatus: String?
+    @State private var isTestingVibecopModel = false
     @State private var tier2TestStatus: String?
     @State private var tier3TestStatus: String?
+    
+    // Ollama model discovery state
+    @State private var ollamaDaemonRunning: Bool? = nil  // nil = unchecked
+    @State private var ollamaInstalledModels: [String] = []
+    @State private var isProbingOllama = false
+    @State private var isPullingOllamaModel = false
+    @State private var ollamaPullProgress: String?
+    @State private var ollamaPullError: String?
+    
+    // Google Workspace / gcloud state
+    @State private var gcloudAvailable = false
+    @State private var gcloudAccount: String?
+    @State private var gcloudProject: String?
+    @State private var workspaceAPIs: [GCloudHelper.APIInfo] = GCloudHelper.requiredAPIs
+    @State private var isCheckingAPIs = false
+    @State private var showSetupGuide = false
     
     var body: some View {
         TabView {
@@ -175,25 +192,94 @@ struct SettingsView: View {
                                         .font(.caption)
                                         .foregroundColor(.green)
                                     
-                                    Button("Test Model") {
-                                        Task {
-                                            do {
-                                                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                vibecopTestStatus = "✅ Success"
-                                            } catch {
-                                                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                            }
+                                    vibecopTestButton()
+                                }
+                            }
+                        } else if config.vibecopEngine == "ollama" {
+                            // Ollama-specific: probe daemon, then list models, offer pull
+                            HStack {
+                                if isProbingOllama && ollamaDaemonRunning == nil {
+                                    ProgressView().scaleEffect(0.6)
+                                    Text("Checking Ollama daemon…").font(.caption).foregroundColor(.secondary)
+                                } else if ollamaDaemonRunning == false {
+                                    Text("Ollama daemon not running").font(.caption).foregroundColor(.red)
+                                } else if ollamaInstalledModels.isEmpty {
+                                    Text("No models installed").font(.caption).foregroundColor(.secondary)
+                                } else {
+                                    Picker("Ollama Model", selection: $config.vibecopModel) {
+                                        ForEach(ollamaInstalledModels, id: \.self) { name in
+                                            Text(name).tag(name)
                                         }
                                     }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
-                                    
-                                    if let status = vibecopTestStatus {
-                                        Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
+                                }
+                                
+                                Button {
+                                    Task { await probeOllamaModels() }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Refresh installed Ollama models")
+                                .disabled(isProbingOllama)
+                            }
+                            .onAppear {
+                                if ollamaDaemonRunning == nil && !isProbingOllama {
+                                    Task { await probeOllamaModels() }
+                                }
+                            }
+                            
+                            // Daemon-down banner
+                            if ollamaDaemonRunning == false {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("⚠️ The Ollama daemon is not reachable at localhost:11434.")
+                                        .font(.caption).foregroundColor(.orange)
+                                    Text("Start it with: ollama serve")
+                                        .font(.caption).monospaced().foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            
+                            // Offer to pull the default model if not installed
+                            if ollamaDaemonRunning == true {
+                                let defaultModel = "gemma4:12b"
+                                if !ollamaInstalledModels.contains(defaultModel) {
+                                    HStack {
+                                        if isPullingOllamaModel {
+                                            ProgressView().scaleEffect(0.6)
+                                            if let progress = ollamaPullProgress {
+                                                Text(progress).font(.caption).foregroundColor(.secondary)
+                                            }
+                                        } else {
+                                            Button("Pull \(defaultModel)") {
+                                                Task { await pullOllamaDefaultModel(defaultModel) }
+                                            }
+                                            .disabled(isProbingOllama)
+                                            Text("Recommended for Vibecop — small, fast, capable.")
+                                                .font(.caption).foregroundColor(.secondary)
+                                        }
                                     }
+                                    
+                                    if let error = ollamaPullError {
+                                        Text("Error: \(error)").font(.caption).foregroundColor(.red)
+                                    }
+                                }
+                            }
+                            
+                            HStack {
+                                if ollamaDaemonRunning == false {
+                                    Text("⏳ Waiting for Ollama daemon…").font(.caption).foregroundColor(.secondary)
+                                } else if ollamaInstalledModels.contains(config.vibecopModel) {
+                                    Text("✅ Model is available in Ollama.")
+                                        .foregroundColor(.green)
+                                        .font(.caption)
+                                } else if !config.vibecopModel.isEmpty && !ollamaInstalledModels.isEmpty {
+                                    Text("⚠️ \"\(config.vibecopModel)\" not found in Ollama.")
+                                        .foregroundColor(.orange)
+                                        .font(.caption)
+                                }
+                                
+                                if ollamaDaemonRunning == true {
+                                    vibecopTestButton()
                                 }
                             }
                         } else {
@@ -204,26 +290,8 @@ struct SettingsView: View {
                                 Text("✅ Assuming model is ready via external daemon.")
                                     .foregroundColor(.green)
                                     .font(.caption)
-                                    
-                                Button("Test Model") {
-                                    Task {
-                                        do {
-                                            let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                            let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                            let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                            _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                            vibecopTestStatus = "✅ Success"
-                                        } catch {
-                                            vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.link)
-                                .font(.caption)
                                 
-                                if let status = vibecopTestStatus {
-                                    Text(status).font(.caption).foregroundColor(status.starts(with: "✅") ? .green : .red)
-                                }
+                                vibecopTestButton()
                             }
                         }
                         
@@ -423,8 +491,148 @@ struct SettingsView: View {
             // MARK: - Integrations Tab
             Form {
                 Section(header: Text("Google Workspace (OAuth)").font(.headline)) {
+                    
+                    // ── Setup Guide ──
+                    DisclosureGroup(isExpanded: $showSetupGuide) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            
+                            // ── gcloud CLI path (primary) ──
+                            Group {
+                                Text("Option 1: gcloud CLI (recommended)")
+                                    .font(.subheadline).fontWeight(.semibold)
+                                
+                                VStack(alignment: .leading, spacing: 6) {
+                                    stepText("1", "Check gcloud is installed & authenticated:")
+                                    if gcloudAvailable {
+                                        if let account = gcloudAccount {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                                                Text("Authenticated as \(account)").font(.caption)
+                                            }
+                                        } else {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "xmark.circle.fill").foregroundColor(.orange)
+                                                Text("Not authenticated — run gcloud auth login").font(.caption)
+                                            }
+                                        }
+                                        if let project = gcloudProject {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "folder.fill").foregroundColor(.secondary)
+                                                Text("Project: \(project)").font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                                            Text("gcloud CLI not found on PATH")
+                                                .font(.caption).foregroundColor(.red)
+                                        }
+                                        Text("Install: brew install google-cloud-sdk")
+                                            .font(.caption).monospaced().foregroundColor(.secondary)
+                                    }
+                                    
+                                    stepText("2", "Enable required Google APIs:")
+                                    if isCheckingAPIs {
+                                        HStack { ProgressView().scaleEffect(0.6); Text("Checking…").font(.caption) }
+                                    } else {
+                                        ForEach($workspaceAPIs) { $api in
+                                            HStack {
+                                                Image(systemName: api.enabled ? "checkmark.circle.fill" : "circle")
+                                                    .foregroundColor(api.enabled ? .green : .secondary)
+                                                Text(api.displayName).font(.caption)
+                                                Spacer()
+                                                if !api.enabled && gcloudAvailable {
+                                                    Button("Enable") {
+                                                        Task {
+                                                            isCheckingAPIs = true
+                                                            await GCloudHelper.enableAPI(api.id)
+                                                            await refreshAPIStatus()
+                                                            isCheckingAPIs = false
+                                                        }
+                                                    }
+                                                    .buttonStyle(.link).font(.caption)
+                                                    .disabled(isCheckingAPIs)
+                                                }
+                                            }
+                                        }
+                                        Button("Refresh API status") {
+                                            Task { await refreshAPIStatus() }
+                                        }
+                                        .buttonStyle(.link).font(.caption)
+                                        .disabled(isCheckingAPIs)
+                                    }
+                                    
+                                    stepText("3", "Create an OAuth 2.0 Client ID:")
+                                    Text("Open the Google Cloud Console, create a Desktop-app OAuth client, then paste the Client ID and Secret below.")
+                                        .font(.caption).foregroundColor(.secondary)
+                                    
+                                    Button {
+                                        if let project = gcloudProject {
+                                            let url = URL(string: "https://console.cloud.google.com/apis/credentials?project=\(project)")!
+                                            NSWorkspace.shared.open(url)
+                                        } else {
+                                            NSWorkspace.shared.open(URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.up.forward.square")
+                                            Text("Open Credentials Page")
+                                        }
+                                    }
+                                    .buttonStyle(.link).font(.caption)
+                                    
+                                    stepText("4", "Paste the Client ID and Secret below, then tap Connect to Google.")
+                                }
+                            }
+                            
+                            Divider()
+                            
+                            // ── Web Console path (secondary) ──
+                            Group {
+                                Text("Option 2: Google Cloud Console")
+                                    .font(.subheadline).fontWeight(.semibold)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    bulletText("Go to console.cloud.google.com")
+                                    bulletText("Select or create a project")
+                                    bulletText("Navigate to APIs & Services → Enabled APIs & Services")
+                                    bulletText("Enable: Calendar, Drive, Docs, Sheets, Gmail, Tasks")
+                                    bulletText("Go to APIs & Services → Credentials")
+                                    bulletText("Create Credentials → OAuth client ID → Desktop app")
+                                    bulletText("Copy the Client ID and Client Secret below")
+                                }
+                                
+                                Button {
+                                    NSWorkspace.shared.open(URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.up.forward.square")
+                                        Text("Open Google Cloud Console")
+                                    }
+                                }
+                                .buttonStyle(.link).font(.caption)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "book.pages.fill").foregroundColor(.irisIndigo)
+                            Text("Setup Guide").font(.subheadline)
+                            if gcloudAvailable, workspaceAPIs.allSatisfy(\.enabled) {
+                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.caption)
+                            }
+                        }
+                    }
+                    .onAppear {
+                        Task { await refreshGCloudState() }
+                    }
+                    .padding(.bottom, 4)
+                    
+                    // ── Credential fields ──
                     TextField("Client ID", text: $config.googleClientID)
+                        .help("From Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID")
                     SecureField("Client Secret", text: $config.googleClientSecret)
+                        .help("From Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID")
                     
                     Text("These credentials enable external tools for Google Calendar, Docs, Drive, Sheets, Gmail, and Tasks.")
                         .font(.caption)
@@ -434,18 +642,18 @@ struct SettingsView: View {
                         Text("✅ Connected to Google Workspace")
                             .foregroundColor(.green)
                             .font(.caption)
-                    }
-                    
-                    Button("Connect to Google") {
-                        Task {
-                            do {
-                                try await OAuthManager.shared.startOAuthFlow()
-                            } catch {
-                                print("OAuth Error: \(error)")
+                    } else {
+                        Button("Connect to Google") {
+                            Task {
+                                do {
+                                    try await OAuthManager.shared.startOAuthFlow()
+                                } catch {
+                                    print("OAuth Error: \(error)")
+                                }
                             }
                         }
+                        .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
                     }
-                    .disabled(config.googleClientID.isEmpty || config.googleClientSecret.isEmpty)
                 }
                 .padding(.bottom)
             }
@@ -641,6 +849,147 @@ struct SettingsView: View {
                     self.updateCheckStatusMessage = "Failed to check for updates: \(msg)"
                 }
             }
+        }
+    }
+    
+    // MARK: - Ollama Helpers
+    
+    private func probeOllamaModels() async {
+        isProbingOllama = true
+        ollamaPullError = nil
+        ollamaDaemonRunning = nil  // reset while probing
+        
+        let reachable = await OllamaEngine.isDaemonReachable()
+        await MainActor.run {
+            self.ollamaDaemonRunning = reachable
+        }
+        
+        guard reachable else {
+            await MainActor.run {
+                self.ollamaInstalledModels = []
+                self.isProbingOllama = false
+            }
+            return
+        }
+        
+        let models = await OllamaEngine.listInstalledModels()
+        await MainActor.run {
+            self.ollamaInstalledModels = models
+            self.isProbingOllama = false
+        }
+    }
+    
+    private func pullOllamaDefaultModel(_ name: String) async {
+        isPullingOllamaModel = true
+        ollamaPullError = nil
+        ollamaPullProgress = "Starting pull of \(name)…"
+        do {
+            try await OllamaEngine.pullModel(name: name) { progress in
+                Task { @MainActor in
+                    self.ollamaPullProgress = progress
+                }
+            }
+            await MainActor.run {
+                self.isPullingOllamaModel = false
+                self.ollamaPullProgress = nil
+                // Refresh the model list after pull
+                Task { await probeOllamaModels() }
+            }
+        } catch {
+            await MainActor.run {
+                self.isPullingOllamaModel = false
+                self.ollamaPullProgress = nil
+                self.ollamaPullError = error.localizedDescription
+            }
+        }
+    }
+    
+    // MARK: - Google Workspace / gcloud Helpers
+    
+    private func refreshGCloudState() async {
+        let available = GCloudHelper.isAvailable
+        await MainActor.run { self.gcloudAvailable = available }
+        guard available else { return }
+        
+        let account = await GCloudHelper.activeAccount()
+        let project = await GCloudHelper.currentProject()
+        await MainActor.run {
+            self.gcloudAccount = account
+            self.gcloudProject = project
+        }
+        await refreshAPIStatus()
+    }
+    
+    private func refreshAPIStatus() async {
+        guard gcloudAvailable else { return }
+        await MainActor.run { isCheckingAPIs = true }
+        
+        let enabled = await GCloudHelper.enabledServices()
+        let updated = GCloudHelper.requiredAPIs.map { api in
+            var copy = api
+            copy.enabled = enabled.contains(api.id)
+            return copy
+        }
+        
+        await MainActor.run {
+            self.workspaceAPIs = updated
+            self.isCheckingAPIs = false
+        }
+    }
+    
+    // MARK: - Setup Guide view helpers
+    
+    @ViewBuilder
+    private func stepText(_ number: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(number).font(.caption).fontWeight(.bold)
+                .frame(width: 16, alignment: .center)
+            Text(text).font(.caption)
+        }
+    }
+    
+    @ViewBuilder
+    private func bulletText(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("•").font(.caption)
+            Text(text).font(.caption)
+        }
+    }
+    
+    // MARK: - Vibecop test button (shared across engine paths)
+    
+    @ViewBuilder
+    private func vibecopTestButton() -> some View {
+        if isTestingVibecopModel {
+            ProgressView().scaleEffect(0.6)
+            Text("Testing…").font(.caption).foregroundColor(.secondary)
+        } else if let status = vibecopTestStatus {
+            Text(status).font(.caption)
+                .foregroundColor(status.starts(with: "✅") ? .green : .red)
+            if status.starts(with: "❌") {
+                Button("Retry") { runVibecopTest() }
+                    .buttonStyle(.link).font(.caption)
+            }
+        } else {
+            Button("Test Model") { runVibecopTest() }
+                .buttonStyle(.link).font(.caption)
+        }
+    }
+    
+    private func runVibecopTest() {
+        isTestingVibecopModel = true
+        vibecopTestStatus = nil
+        Task {
+            do {
+                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                vibecopTestStatus = "✅ Model tested successfully"
+            } catch {
+                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+            }
+            isTestingVibecopModel = false
         }
     }
 }
