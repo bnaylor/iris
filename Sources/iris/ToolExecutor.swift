@@ -22,7 +22,7 @@ struct ToolExecutor {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "path": Schema(type: "STRING", description: "Absolute or tilde-expanded path to the file")
+                    "path": Schema(type: "STRING", description: "Absolute, tilde (~), or workspace-relative path to the file. A relative path resolves against the conversation's bound workspace, not the app's directory.")
                 ],
                 required: ["path"]
             )
@@ -33,7 +33,7 @@ struct ToolExecutor {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "path": Schema(type: "STRING", description: "Absolute or tilde-expanded path to the file"),
+                    "path": Schema(type: "STRING", description: "Absolute, tilde (~), or workspace-relative path to the file. A relative path resolves against the conversation's bound workspace, not the app's directory."),
                     "content": Schema(type: "STRING", description: "The content to write")
                 ],
                 required: ["path", "content"]
@@ -45,7 +45,7 @@ struct ToolExecutor {
             parameters: Schema(
                 type: "OBJECT",
                 properties: [
-                    "path": Schema(type: "STRING", description: "Absolute or tilde-expanded path to watch"),
+                    "path": Schema(type: "STRING", description: "Absolute, tilde (~), or workspace-relative path to watch. A relative path resolves against the conversation's bound workspace, not the app's directory."),
                     "instructions": Schema(type: "STRING", description: "The instructions to execute when a file is modified")
                 ],
                 required: ["path", "instructions"]
@@ -125,8 +125,9 @@ struct ToolExecutor {
             return await writeFile(path, content: content, cwd: cwd)
         case "register_directory_watcher":
             guard let path = args["path"]?.stringValue, let instructions = args["instructions"]?.stringValue else { return "Error: Missing path or instructions" }
-            await WatcherManager.shared.addRule(path: path, instructions: instructions)
-            return "Successfully registered watcher for \(path). You will be notified automatically when files change."
+            let watchPath = Self.resolvePath(path, cwd: cwd)
+            await WatcherManager.shared.addRule(path: watchPath, instructions: instructions)
+            return "Successfully registered watcher for \(watchPath). You will be notified automatically when files change."
         case "search_web":
             guard let query = args["query"]?.stringValue else { return "Error: Missing query" }
             return await searchWeb(query: query)
