@@ -24,3 +24,5 @@ Tests/irisTests/Fixtures/deberta-v3-tokenizer/tokenizer.json
 
 # Swap files
 *.swp
+
+__pycache__/
