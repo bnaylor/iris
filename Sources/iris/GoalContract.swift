@@ -46,6 +46,36 @@ struct GoalContract: Codable, Equatable, Sendable {
     var checkpointStatus: CheckpointStatus = .running
     var state: ContractState = .draft
 
+    init(id: UUID = UUID(), objective: String, criteria: [Criterion], outOfScope: [String] = [],
+         stopBefore: [String] = [], assumptions: [String] = [], changeLog: [ContractChange] = [],
+         milestones: [Milestone] = [], currentMilestone: Int = 0,
+         checkpointStatus: CheckpointStatus = .running, state: ContractState = .draft) {
+        self.id = id; self.objective = objective; self.criteria = criteria
+        self.outOfScope = outOfScope; self.stopBefore = stopBefore; self.assumptions = assumptions
+        self.changeLog = changeLog; self.milestones = milestones; self.currentMilestone = currentMilestone
+        self.checkpointStatus = checkpointStatus; self.state = state
+    }
+
+    /// Custom decoder so the ladder fields (added in slice B1) are `decodeIfPresent`-defaulted:
+    /// synthesized `Codable` ignores property defaults and would throw `keyNotFound` on a contract
+    /// persisted by slice A/C (before `milestones`/`currentMilestone`/`checkpointStatus` existed),
+    /// failing the WHOLE `[Conversation]` decode and dropping every conversation. All older
+    /// defaulted fields are decoded leniently too, for the same forward-compat reason.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        objective = try c.decode(String.self, forKey: .objective)
+        criteria = try c.decode([Criterion].self, forKey: .criteria)
+        outOfScope = try c.decodeIfPresent([String].self, forKey: .outOfScope) ?? []
+        stopBefore = try c.decodeIfPresent([String].self, forKey: .stopBefore) ?? []
+        assumptions = try c.decodeIfPresent([String].self, forKey: .assumptions) ?? []
+        changeLog = try c.decodeIfPresent([ContractChange].self, forKey: .changeLog) ?? []
+        milestones = try c.decodeIfPresent([Milestone].self, forKey: .milestones) ?? []
+        currentMilestone = try c.decodeIfPresent(Int.self, forKey: .currentMilestone) ?? 0
+        checkpointStatus = try c.decodeIfPresent(CheckpointStatus.self, forKey: .checkpointStatus) ?? .running
+        state = try c.decodeIfPresent(ContractState.self, forKey: .state) ?? .draft
+    }
+
     var isLocked: Bool { state == .locked }
 
     mutating func lock() { state = .locked }

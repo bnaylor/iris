@@ -89,6 +89,24 @@ struct GoalContractLadderTests {
         #expect(!plain.oracleText().contains("Current checkpoint"))
     }
 
+    @Test("a slice-A/C contract JSON (no ladder keys) decodes with ladder defaults")
+    func decodesPreLadderContract() throws {
+        // A contract persisted BEFORE slice B1 existed — no milestones/currentMilestone/
+        // checkpointStatus keys. Synthesized Codable would throw keyNotFound and drop the whole
+        // conversation list; the custom decoder must default them instead.
+        let cid = UUID().uuidString
+        let json = """
+        {"id":"\(UUID().uuidString)","objective":"Ship","criteria":[{"id":"\(cid)","text":"x","kind":"qualitative"}],"outOfScope":[],"stopBefore":[],"assumptions":[],"changeLog":[],"state":"locked"}
+        """.data(using: .utf8)!
+        let c = try JSONDecoder().decode(GoalContract.self, from: json)
+        #expect(c.objective == "Ship")
+        #expect(c.isLocked)
+        #expect(c.milestones.isEmpty)
+        #expect(!c.hasLadder)
+        #expect(c.currentMilestone == 0)
+        #expect(c.checkpointStatus == .running)
+    }
+
     @Test("rungState classifies done / current / pausedCurrent / upcoming")
     func rungStates() {
         var c = laddered()          // two milestones, currentMilestone == 0, running
