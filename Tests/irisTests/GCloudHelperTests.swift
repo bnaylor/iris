@@ -6,7 +6,7 @@ final class GCloudHelperTests: XCTestCase {
     // MARK: - requiredAPIs
     
     func testRequiredAPIsCount() {
-        XCTAssertEqual(GCloudHelper.requiredAPIs.count, 7, "Seven Google Workspace APIs should be defined")
+        XCTAssertEqual(GCloudHelper.requiredAPIs.count, 6, "Six Google Workspace APIs should be defined (userinfo.email is OIDC, no People API)")
     }
     
     func testRequiredAPIsUniqueIDs() {
@@ -17,39 +17,41 @@ final class GCloudHelperTests: XCTestCase {
     func testRequiredAPIIDsAreCorrect() {
         let ids = Set(GCloudHelper.requiredAPIs.map(\.id))
         XCTAssertTrue(ids.contains("calendar-json.googleapis.com"))
-        XCTAssertTrue(ids.contains("people.googleapis.com"))
         XCTAssertTrue(ids.contains("drive.googleapis.com"))
         XCTAssertTrue(ids.contains("docs.googleapis.com"))
         XCTAssertTrue(ids.contains("sheets.googleapis.com"))
         XCTAssertTrue(ids.contains("gmail.googleapis.com"))
         XCTAssertTrue(ids.contains("tasks.googleapis.com"))
+        // People API should NOT be present (userinfo.email is OIDC)
+        XCTAssertFalse(ids.contains("people.googleapis.com"))
     }
     
     func testRequiredAPIScopesAreCorrect() {
         let scopes = Set(GCloudHelper.requiredAPIs.map(\.scope))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/calendar"))
-        XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/userinfo.email"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/drive"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/documents"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/spreadsheets"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.modify"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/tasks"))
+        // userinfo.email is an OIDC scope and does NOT require the People API
+        XCTAssertFalse(scopes.contains("https://www.googleapis.com/auth/userinfo.email"))
     }
     
     func testRequiredAPIDisplayNames() {
         let names = GCloudHelper.requiredAPIs.map(\.displayName)
         XCTAssertTrue(names.contains("Google Calendar"))
-        XCTAssertTrue(names.contains("Google People"))
         XCTAssertTrue(names.contains("Google Drive"))
         XCTAssertTrue(names.contains("Google Docs"))
         XCTAssertTrue(names.contains("Google Sheets"))
         XCTAssertTrue(names.contains("Gmail"))
         XCTAssertTrue(names.contains("Google Tasks"))
+        XCTAssertFalse(names.contains("Google People"))
     }
     
     func testAPIInfoIdentifiable() {
         let api = GCloudHelper.requiredAPIs[0]
-        XCTAssertEqual(api.id, api.id as String) // Identifiable conformance
+        XCTAssertEqual(api.id, api.id as String)
     }
     
     func testAPIInfoDefaultEnabledIsFalse() {
@@ -58,38 +60,36 @@ final class GCloudHelperTests: XCTestCase {
         }
     }
     
-    // MARK: - enabledServices parsing
+    // MARK: - parseEnabledServices (pure function)
     
-    func testEnabledServicesParsesGCloudOutput() {
-        // enabledServices() calls `gcloud services list --enabled --format=value(config.name)`
-        // and splits on newlines. Verify the data model works correctly with simulated output.
-        let simulatedOutput = """
+    func testParseEnabledServicesNormalOutput() {
+        let output = """
         calendar-json.googleapis.com
         drive.googleapis.com
         docs.googleapis.com
         """
-        let parsed = Set(simulatedOutput.components(separatedBy: .newlines).filter { !$0.isEmpty })
-        XCTAssertEqual(parsed.count, 3)
-        XCTAssertTrue(parsed.contains("calendar-json.googleapis.com"))
-        XCTAssertTrue(parsed.contains("drive.googleapis.com"))
-        XCTAssertTrue(parsed.contains("docs.googleapis.com"))
-        XCTAssertFalse(parsed.contains("sheets.googleapis.com"))
+        let services = GCloudHelper.parseEnabledServices(from: output)
+        XCTAssertEqual(services.count, 3)
+        XCTAssertTrue(services.contains("calendar-json.googleapis.com"))
+        XCTAssertTrue(services.contains("drive.googleapis.com"))
+        XCTAssertTrue(services.contains("docs.googleapis.com"))
+        XCTAssertFalse(services.contains("sheets.googleapis.com"))
     }
     
-    func testEnabledServicesEmptyOutput() {
-        let parsed = Set("".components(separatedBy: .newlines).filter { !$0.isEmpty })
-        XCTAssertTrue(parsed.isEmpty)
+    func testParseEnabledServicesEmptyOutput() {
+        let services = GCloudHelper.parseEnabledServices(from: "")
+        XCTAssertTrue(services.isEmpty)
     }
     
-    func testEnabledServicesFiltersEmptyLines() {
-        let simulatedOutput = """
+    func testParseEnabledServicesFiltersBlankLines() {
+        let output = """
         calendar-json.googleapis.com
         
         drive.googleapis.com
         
         """
-        let parsed = Set(simulatedOutput.components(separatedBy: .newlines).filter { !$0.isEmpty })
-        XCTAssertEqual(parsed.count, 2)
+        let services = GCloudHelper.parseEnabledServices(from: output)
+        XCTAssertEqual(services.count, 2)
     }
     
     // MARK: - APIInfo mutation

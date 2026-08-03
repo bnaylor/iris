@@ -3,9 +3,9 @@ import XCTest
 
 final class OllamaEngineTests: XCTestCase {
     
-    // MARK: - JSON response parsing (logic used by listInstalledModels)
+    // MARK: - parseModelNames (from /api/tags)
     
-    func testParseOllamaTagsResponse() {
+    func testParseModelNamesFromTagsResponse() {
         let json = """
         {
             "models": [
@@ -15,101 +15,58 @@ final class OllamaEngineTests: XCTestCase {
             ]
         }
         """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = obj["models"] as? [[String: Any]] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        let names = models.compactMap { $0["name"] as? String }.sorted()
-        XCTAssertEqual(names.count, 3)
+        let data = json.data(using: .utf8)!
+        let names = OllamaEngine.parseModelNames(from: data)
         XCTAssertEqual(names, ["gemma4:12b", "llama3.2:3b", "qwen3.5:latest"])
     }
     
-    func testParseEmptyOllamaTagsResponse() {
-        let json = """
-        {
-            "models": []
-        }
-        """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = obj["models"] as? [[String: Any]] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        let names = models.compactMap { $0["name"] as? String }
+    func testParseModelNamesEmptyResponse() {
+        let json = #"{"models": []}"#
+        let data = json.data(using: .utf8)!
+        let names = OllamaEngine.parseModelNames(from: data)
         XCTAssertTrue(names.isEmpty)
     }
     
-    func testParseOllamaTagsMissingModelsKey() {
-        let json = """
-        {
-            "other_key": "value"
-        }
-        """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        // When "models" key is missing, we get nil, which maps to []
-        let models = obj["models"] as? [[String: Any]] ?? []
-        XCTAssertTrue(models.isEmpty)
-    }
-    
-    func testParseOllamaTagsInvalidJSON() {
-        let json = "{ invalid }"
+    func testParseModelNamesMissingKey() {
+        let json = #"{"other": "value"}"#
         let data = json.data(using: .utf8)!
-        let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        XCTAssertNil(obj, "Invalid JSON should return nil")
+        let names = OllamaEngine.parseModelNames(from: data)
+        XCTAssertTrue(names.isEmpty)
     }
     
-    // MARK: - Pull response parsing
+    func testParseModelNamesInvalidJSON() {
+        let json = "{ not json }"
+        let data = json.data(using: .utf8)!
+        let names = OllamaEngine.parseModelNames(from: data)
+        XCTAssertTrue(names.isEmpty)
+    }
     
-    func testParseOllamaPullSuccessResponse() {
-        let json = """
-        {
-            "status": "success"
-        }
-        """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let status = obj["status"] as? String else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
+    // MARK: - parsePullStatus (from /api/pull)
+    
+    func testParsePullStatusSuccess() {
+        let json = #"{"status": "success"}"#
+        let data = json.data(using: .utf8)!
+        let status = OllamaEngine.parsePullStatus(from: data)
         XCTAssertEqual(status, "success")
     }
     
-    func testParseOllamaPullProgressResponse() {
-        let json = """
-        {
-            "status": "downloading 45%"
-        }
-        """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let status = obj["status"] as? String else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
+    func testParsePullStatusProgress() {
+        let json = #"{"status": "downloading 45%"}"#
+        let data = json.data(using: .utf8)!
+        let status = OllamaEngine.parsePullStatus(from: data)
         XCTAssertEqual(status, "downloading 45%")
     }
     
-    // MARK: - PS response parsing (isModelLoaded)
+    func testParsePullStatusInvalidJSON() {
+        let json = "{ broken }"
+        let data = json.data(using: .utf8)!
+        let status = OllamaEngine.parsePullStatus(from: data)
+        XCTAssertNil(status)
+    }
     
-    func testParseOllamaPSResponseModelFound() {
+    // MARK: - parsePSModels + modelIsInPSList (from /api/ps)
+    
+    func testParsePSModelsAndModelFound() {
         let json = """
         {
             "models": [
@@ -118,95 +75,43 @@ final class OllamaEngineTests: XCTestCase {
             ]
         }
         """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = obj["models"] as? [[String: Any]] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        let modelName = "gemma4:12b"
-        let found = models.contains { model in
-            guard let name = model["name"] as? String else { return false }
-            return name == modelName || name.hasPrefix(modelName + ":")
-        }
-        XCTAssertTrue(found)
+        let data = json.data(using: .utf8)!
+        let models = OllamaEngine.parsePSModels(from: data)
+        XCTAssertEqual(models.count, 2)
+        XCTAssertTrue(OllamaEngine.modelIsInPSList("gemma4:12b", models: models))
     }
     
-    func testParseOllamaPSResponseModelNotFound() {
-        let json = """
-        {
-            "models": [
-                {"name": "qwen3.5:latest", "size": 5432109876}
-            ]
-        }
-        """
-        
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = obj["models"] as? [[String: Any]] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        let modelName = "gemma4:12b"
-        let found = models.contains { model in
-            guard let name = model["name"] as? String else { return false }
-            return name == modelName || name.hasPrefix(modelName + ":")
-        }
-        XCTAssertFalse(found)
+    func testParsePSModelsModelNotFound() {
+        let json = #"{"models": [{"name": "qwen3.5:latest"}]}"#
+        let data = json.data(using: .utf8)!
+        let models = OllamaEngine.parsePSModels(from: data)
+        XCTAssertFalse(OllamaEngine.modelIsInPSList("gemma4:12b", models: models))
     }
     
-    func testParseOllamaPSResponsePrefixMatch() {
-        // When a model was pulled with a variant tag, isModelLoaded should
-        // match via colon prefix (Ollama's tag separator)
-        // e.g. "gemma4:12b" should match "gemma4:12b:text" 
-        let json = """
-        {
-            "models": [
-                {"name": "gemma4:12b:text", "size": 7556508396}
-            ]
-        }
-        """
+    func testModelIsInPSListColonPrefixMatch() {
+        // Ollama tag separator is ":" — "gemma4:12b" should match "gemma4:12b:text"
+        let models: [[String: Any]] = [["name": "gemma4:12b:text"]]
+        XCTAssertTrue(OllamaEngine.modelIsInPSList("gemma4:12b", models: models))
         
-        guard let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = obj["models"] as? [[String: Any]] else {
-            XCTFail("Failed to parse JSON")
-            return
-        }
-        
-        let modelName = "gemma4:12b"
-        let found = models.contains { model in
-            guard let name = model["name"] as? String else { return false }
-            return name == modelName || name.hasPrefix(modelName + ":")
-        }
-        XCTAssertTrue(found, "Colon-prefix match should find gemma4:12b:text for query gemma4:12b")
-        
-        // Also verify that dashes do NOT match (only colon prefixes work)
-        let noMatchModels: [[String: Any]] = [["name": "gemma4:12b-Q4_K_M"]]
-        let noMatchFound = noMatchModels.contains { model in
-            guard let name = model["name"] as? String else { return false }
-            return name == modelName || name.hasPrefix(modelName + ":")
-        }
-        XCTAssertFalse(noMatchFound, "Dash suffix should not match — only colon prefixes work")
+        // Dash suffix should NOT match
+        let dashModels: [[String: Any]] = [["name": "gemma4:12b-Q4_K_M"]]
+        XCTAssertFalse(OllamaEngine.modelIsInPSList("gemma4:12b", models: dashModels))
     }
     
-    // MARK: - Base URL construction
+    func testParsePSModelsInvalidJSON() {
+        let json = "{ bad }"
+        let data = json.data(using: .utf8)!
+        let models = OllamaEngine.parsePSModels(from: data)
+        XCTAssertTrue(models.isEmpty)
+    }
     
-    func testBaseURLIsCorrect() {
-        // The baseURL is private; we verify the paths are constructed correctly
-        // by testing URL construction with the expected base
-        let baseURL = "http://localhost:11434"
-        let tagsURL = URL(string: "\(baseURL)/api/tags")
-        let generateURL = URL(string: "\(baseURL)/api/generate")
-        let pullURL = URL(string: "\(baseURL)/api/pull")
-        let psURL = URL(string: "\(baseURL)/api/ps")
-        
-        XCTAssertEqual(tagsURL?.absoluteString, "http://localhost:11434/api/tags")
-        XCTAssertEqual(generateURL?.absoluteString, "http://localhost:11434/api/generate")
-        XCTAssertEqual(pullURL?.absoluteString, "http://localhost:11434/api/pull")
-        XCTAssertEqual(psURL?.absoluteString, "http://localhost:11434/api/ps")
+    // MARK: - URL construction
+    
+    func testBaseURLEndpointConstruction() {
+        let base = "http://localhost:11434"
+        XCTAssertEqual(URL(string: "\(base)/api/tags")?.absoluteString, "http://localhost:11434/api/tags")
+        XCTAssertEqual(URL(string: "\(base)/api/generate")?.absoluteString, "http://localhost:11434/api/generate")
+        XCTAssertEqual(URL(string: "\(base)/api/pull")?.absoluteString, "http://localhost:11434/api/pull")
+        XCTAssertEqual(URL(string: "\(base)/api/ps")?.absoluteString, "http://localhost:11434/api/ps")
     }
 }

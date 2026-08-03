@@ -38,17 +38,46 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else { return false }
             
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let models = json["models"] as? [[String: Any]] {
-                return models.contains { model in
-                    guard let name = model["name"] as? String else { return false }
-                    return name == modelName || name.hasPrefix(modelName + ":")
-                }
-            }
+            let models = Self.parsePSModels(from: data)
+            return Self.modelIsInPSList(modelName, models: models)
         } catch {
             return false
         }
-        return false
+    }
+    
+    // MARK: - Parsing (pure functions — testable without network)
+    
+    /// Parses model names from an Ollama /api/tags JSON response body.
+    /// Returns a sorted array of model name strings, or [] on parse failure.
+    static func parseModelNames(from data: Data) -> [String] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]] else { return [] }
+        return models.compactMap { $0["name"] as? String }.sorted()
+    }
+    
+    /// Parses the status field from an Ollama /api/pull JSON response body.
+    /// Returns the status string, or nil on parse failure.
+    static func parsePullStatus(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let status = json["status"] as? String else { return nil }
+        return status
+    }
+    
+    /// Parses the "models" array from an Ollama /api/ps JSON response body.
+    /// Returns the raw model dictionaries, or [] on parse failure.
+    static func parsePSModels(from data: Data) -> [[String: Any]] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]] else { return [] }
+        return models
+    }
+    
+    /// Checks whether a model name appears in the ps model list,
+    /// matching exactly or by colon-prefix (Ollama's tag separator).
+    static func modelIsInPSList(_ name: String, models: [[String: Any]]) -> Bool {
+        models.contains { model in
+            guard let modelName = model["name"] as? String else { return false }
+            return modelName == name || modelName.hasPrefix(name + ":")
+        }
     }
     
     // MARK: - Static helpers for model discovery & pull
@@ -81,20 +110,14 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else { return [] }
-            
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let models = json["models"] as? [[String: Any]] {
-                return models.compactMap { $0["name"] as? String }.sorted()
-            }
+            return parseModelNames(from: data)
         } catch {
             return []
         }
-        return []
     }
     
-    /// Pulls a model from Ollama's registry. Reports progress via the callback.
-    /// The callback receives a human-readable status string (e.g. "pulling manifest",
-    /// "downloading 45%", "verifying sha256 digest", "done").
+    /// Pulls a model from Ollama's registry. Reports progress via the callback
+    /// with real incremental status (uses stream:true and parses NDJSON lines).
     static func pullModel(name: String, onProgress: @escaping @Sendable (String) -> Void) async throws {
         guard let url = URL(string: "\(baseURL)/api/pull") else {
             throw NSError(domain: "OllamaEngine", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid base URL"])
@@ -102,34 +125,42 @@ actor OllamaEngine: AuxiliaryInferenceEngine {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["name": name, "stream": false]
+        let body: [String: Any] = ["name": name, "stream": true]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         req.timeoutInterval = 600
         
         onProgress("Starting pull of \(name)…")
         
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (bytes, response) = try await URLSession.shared.bytes(for: req)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NSError(domain: "OllamaEngine", code: 4, userInfo: [NSLocalizedDescriptionKey: "No HTTP response"])
         }
         
-        if httpResponse.statusCode == 200 {
-            // If stream:false, the response is a single JSON object with "status": "success"
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String {
-                if status == "success" {
-                    onProgress("done")
-                    return
-                }
-                onProgress(status)
-                return
+        if httpResponse.statusCode != 200 {
+            // Read error body
+            var errorBody = ""
+            for try await line in bytes.lines {
+                errorBody += line
             }
-            onProgress("done")
-            return
+            throw NSError(domain: "OllamaEngine", code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "Pull failed (HTTP \(httpResponse.statusCode)): \(errorBody)"])
         }
         
-        let errBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-        throw NSError(domain: "OllamaEngine", code: 5, userInfo: [NSLocalizedDescriptionKey: "Pull failed (HTTP \(httpResponse.statusCode)): \(errBody)"])
+        // Parse NDJSON stream — each line is a JSON object with a "status" field
+        var lastStatus = ""
+        for try await line in bytes.lines {
+            guard let lineData = line.data(using: .utf8),
+                  let status = parsePullStatus(from: lineData) else { continue }
+            lastStatus = status
+            onProgress(status)
+        }
+        
+        // If the stream ended without an explicit "success", check the last status
+        if lastStatus != "success" {
+            // Some Ollama versions don't send a final "success" line;
+            // treat any non-error terminal state as done.
+            onProgress("done")
+        }
     }
     
     /// Fires a non-blocking warmup request to keep the model alive.

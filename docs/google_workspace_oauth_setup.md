@@ -22,11 +22,10 @@ gcloud config set project YOUR_PROJECT_ID
 
 ### Step 2: Enable required APIs
 
-In the Iris Integrations tab, expand the **Setup Guide**. Under "Option 1: gcloud CLI", you'll see a checklist of seven APIs. Tap **Enable** next to each one, or run them manually:
+In the Iris Integrations tab, expand the **Setup Guide**. Under "Option 1: gcloud CLI", you'll see a checklist of six APIs. Tap **Enable** next to each one, or run them manually:
 
 ```bash
 gcloud services enable calendar-json.googleapis.com --quiet
-gcloud services enable people.googleapis.com --quiet
 gcloud services enable drive.googleapis.com --quiet
 gcloud services enable docs.googleapis.com --quiet
 gcloud services enable sheets.googleapis.com --quiet
@@ -34,7 +33,7 @@ gcloud services enable gmail.googleapis.com --quiet
 gcloud services enable tasks.googleapis.com --quiet
 ```
 
-Tap **Refresh API status** to confirm all seven show green checkmarks.
+Tap **Refresh API status** to confirm all six show green checkmarks.
 
 ### Step 3: Create an OAuth 2.0 Client ID
 
@@ -67,7 +66,6 @@ Search for and enable each of these:
 | API | Service Name |
 |---|---|
 | Google Calendar API | `calendar-json.googleapis.com` |
-| Google People API | `people.googleapis.com` |
 | Google Drive API | `drive.googleapis.com` |
 | Google Docs API | `docs.googleapis.com` |
 | Google Sheets API | `sheets.googleapis.com` |

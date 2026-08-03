@@ -1,7 +1,8 @@
 import Foundation
 
 /// Lightweight helper for running `gcloud` CLI commands relevant to the
-/// Google Workspace OAuth setup flow.
+/// Google Workspace OAuth setup flow.  All Process invocations hop off
+/// the calling actor so the settings UI stays responsive.
 enum GCloudHelper {
     
     struct APIInfo: Identifiable {
@@ -11,10 +12,10 @@ enum GCloudHelper {
         var enabled: Bool
     }
     
-    /// The seven APIs required by the Google Workspace integration.
+    /// The six APIs required by the Google Workspace integration.
+    /// (userinfo.email is an OIDC scope — no People API enablement needed.)
     static let requiredAPIs: [APIInfo] = [
         APIInfo(id: "calendar-json.googleapis.com", displayName: "Google Calendar", scope: "https://www.googleapis.com/auth/calendar", enabled: false),
-        APIInfo(id: "people.googleapis.com",        displayName: "Google People",  scope: "https://www.googleapis.com/auth/userinfo.email", enabled: false),
         APIInfo(id: "drive.googleapis.com",          displayName: "Google Drive",   scope: "https://www.googleapis.com/auth/drive", enabled: false),
         APIInfo(id: "docs.googleapis.com",           displayName: "Google Docs",    scope: "https://www.googleapis.com/auth/documents", enabled: false),
         APIInfo(id: "sheets.googleapis.com",         displayName: "Google Sheets",  scope: "https://www.googleapis.com/auth/spreadsheets", enabled: false),
@@ -34,27 +35,33 @@ enum GCloudHelper {
         return task.terminationStatus == 0
     }
     
-    /// Returns the authenticated account email, or nil.
-    static func activeAccount() -> String? {
-        run("auth", "list", "--format=value(account)", "--filter=status:ACTIVE")
+    /// Returns the authenticated account email, or nil.  Runs off the calling actor.
+    static func activeAccount() async -> String? {
+        await runAsync("auth", "list", "--format=value(account)", "--filter=status:ACTIVE")
     }
     
-    /// Returns the current GCP project ID, or nil.
-    static func currentProject() -> String? {
-        run("config", "get-value", "project")
+    /// Returns the current GCP project ID, or nil.  Runs off the calling actor.
+    static func currentProject() async -> String? {
+        await runAsync("config", "get-value", "project")
     }
     
     // MARK: - API enablement
     
-    /// Returns the list of enabled service names.
-    static func enabledServices() -> Set<String> {
-        guard let raw = run("services", "list", "--enabled", "--format=value(config.name)") else {
-            return []
-        }
-        return Set(raw.components(separatedBy: .newlines).filter { !$0.isEmpty })
+    /// Parses the raw output of `gcloud services list --enabled --format=value(config.name)`
+    /// into a set of enabled service names.  Pure function — testable without gcloud.
+    static func parseEnabledServices(from output: String) -> Set<String> {
+        Set(output.components(separatedBy: .newlines).filter { !$0.isEmpty })
     }
     
-    /// Enables a single API. Returns true on success.
+    /// Returns the set of enabled service names.  Runs off the calling actor.
+    static func enabledServices() async -> Set<String> {
+        guard let raw = await runAsync("services", "list", "--enabled", "--format=value(config.name)") else {
+            return []
+        }
+        return parseEnabledServices(from: raw)
+    }
+    
+    /// Enables a single API. Returns true on success.  Runs off the calling actor.
     @discardableResult
     static func enableAPI(_ serviceName: String) async -> Bool {
         await withCheckedContinuation { continuation in
@@ -78,7 +85,17 @@ enum GCloudHelper {
     
     // MARK: - Internal
     
-    private static func run(_ args: String...) -> String? {
+    /// Runs a gcloud subcommand asynchronously on a background queue and returns its stdout.
+    private static func runAsync(_ args: String...) async -> String? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                let result = run(args)
+                continuation.resume(returning: result)
+            }
+        }
+    }
+    
+    private static func run(_ args: [String]) -> String? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["gcloud"] + args

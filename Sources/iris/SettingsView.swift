@@ -192,51 +192,7 @@ struct SettingsView: View {
                                         .font(.caption)
                                         .foregroundColor(.green)
                                     
-                                    if isTestingVibecopModel {
-                                        ProgressView().scaleEffect(0.6)
-                                        Text("Testing…").font(.caption).foregroundColor(.secondary)
-                                    } else if let status = vibecopTestStatus {
-                                        Text(status).font(.caption)
-                                            .foregroundColor(status.starts(with: "✅") ? .green : .red)
-                                        if status.starts(with: "❌") {
-                                            Button("Retry") {
-                                                vibecopTestStatus = nil
-                                                isTestingVibecopModel = true
-                                                Task {
-                                                    do {
-                                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                        vibecopTestStatus = "✅ Model tested successfully"
-                                                    } catch {
-                                                        vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                                    }
-                                                    isTestingVibecopModel = false
-                                                }
-                                            }
-                                            .buttonStyle(.link)
-                                            .font(.caption)
-                                        }
-                                    } else {
-                                        Button("Test Model") {
-                                            isTestingVibecopModel = true
-                                            Task {
-                                                do {
-                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                    vibecopTestStatus = "✅ Model tested successfully"
-                                                } catch {
-                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                                }
-                                                isTestingVibecopModel = false
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                        .font(.caption)
-                                    }
+                                    vibecopTestButton()
                                 }
                             }
                         } else if config.vibecopEngine == "ollama" {
@@ -323,51 +279,7 @@ struct SettingsView: View {
                                 }
                                 
                                 if ollamaDaemonRunning == true {
-                                    if isTestingVibecopModel {
-                                        ProgressView().scaleEffect(0.6)
-                                        Text("Testing…").font(.caption).foregroundColor(.secondary)
-                                    } else if let status = vibecopTestStatus {
-                                        Text(status).font(.caption)
-                                            .foregroundColor(status.starts(with: "✅") ? .green : .red)
-                                        if status.starts(with: "❌") {
-                                            Button("Retry") {
-                                                vibecopTestStatus = nil
-                                                isTestingVibecopModel = true
-                                                Task {
-                                                    do {
-                                                        let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                        let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                        let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                        _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                        vibecopTestStatus = "✅ Model tested successfully"
-                                                    } catch {
-                                                        vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                                    }
-                                                    isTestingVibecopModel = false
-                                                }
-                                            }
-                                            .buttonStyle(.link)
-                                            .font(.caption)
-                                        }
-                                    } else {
-                                        Button("Test Model") {
-                                            isTestingVibecopModel = true
-                                            Task {
-                                                do {
-                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                    vibecopTestStatus = "✅ Model tested successfully"
-                                                } catch {
-                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                                }
-                                                isTestingVibecopModel = false
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                        .font(.caption)
-                                    }
+                                    vibecopTestButton()
                                 }
                             }
                         } else {
@@ -379,51 +291,7 @@ struct SettingsView: View {
                                     .foregroundColor(.green)
                                     .font(.caption)
                                 
-                                if isTestingVibecopModel {
-                                    ProgressView().scaleEffect(0.6)
-                                    Text("Testing…").font(.caption).foregroundColor(.secondary)
-                                } else if let status = vibecopTestStatus {
-                                    Text(status).font(.caption)
-                                        .foregroundColor(status.starts(with: "✅") ? .green : .red)
-                                    if status.starts(with: "❌") {
-                                        Button("Retry") {
-                                            vibecopTestStatus = nil
-                                            isTestingVibecopModel = true
-                                            Task {
-                                                do {
-                                                    let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                    let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                    let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                    _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                    vibecopTestStatus = "✅ Model tested successfully"
-                                                } catch {
-                                                    vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                                }
-                                                isTestingVibecopModel = false
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                        .font(.caption)
-                                    }
-                                } else {
-                                    Button("Test Model") {
-                                        isTestingVibecopModel = true
-                                        Task {
-                                            do {
-                                                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
-                                                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
-                                                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
-                                                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
-                                                vibecopTestStatus = "✅ Model tested successfully"
-                                            } catch {
-                                                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
-                                            }
-                                            isTestingVibecopModel = false
-                                        }
-                                    }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
-                                }
+                                vibecopTestButton()
                             }
                         }
                         
@@ -728,7 +596,7 @@ struct SettingsView: View {
                                     bulletText("Go to console.cloud.google.com")
                                     bulletText("Select or create a project")
                                     bulletText("Navigate to APIs & Services → Enabled APIs & Services")
-                                    bulletText("Enable: Calendar, People, Drive, Docs, Sheets, Gmail, Tasks")
+                                    bulletText("Enable: Calendar, Drive, Docs, Sheets, Gmail, Tasks")
                                     bulletText("Go to APIs & Services → Credentials")
                                     bulletText("Create Credentials → OAuth client ID → Desktop app")
                                     bulletText("Copy the Client ID and Client Secret below")
@@ -1008,10 +876,6 @@ struct SettingsView: View {
         await MainActor.run {
             self.ollamaInstalledModels = models
             self.isProbingOllama = false
-            // If the current config model isn't in the list and we got results, default to first
-            if !models.isEmpty, !models.contains(config.vibecopModel) {
-                config.vibecopModel = models.first!
-            }
         }
     }
     
@@ -1047,8 +911,8 @@ struct SettingsView: View {
         await MainActor.run { self.gcloudAvailable = available }
         guard available else { return }
         
-        let account = GCloudHelper.activeAccount()
-        let project = GCloudHelper.currentProject()
+        let account = await GCloudHelper.activeAccount()
+        let project = await GCloudHelper.currentProject()
         await MainActor.run {
             self.gcloudAccount = account
             self.gcloudProject = project
@@ -1060,7 +924,7 @@ struct SettingsView: View {
         guard gcloudAvailable else { return }
         await MainActor.run { isCheckingAPIs = true }
         
-        let enabled = GCloudHelper.enabledServices()
+        let enabled = await GCloudHelper.enabledServices()
         let updated = GCloudHelper.requiredAPIs.map { api in
             var copy = api
             copy.enabled = enabled.contains(api.id)
@@ -1089,6 +953,43 @@ struct SettingsView: View {
         HStack(alignment: .top, spacing: 6) {
             Text("•").font(.caption)
             Text(text).font(.caption)
+        }
+    }
+    
+    // MARK: - Vibecop test button (shared across engine paths)
+    
+    @ViewBuilder
+    private func vibecopTestButton() -> some View {
+        if isTestingVibecopModel {
+            ProgressView().scaleEffect(0.6)
+            Text("Testing…").font(.caption).foregroundColor(.secondary)
+        } else if let status = vibecopTestStatus {
+            Text(status).font(.caption)
+                .foregroundColor(status.starts(with: "✅") ? .green : .red)
+            if status.starts(with: "❌") {
+                Button("Retry") { runVibecopTest() }
+                    .buttonStyle(.link).font(.caption)
+            }
+        } else {
+            Button("Test Model") { runVibecopTest() }
+                .buttonStyle(.link).font(.caption)
+        }
+    }
+    
+    private func runVibecopTest() {
+        isTestingVibecopModel = true
+        vibecopTestStatus = nil
+        Task {
+            do {
+                let engineType = AuxiliaryEngineType(rawValue: config.vibecopEngine) ?? .llamaCPP
+                let auxConfig = AuxiliaryModelConfig(role: "vibecop", engineType: engineType, modelPathOrName: config.vibecopModel)
+                let engine = try await AuxiliaryModelManager.shared.getEngine(for: "vibecop", config: auxConfig)
+                _ = try await engine.generate(prompt: "Hello", jsonSchema: nil)
+                vibecopTestStatus = "✅ Model tested successfully"
+            } catch {
+                vibecopTestStatus = "❌ Failed: \(error.localizedDescription)"
+            }
+            isTestingVibecopModel = false
         }
     }
 }
