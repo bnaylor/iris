@@ -3,6 +3,10 @@ import Foundation
 /// Lightweight helper for running `gcloud` CLI commands relevant to the
 /// Google Workspace OAuth setup flow.  All Process invocations hop off
 /// the calling actor so the settings UI stays responsive.
+///
+/// Searches for the `gcloud` binary in explicit paths so that the helper
+/// works even when Iris is launched from Finder/Dock (which inherits a
+/// restricted `PATH` that excludes Homebrew and custom SDK directories).
 enum GCloudHelper {
     
     struct APIInfo: Identifiable {
@@ -23,17 +27,32 @@ enum GCloudHelper {
         APIInfo(id: "tasks.googleapis.com",          displayName: "Google Tasks",   scope: "https://www.googleapis.com/auth/tasks", enabled: false),
     ]
     
-    // MARK: - Availability & auth
+    // MARK: - Binary resolution
     
-    /// Returns true if `gcloud` is on PATH.
-    static var isAvailable: Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["which", "gcloud"]
-        let pipe = Pipe(); task.standardOutput = pipe; task.standardError = Pipe()
-        do { try task.run(); task.waitUntilExit() } catch { return false }
-        return task.terminationStatus == 0
+    /// Search paths for the `gcloud` binary, ordered by priority.
+    /// macOS GUI apps inherit a restricted PATH, so we probe these explicitly.
+    static let gcloudSearchPaths: [String] = [
+        "/opt/homebrew/bin/gcloud",                       // Homebrew on Apple Silicon
+        "/usr/local/bin/gcloud",                          // Homebrew on Intel / manual install
+        "\(NSHomeDirectory())/google-cloud-sdk/bin/gcloud", // Google Cloud SDK standalone
+    ]
+    
+    /// Resolved absolute path to the gcloud binary, or nil if not found.
+    static var resolvedGCloudPath: String? {
+        for path in gcloudSearchPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return nil
     }
+    
+    /// Returns true if a `gcloud` binary was found at any of the search paths.
+    static var isAvailable: Bool {
+        resolvedGCloudPath != nil
+    }
+    
+    // MARK: - Auth helpers
     
     /// Returns the authenticated account email, or nil.  Runs off the calling actor.
     static func activeAccount() async -> String? {
@@ -64,11 +83,12 @@ enum GCloudHelper {
     /// Enables a single API. Returns true on success.  Runs off the calling actor.
     @discardableResult
     static func enableAPI(_ serviceName: String) async -> Bool {
-        await withCheckedContinuation { continuation in
+        guard let gcloudPath = resolvedGCloudPath else { return false }
+        return await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
                 let task = Process()
-                task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                task.arguments = ["gcloud", "services", "enable", serviceName, "--quiet"]
+                task.executableURL = URL(fileURLWithPath: gcloudPath)
+                task.arguments = ["services", "enable", serviceName, "--quiet"]
                 task.standardOutput = Pipe()
                 task.standardError = Pipe()
                 do {
@@ -96,9 +116,10 @@ enum GCloudHelper {
     }
     
     private static func run(_ args: [String]) -> String? {
+        guard let gcloudPath = resolvedGCloudPath else { return nil }
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["gcloud"] + args
+        task.executableURL = URL(fileURLWithPath: gcloudPath)
+        task.arguments = args
         let pipe = Pipe(); task.standardOutput = pipe; task.standardError = Pipe()
         do {
             try task.run()

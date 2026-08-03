@@ -117,4 +117,21 @@ final class GCloudHelperTests: XCTestCase {
         apis[0].enabled = false
         XCTAssertFalse(apis.allSatisfy(\.enabled))
     }
+    
+    // MARK: - Binary search paths
+    
+    func testGCloudSearchPathsNotEmpty() {
+        XCTAssertFalse(GCloudHelper.gcloudSearchPaths.isEmpty)
+    }
+    
+    func testGCloudSearchPathsIncludeHomebrew() {
+        XCTAssertTrue(GCloudHelper.gcloudSearchPaths.contains("/opt/homebrew/bin/gcloud"))
+        XCTAssertTrue(GCloudHelper.gcloudSearchPaths.contains("/usr/local/bin/gcloud"))
+    }
+    
+    func testGCloudSearchPathsContainAbsolutePaths() {
+        for path in GCloudHelper.gcloudSearchPaths {
+            XCTAssertTrue(path.hasPrefix("/"), "Search path should be absolute: \(path)")
+        }
+    }
 }
