@@ -42,4 +42,16 @@ struct ToolExecutorWorkspaceTests {
         )
         #expect(readResult.contains("print('hi')"))
     }
+
+    @Test("register_directory_watcher with a relative path resolves against the bound workspace")
+    func relativeWatcherResolvesToWorkspace() async {
+        let result = await ToolExecutor.shared.execute(
+            name: "register_directory_watcher",
+            args: ["path": .string("src"), "instructions": .string("note changes")],
+            cwd: "/ws"
+        )
+        // The confirmation echoes the resolved path — under the workspace, not the process cwd.
+        #expect(result.contains("/ws/src"))
+        #expect(!result.contains(FileManager.default.currentDirectoryPath + "/src"))
+    }
 }
