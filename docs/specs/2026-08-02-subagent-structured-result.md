@@ -2,7 +2,7 @@
 
 * **Issues**: [#13](https://github.com/bnaylor/iris/issues/13) (inner/outer loop semantics) — the **inner-loop-result half**. Builds on merged **slice B1** ([2026-08-01-goal-checkpoint-ladder.md](2026-08-01-goal-checkpoint-ladder.md)), **slice A** ([2026-07-28-goal-contract.md](2026-07-28-goal-contract.md)), and **slice C** ([2026-07-29-goal-drift-evaluator.md](2026-07-29-goal-drift-evaluator.md)).
 * **Date**: 2026-08-02
-* **Status**: Approved (design)
+* **Status**: Implemented
 
 ## 1. Overview
 
