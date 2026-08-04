@@ -56,6 +56,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var goalContract: GoalContract? = nil
     var lastGoalCompletionReport: JSONValue? = nil
     var lastGoalEvaluation: GoalEvaluation? = nil
+    var subagentResult: SubagentResult? = nil
 
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
@@ -70,7 +71,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport, lastGoalEvaluation
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport, lastGoalEvaluation, subagentResult
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +89,7 @@ struct Conversation: Identifiable, Codable, Hashable {
         goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
         lastGoalCompletionReport = try container.decodeIfPresent(JSONValue.self, forKey: .lastGoalCompletionReport)
         lastGoalEvaluation = try container.decodeIfPresent(GoalEvaluation.self, forKey: .lastGoalEvaluation)
+        subagentResult = try container.decodeIfPresent(SubagentResult.self, forKey: .subagentResult)
         // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
         // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
         if goalContract == nil, let legacy = activeGoal {
