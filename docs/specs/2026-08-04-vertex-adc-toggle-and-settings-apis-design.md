@@ -12,9 +12,8 @@ When users select **Application Default Credentials (ADC)** as their Gemini auth
 Additionally, while Iris provides an automated GCP/Google Workspace API enablement checklist in its Settings pane, that checklist currently only includes the six Google Workspace APIs (`calendar`, `drive`, `docs`, `sheets`, `gmail`, `tasks`). It lacks the Google Cloud AI APIs needed for ADC and Gemini workflows (`aiplatform.googleapis.com`, `cloudaicompanion.googleapis.com`, and `generativelanguage.googleapis.com`).
 
 This design implements:
-1. **Automatic Vertex AI Endpoint Toggle**: Automatically routing Gemini requests to regional Vertex AI endpoints (`https://us-central1-aiplatform.googleapis.com/...`) when ADC auth mode is selected and `geminiBaseURL` is not overridden.
-2. **Automatic Model Mapping for Vertex GA**: Mapping AI Studio experimental/default `3.x` model names to Vertex AI `2.x` GA equivalents so default model configurations succeed without `404 Not Found` errors.
-3. **Expanded Settings API Enablement Pane**: Adding `aiplatform.googleapis.com`, `cloudaicompanion.googleapis.com`, and `generativelanguage.googleapis.com` to `GCloudHelper.requiredAPIs` so users can inspect and enable them directly from Settings.
+1. **Automatic Vertex AI Global Endpoint Toggle**: Automatically routing Gemini requests to the Global Vertex AI endpoint (`https://aiplatform.googleapis.com/.../locations/global/...`) when ADC auth mode is selected and `geminiBaseURL` is not overridden. Because Gemini 3.x models (`gemini-3.5-flash`, `gemini-3.1-pro-preview`, etc.) are deployed on Global and Multi-Region shards, targeting `locations/global` allows modern Gemini 3.x models to work natively out of the box without any model down-mapping.
+2. **Expanded Settings API Enablement Pane**: Adding `aiplatform.googleapis.com`, `cloudaicompanion.googleapis.com`, and `generativelanguage.googleapis.com` to `GCloudHelper.requiredAPIs` so users can inspect and enable them directly from Settings.
 
 ---
 
@@ -29,14 +28,9 @@ This design implements:
       ```
       GCP Project ID not found. Required for Application Default Credentials (ADC) Vertex AI endpoint. Set via 'gcloud config set project <PROJECT_ID>' or export GOOGLE_CLOUD_QUOTA_PROJECT.
       ```
-    * Map the configured model string using a helper `resolveGeminiModelForVertex(_ modelName: String) -> String`:
-      * `gemini-3.5-flash` → `gemini-2.5-flash`
-      * `gemini-3.1-pro-preview` → `gemini-2.5-pro`
-      * `gemini-3.1-flash-lite` → `gemini-2.5-flash`
-      * Any other model string is returned unchanged.
-    * Construct the regional Vertex AI request URL:
+    * Construct the Global Vertex AI request URL:
       ```
-      https://us-central1-aiplatform.googleapis.com/v1/projects/\(project)/locations/us-central1/publishers/google/models/\(mappedModel):generateContent
+      https://aiplatform.googleapis.com/v1/projects/\(project)/locations/global/publishers/google/models/\(modelName):generateContent
       ```
   * When `config.geminiAuthMode != GeminiAuthMode.adc.rawValue`, default to the AI Studio endpoint:
     ```
@@ -63,7 +57,7 @@ This design implements:
    * Headers injected:
      * `Authorization: Bearer <accessToken>`
      * `x-goog-user-project: <quotaProject>`
-   * Target URL: `us-central1-aiplatform.googleapis.com/v1/...`.
+   * Target URL: `https://aiplatform.googleapis.com/v1/projects/\(quotaProject)/locations/global/publishers/google/models/\(modelName):generateContent`.
 
 ---
 
@@ -75,8 +69,8 @@ This design implements:
 * Update `testRequiredAPIScopesAreCorrect` and `testRequiredAPIDisplayNames` to assert the new scopes and display names.
 
 ### 4.2 Unit Tests (`Tests/irisTests/LLMClientTests.swift`)
-* Add unit test verifying `resolveGeminiModelForVertex(_:)` maps `gemini-3.5-flash` → `gemini-2.5-flash`, `gemini-3.1-pro-preview` → `gemini-2.5-pro`, `gemini-3.1-flash-lite` → `gemini-2.5-flash`, and leaves other models untouched.
-* Add unit test verifying endpoint URL construction for both ADC mode (Vertex AI regional URL with project ID) and API key mode (AI Studio URL).
+* Add unit test verifying endpoint URL construction for ADC mode targets `https://aiplatform.googleapis.com/v1/projects/<project>/locations/global/publishers/google/models/<model>:generateContent`.
+* Add unit test verifying endpoint URL construction for API key mode targets AI Studio URL.
 
 ### 4.3 Automated Verification
 * Run `swift test` across the repo to verify 0 regressions.
