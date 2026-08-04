@@ -298,4 +298,44 @@ final class SubagentManagerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("fully configurable sandboxed micro-VM"))
         XCTAssertTrue(prompt.contains("full root permissions"))
     }
+
+    func testSubagentWriteIsRecordedInResult() async throws {
+        let state = AppState()
+        SubagentManager.shared.setGlobalState(state)
+        // Fast-path approve write_file for the exact path the mock uses (spec §5 / requestApproval).
+        PermissionManager.shared.allowGlobally(toolName: "write_file", details: "ledger_probe.txt")
+
+        let lock = NSLock(); var count = 0
+        MockURLProtocol.handler = { request in
+            lock.lock(); let c = count; count += 1; lock.unlock()
+            let input: [String: Any]
+            if c == 0 {
+                input = ["type": "tool_use", "id": "w1", "name": "write_file",
+                         "input": ["path": "ledger_probe.txt", "content": "hi"]]
+            } else {
+                input = ["type": "tool_use", "id": "g1", "name": "goal_complete",
+                         "input": ["summary": "wrote the file"]]
+            }
+            let responseJson: [String: Any] = [
+                "id": UUID().uuidString, "type": "message", "role": "assistant",
+                "model": "claude-3-5-sonnet", "content": [input],
+                "usage": ["input_tokens": 10, "output_tokens": 10]
+            ]
+            let data = try! JSONSerialization.data(withJSONObject: responseJson)
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, data)
+        }
+
+        let parentId = UUID()
+        await MainActor.run { state.createNewConversation(id: parentId) }
+        let summary = await SubagentManager.shared.runSubagent(
+            role: "engineer", task: "write a file", effort: "easy", parentConversationId: parentId)
+
+        XCTAssertTrue(summary.contains("Files written (1)"))
+        XCTAssertTrue(summary.contains("ledger_probe.txt"))
+
+        // Clean up the file written during this test.
+        let probePath = FileManager.default.currentDirectoryPath + "/ledger_probe.txt"
+        try? FileManager.default.removeItem(atPath: probePath)
+    }
 }

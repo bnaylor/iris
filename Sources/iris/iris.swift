@@ -982,7 +982,14 @@ actor IrisEngine {
         }
         
         var result = await executor.execute(name: name, args: execArgs, cwd: cwd, conversationId: conversationId, useSandbox: useSandbox)
-        
+
+        if name == "write_file", result.hasPrefix("Successfully wrote to "),
+           let cid = conversationId, let path = execArgs["path"]?.stringValue {
+            let resolved = ToolExecutor.resolvePath(path, cwd: cwd)
+            let localState = state
+            await MainActor.run { localState?.recordSubagentWrite(conversationId: cid, path: resolved) }
+        }
+
         let afterDecision = await HookManager.shared.fireAfterTool(toolName: name, result: result, useSandbox: hooksSandbox)
         if case .block(let reason) = afterDecision {
             return "System Hook blocked result: \(reason)"
