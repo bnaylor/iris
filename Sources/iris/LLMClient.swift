@@ -24,7 +24,7 @@ struct LLMClient {
         if !customBaseURL.isEmpty {
             baseURLString = customBaseURL
         } else if isADC {
-            guard let project = quotaProject, !project.isEmpty else {
+            guard let project = quotaProject?.trimmingCharacters(in: .whitespacesAndNewlines), !project.isEmpty else {
                 throw APIError(message: "GCP Project ID not found. Required for Application Default Credentials (ADC) Vertex AI endpoint. Set via 'gcloud config set project <PROJECT_ID>' or export GOOGLE_CLOUD_QUOTA_PROJECT.")
             }
             baseURLString = "https://aiplatform.googleapis.com/v1/projects/\(project)/locations/global/publishers/google/models/\(modelName):generateContent"
@@ -38,17 +38,16 @@ struct LLMClient {
         return url
     }
 
-    func endpoint(for tier: ModelTier) -> String {
+    func endpoint(for tier: ModelTier) async -> String {
         let config = ConfigManager.shared
         let modelName = config.getModel(for: tier)
         let isADC = config.geminiAuthMode == GeminiAuthMode.adc.rawValue
-        // For synchronous display/inspection in endpoint(for:), use quota project from env if available, or fallback to AI studio URL if project is unknown.
-        let envProject = ProcessInfo.processInfo.environment["GOOGLE_CLOUD_QUOTA_PROJECT"] ?? ProcessInfo.processInfo.environment["GOOGLE_CLOUD_PROJECT"]
+        let quotaProject = isADC ? await ADCCredentialManager.shared.getQuotaProject() : nil
         if let url = try? LLMClient.resolveGeminiRequestURL(
             modelName: modelName,
             isADC: isADC,
             customBaseURL: config.geminiBaseURL,
-            quotaProject: envProject
+            quotaProject: quotaProject
         ) {
             return url.absoluteString
         }
@@ -101,7 +100,9 @@ struct LLMClient {
                 }
                 
                 if !isADC {
-                    urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+                    var items = urlComponents.queryItems ?? []
+                    items.append(URLQueryItem(name: "key", value: apiKey))
+                    urlComponents.queryItems = items
                 }
 
                 guard let finalURL = urlComponents.url else {

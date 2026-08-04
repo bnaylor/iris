@@ -38,6 +38,7 @@ final class GCloudHelperTests: XCTestCase {
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/tasks"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/cloud-platform"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/generative-language"))
+        XCTAssertFalse(scopes.contains("https://www.googleapis.com/auth/userinfo.email"))
     }
     
     func testRequiredAPIDisplayNames() {

@@ -55,4 +55,20 @@ final class LLMClientTests: XCTestCase {
             XCTAssertTrue(apiError.message.contains("GCP Project ID not found"), "Error message should instruct user to set project: \(apiError.message)")
         }
     }
+    
+    func testResolveGeminiRequestURLADCModeTrimsWhitespaceInProject() throws {
+        let url = try LLMClient.resolveGeminiRequestURL(
+            modelName: "gemini-3.5-flash",
+            isADC: true,
+            customBaseURL: "",
+            quotaProject: "  my-test-project \n"
+        )
+        XCTAssertEqual(url.absoluteString, "https://aiplatform.googleapis.com/v1/projects/my-test-project/locations/global/publishers/google/models/gemini-3.5-flash:generateContent")
+    }
+    
+    func testEndpointForTierReturnsURL() async {
+        let client = LLMClient()
+        let endpoint = await client.endpoint(for: .medium)
+        XCTAssertFalse(endpoint.isEmpty)
+    }
 }
