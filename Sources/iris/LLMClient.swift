@@ -14,9 +14,44 @@ protocol LLMClientProtocol: Sendable {
 extension LLMClient: LLMClientProtocol {}
 
 struct LLMClient {
+    static func resolveGeminiRequestURL(
+        modelName: String,
+        isADC: Bool,
+        customBaseURL: String,
+        quotaProject: String?
+    ) throws -> URL {
+        let baseURLString: String
+        if !customBaseURL.isEmpty {
+            baseURLString = customBaseURL
+        } else if isADC {
+            guard let project = quotaProject, !project.isEmpty else {
+                throw APIError(message: "GCP Project ID not found. Required for Application Default Credentials (ADC) Vertex AI endpoint. Set via 'gcloud config set project <PROJECT_ID>' or export GOOGLE_CLOUD_QUOTA_PROJECT.")
+            }
+            baseURLString = "https://aiplatform.googleapis.com/v1/projects/\(project)/locations/global/publishers/google/models/\(modelName):generateContent"
+        } else {
+            baseURLString = "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent"
+        }
+        
+        guard let url = URL(string: baseURLString) else {
+            throw APIError(message: "Invalid Gemini base URL configuration: \(baseURLString)")
+        }
+        return url
+    }
+
     func endpoint(for tier: ModelTier) -> String {
         let config = ConfigManager.shared
         let modelName = config.getModel(for: tier)
+        let isADC = config.geminiAuthMode == GeminiAuthMode.adc.rawValue
+        // For synchronous display/inspection in endpoint(for:), use quota project from env if available, or fallback to AI studio URL if project is unknown.
+        let envProject = ProcessInfo.processInfo.environment["GOOGLE_CLOUD_QUOTA_PROJECT"] ?? ProcessInfo.processInfo.environment["GOOGLE_CLOUD_PROJECT"]
+        if let url = try? LLMClient.resolveGeminiRequestURL(
+            modelName: modelName,
+            isADC: isADC,
+            customBaseURL: config.geminiBaseURL,
+            quotaProject: envProject
+        ) {
+            return url.absoluteString
+        }
         return "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent"
     }
     
@@ -53,28 +88,34 @@ struct LLMClient {
                 let cleanRequest = request
                 // We no longer strip thought_signature because Gemini requires it to be echoed back
                 
-                let baseURLString = config.geminiBaseURL.isEmpty ? "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent" : config.geminiBaseURL
+                let quotaProject = isADC ? await ADCCredentialManager.shared.getQuotaProject() : nil
+                let requestURL = try LLMClient.resolveGeminiRequestURL(
+                    modelName: modelName,
+                    isADC: isADC,
+                    customBaseURL: config.geminiBaseURL,
+                    quotaProject: quotaProject
+                )
                 
-                guard var urlComponents = URLComponents(string: baseURLString) else {
-                    throw APIError(message: "Invalid Gemini base URL configuration: \(baseURLString)")
+                guard var urlComponents = URLComponents(url: requestURL, resolvingAgainstBaseURL: false) else {
+                    throw APIError(message: "Invalid Gemini request URL: \(requestURL.absoluteString)")
                 }
                 
                 if !isADC {
                     urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
                 }
 
-                guard let requestURL = urlComponents.url else {
+                guard let finalURL = urlComponents.url else {
                     throw APIError(message: "Failed to construct Gemini request URL.")
                 }
-                var urlRequest = URLRequest(url: requestURL)
+                var urlRequest = URLRequest(url: finalURL)
                 urlRequest.httpMethod = "POST"
                 urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
                 
                 if isADC {
                     let accessToken = try await ADCCredentialManager.shared.getAccessToken()
                     urlRequest.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                    if let quotaProject = await ADCCredentialManager.shared.getQuotaProject() {
-                        urlRequest.addValue(quotaProject, forHTTPHeaderField: "x-goog-user-project")
+                    if let project = quotaProject {
+                        urlRequest.addValue(project, forHTTPHeaderField: "x-goog-user-project")
                     }
                 }
                 
