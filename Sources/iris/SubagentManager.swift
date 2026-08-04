@@ -17,11 +17,13 @@ final class SubagentManager: @unchecked Sendable {
         self.state = state
     }
     
-    func runSubagent(role: String, task: String, effort: String, parentConversationId: UUID) async -> String {
+    func runSubagent(role: String, task: String, effort: String, parentConversationId: UUID, maxIterations: Int = 3000) async -> String {
         guard let appState = self.state else {
             return "Error: AppState not available for subagent execution."
         }
-        
+
+        let startedAt = Date()
+
         // 1. Create a new conversation for the subagent
         let subagentId = UUID()
         await MainActor.run {
@@ -29,55 +31,49 @@ final class SubagentManager: @unchecked Sendable {
             appState.updateConversationTitle(id: subagentId, title: "Subagent: \(role)")
             appState.registerSubagent(id: subagentId, role: role)
         }
-        
+
         let tier: ModelTier
         switch effort.lowercased() {
         case "easy": tier = .easy
         case "hard": tier = .hard
         default: tier = .medium
         }
-        
+
         // 2. Instantiate a fresh IrisEngine linked to this conversation
         let engine = IrisEngine(state: appState, tier: tier, principal: .subagent, roleLabel: role)
-        
+
         // 3. Craft the role-specific prompt
         let customPromptText = generateRolePrompt(role: role)
         await engine.setSystemPrompt(text: customPromptText)
-        
+
         // 4. Inject the initial task and set the goal so the engine auto-loops
         await MainActor.run {
             appState.setGoal(for: subagentId, goal: task)
             appState.appendMessage(role: .system, content: "Starting subagent with role '\(role)' to execute task:\n\(task)", to: subagentId)
         }
-        
+
         actor ResultHolder {
-            var summary: String? = nil
-            func setSummary(_ s: String) { summary = s }
-            func getSummary() -> String? { return summary }
+            var termination: SubagentTermination? = nil
+            func set(_ t: SubagentTermination) { if termination == nil { termination = t } }
+            func get() -> SubagentTermination? { return termination }
         }
         let holder = ResultHolder()
-        
+
         await MainActor.run {
-            appState.onSubagentComplete[subagentId] = { sum in
-                Task {
-                    await holder.setSummary(sum)
-                }
-                Task { @MainActor in
-                    appState.onSubagentComplete[subagentId] = nil
-                }
+            appState.onSubagentComplete[subagentId] = { termination in
+                Task { await holder.set(termination) }
+                Task { @MainActor in appState.onSubagentComplete[subagentId] = nil }
             }
         }
-        
+
         let engineTask = Task {
             // Kick off the first turn. Since activeGoal is set, the engine will autonomously reprompt itself
             // in a loop until goal_complete is called.
             await engine.processInput(task, source: "System", conversationId: subagentId)
         }
-        
+
         var iterations = 0
-        let maxIterations = 3000 // 100ms * 3000 = 5 minutes
-        
-        while await holder.getSummary() == nil {
+        while await holder.get() == nil {
             if iterations >= maxIterations {
                 // Hard stop: cancel the engine task, unstick any pending approval, stop the
                 // reprompt loop, free the sandbox container, and clear the goal.
@@ -86,19 +82,25 @@ final class SubagentManager: @unchecked Sendable {
                 await engine.cancelReprompt(for: subagentId)
                 await SandboxSessionManager.shared.endSession(subagentId)
                 await MainActor.run { appState.clearGoal(for: subagentId) }
-                await holder.setSummary("Subagent timed out after 5 minutes and was cancelled (task, pending approvals, and sandbox container cleaned up).")
+                await holder.set(SubagentTermination(status: .timedOut,
+                    summary: "Subagent timed out after the iteration cap and was cancelled (task, pending approvals, and sandbox container cleaned up).",
+                    calledGoalComplete: false))
                 break
             }
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             iterations += 1
         }
-        let finalSummary = await holder.getSummary() ?? "Subagent completed with no summary."
-        
+        let termination = await holder.get() ?? SubagentTermination(status: .failed, summary: "Subagent completed with no summary.", calledGoalComplete: false)
+        let files = await MainActor.run { appState.drainSubagentWrites(for: subagentId) }
+        let result = SubagentResult(role: role, status: termination.status,
+                                    calledGoalComplete: termination.calledGoalComplete,
+                                    summary: termination.summary, filesWritten: files,
+                                    startedAt: startedAt, endedAt: Date())
         await MainActor.run {
+            appState.setSubagentResult(for: subagentId, result)
             appState.removeSubagent(id: subagentId)
         }
-        
-        return finalSummary
+        return result.renderedForParent()
     }
     
     func generateRolePrompt(role: String) -> String {

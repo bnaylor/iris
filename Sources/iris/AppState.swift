@@ -147,7 +147,7 @@ class AppState {
     var availableUpdate: ReleaseInfo?
     var isCheckingForUpdates = false
     var updateCheckStatusMessage: String?
-    var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
+    var onSubagentComplete: [UUID: @Sendable (SubagentTermination) -> Void] = [:]
 
     /// Fired by the `submit_evaluation` handler in the EVALUATOR's own conversation; the closure
     /// (registered by GoalEvaluator) reconciles the verdict and writes it to the ORIGINATING
@@ -275,7 +275,14 @@ class AppState {
         subagentWriteLedger[conversationId] = nil
         return list
     }
-    
+
+    /// Persists a subagent's structured result on its conversation for the UI and later slices.
+    func setSubagentResult(for conversationId: UUID, _ result: SubagentResult) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].subagentResult = result
+        saveConversations()
+    }
+
     func updateSubagentStatus(id: UUID, status: String) {
         if let idx = activeSubagents.firstIndex(where: { $0.id == id }) {
             activeSubagents[idx].status = status

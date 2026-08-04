@@ -95,7 +95,9 @@ final class SubagentManagerTests: XCTestCase {
             parentConversationId: parentConversationId
         )
         
-        XCTAssertEqual(summary, "I have audited the code securely.")
+        XCTAssertTrue(summary.contains("I have audited the code securely."))
+        XCTAssertTrue(summary.contains("status: completed"))
+        XCTAssertTrue(summary.contains("goal_complete called"))
     }
     
     func testConcurrentSubagentExecution() async throws {
@@ -178,7 +180,7 @@ final class SubagentManagerTests: XCTestCase {
         
         XCTAssertEqual(results.count, 5, "All 5 concurrent subagents should return successfully")
         for res in results {
-            XCTAssertEqual(res, "Concurrent execution complete.")
+            XCTAssertTrue(res.contains("Concurrent execution complete."))
         }
     }
     func testNilStateReturnsError() async throws {
@@ -260,8 +262,35 @@ final class SubagentManagerTests: XCTestCase {
             parentConversationId: parentConversationId
         )
         
-        XCTAssertEqual(summary, "Finished with unknown effort.")
+        XCTAssertTrue(summary.contains("Finished with unknown effort."))
         XCTAssertEqual(usedModel, "claude-3-5-sonnet")
+    }
+
+    func testNeverCompletingSubagentTimesOut() async throws {
+        let state = AppState()
+        SubagentManager.shared.setGlobalState(state)
+
+        // Always return plain text — the subagent never calls goal_complete, so it loops until the cap.
+        MockURLProtocol.handler = { request in
+            let responseJson: [String: Any] = [
+                "id": UUID().uuidString, "type": "message", "role": "assistant",
+                "model": "claude-3-5-sonnet",
+                "content": [["type": "text", "text": "Still working..."]],
+                "usage": ["input_tokens": 10, "output_tokens": 10]
+            ]
+            let data = try! JSONSerialization.data(withJSONObject: responseJson)
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, data)
+        }
+
+        let parentId = UUID()
+        await MainActor.run { state.createNewConversation(id: parentId) }
+
+        let summary = await SubagentManager.shared.runSubagent(
+            role: "worker", task: "loop forever", effort: "easy",
+            parentConversationId: parentId, maxIterations: 3)   // ~300ms cap
+
+        XCTAssertTrue(summary.contains("status: timed out"))
     }
 
     func testRolePromptIncludesVMConfigAuthority() {

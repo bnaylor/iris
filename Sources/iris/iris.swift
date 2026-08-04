@@ -116,7 +116,7 @@ actor IrisEngine {
         // here means no summary was delivered.)
         await MainActor.run {
             if localState?.onSubagentComplete[conversationId] != nil {
-                localState?.onSubagentComplete[conversationId]?("Stopped: \(reason) (no explicit summary produced).")
+                localState?.onSubagentComplete[conversationId]?(SubagentTermination(status: .cancelled, summary: "Stopped: \(reason) (no explicit summary produced).", calledGoalComplete: false))
                 localState?.onSubagentComplete[conversationId] = nil
             }
         }
@@ -676,7 +676,7 @@ actor IrisEngine {
                 turnFinished = true
                 await MainActor.run {
                     localState?.clearGoal(for: conversationId)
-                    localState?.onSubagentComplete[conversationId]?("Subagent failed due to LLM Error: \(error.localizedDescription)")
+                    localState?.onSubagentComplete[conversationId]?(SubagentTermination(status: .failed, summary: "Subagent failed due to LLM Error: \(error.localizedDescription)", calledGoalComplete: false))
                     localState?.onSubagentComplete[conversationId] = nil
                 }
             }
@@ -821,9 +821,8 @@ actor IrisEngine {
             
             if isBackground {
                 Task {
-                    let summary = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
-                    let notification = "Background Subagent (\(role)) finished with summary:\n\(summary)"
-                    await self.handleSystemEvent(notification, source: "SubagentManager", conversationId: conversationId)
+                    let rendered = await SubagentManager.shared.runSubagent(role: role, task: task, effort: effort, parentConversationId: conversationId)
+                    await self.handleSystemEvent("Background subagent result:\n\(rendered)", source: "SubagentManager", conversationId: conversationId)
                 }
                 result = "Subagent '\(role)' spawned in the background. You will receive a System Event when it finishes."
             } else {
@@ -857,7 +856,7 @@ actor IrisEngine {
                 localState?.recordCompletionSelfReport(for: conversationId, statusJSON: statusReport)
                 if let c = contractToGrade { localState?.beginGoalEvaluation(for: conversationId, contract: c) }
                 localState?.clearGoal(for: conversationId)
-                localState?.onSubagentComplete[conversationId]?(summary)
+                localState?.onSubagentComplete[conversationId]?(SubagentTermination(status: .completed, summary: summary, calledGoalComplete: true))
                 localState?.onSubagentComplete[conversationId] = nil
             }
             if let c = contractToGrade {
