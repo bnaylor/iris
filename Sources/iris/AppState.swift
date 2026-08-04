@@ -142,6 +142,7 @@ class AppState {
     /// so overlapping turns (concurrent sends, subagents, auto-reprompt) can't leave it stuck.
     private(set) var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
+    var subagentWriteLedger: [UUID: [String]] = [:]
     var pendingApprovals: [ToolApprovalRequest] = []
     var availableUpdate: ReleaseInfo?
     var isCheckingForUpdates = false
@@ -255,6 +256,24 @@ class AppState {
 
     func removeSubagent(id: UUID) {
         activeSubagents.removeAll(where: { $0.id == id })
+        subagentWriteLedger[id] = nil
+    }
+
+    /// Records a successful write_file path for a subagent conversation (deduped). No-op for the
+    /// main agent so its writes don't accumulate. Drained into SubagentResult.filesWritten at
+    /// termination (spec §5).
+    func recordSubagentWrite(conversationId: UUID, path: String) {
+        guard conversations.first(where: { $0.id == conversationId })?.isSubagent == true else { return }
+        var list = subagentWriteLedger[conversationId] ?? []
+        if !list.contains(path) { list.append(path) }
+        subagentWriteLedger[conversationId] = list
+    }
+
+    /// Returns the recorded writes for a conversation and clears the entry.
+    func drainSubagentWrites(for conversationId: UUID) -> [String] {
+        let list = subagentWriteLedger[conversationId] ?? []
+        subagentWriteLedger[conversationId] = nil
+        return list
     }
     
     func updateSubagentStatus(id: UUID, status: String) {
