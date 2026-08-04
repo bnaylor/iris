@@ -16,15 +16,18 @@ enum GCloudHelper {
         var enabled: Bool
     }
     
-    /// The six APIs required by the Google Workspace integration.
+    /// The nine APIs required by the Google Workspace and Gemini ADC integrations.
     /// (userinfo.email is an OIDC scope — no People API enablement needed.)
     static let requiredAPIs: [APIInfo] = [
-        APIInfo(id: "calendar-json.googleapis.com", displayName: "Google Calendar", scope: "https://www.googleapis.com/auth/calendar", enabled: false),
-        APIInfo(id: "drive.googleapis.com",          displayName: "Google Drive",   scope: "https://www.googleapis.com/auth/drive", enabled: false),
-        APIInfo(id: "docs.googleapis.com",           displayName: "Google Docs",    scope: "https://www.googleapis.com/auth/documents", enabled: false),
-        APIInfo(id: "sheets.googleapis.com",         displayName: "Google Sheets",  scope: "https://www.googleapis.com/auth/spreadsheets", enabled: false),
-        APIInfo(id: "gmail.googleapis.com",          displayName: "Gmail",          scope: "https://www.googleapis.com/auth/gmail.modify", enabled: false),
-        APIInfo(id: "tasks.googleapis.com",          displayName: "Google Tasks",   scope: "https://www.googleapis.com/auth/tasks", enabled: false),
+        APIInfo(id: "calendar-json.googleapis.com",      displayName: "Google Calendar",    scope: "https://www.googleapis.com/auth/calendar", enabled: false),
+        APIInfo(id: "drive.googleapis.com",              displayName: "Google Drive",       scope: "https://www.googleapis.com/auth/drive", enabled: false),
+        APIInfo(id: "docs.googleapis.com",               displayName: "Google Docs",        scope: "https://www.googleapis.com/auth/documents", enabled: false),
+        APIInfo(id: "sheets.googleapis.com",             displayName: "Google Sheets",      scope: "https://www.googleapis.com/auth/spreadsheets", enabled: false),
+        APIInfo(id: "gmail.googleapis.com",              displayName: "Gmail",              scope: "https://www.googleapis.com/auth/gmail.modify", enabled: false),
+        APIInfo(id: "tasks.googleapis.com",              displayName: "Google Tasks",       scope: "https://www.googleapis.com/auth/tasks", enabled: false),
+        APIInfo(id: "aiplatform.googleapis.com",         displayName: "Vertex AI",          scope: "https://www.googleapis.com/auth/cloud-platform", enabled: false),
+        APIInfo(id: "cloudaicompanion.googleapis.com",   displayName: "Cloud AI Companion", scope: "https://www.googleapis.com/auth/cloud-platform", enabled: false),
+        APIInfo(id: "generativelanguage.googleapis.com", displayName: "Gemini API",         scope: "https://www.googleapis.com/auth/generative-language", enabled: false),
     ]
     
     // MARK: - Binary resolution

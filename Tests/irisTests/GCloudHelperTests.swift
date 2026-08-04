@@ -6,7 +6,7 @@ final class GCloudHelperTests: XCTestCase {
     // MARK: - requiredAPIs
     
     func testRequiredAPIsCount() {
-        XCTAssertEqual(GCloudHelper.requiredAPIs.count, 6, "Six Google Workspace APIs should be defined (userinfo.email is OIDC, no People API)")
+        XCTAssertEqual(GCloudHelper.requiredAPIs.count, 9, "Nine APIs should be defined (6 Workspace + 3 Google Cloud AI APIs)")
     }
     
     func testRequiredAPIsUniqueIDs() {
@@ -22,7 +22,9 @@ final class GCloudHelperTests: XCTestCase {
         XCTAssertTrue(ids.contains("sheets.googleapis.com"))
         XCTAssertTrue(ids.contains("gmail.googleapis.com"))
         XCTAssertTrue(ids.contains("tasks.googleapis.com"))
-        // People API should NOT be present (userinfo.email is OIDC)
+        XCTAssertTrue(ids.contains("aiplatform.googleapis.com"))
+        XCTAssertTrue(ids.contains("cloudaicompanion.googleapis.com"))
+        XCTAssertTrue(ids.contains("generativelanguage.googleapis.com"))
         XCTAssertFalse(ids.contains("people.googleapis.com"))
     }
     
@@ -34,8 +36,8 @@ final class GCloudHelperTests: XCTestCase {
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/spreadsheets"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.modify"))
         XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/tasks"))
-        // userinfo.email is an OIDC scope and does NOT require the People API
-        XCTAssertFalse(scopes.contains("https://www.googleapis.com/auth/userinfo.email"))
+        XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/cloud-platform"))
+        XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/generative-language"))
     }
     
     func testRequiredAPIDisplayNames() {
@@ -46,6 +48,9 @@ final class GCloudHelperTests: XCTestCase {
         XCTAssertTrue(names.contains("Google Sheets"))
         XCTAssertTrue(names.contains("Gmail"))
         XCTAssertTrue(names.contains("Google Tasks"))
+        XCTAssertTrue(names.contains("Vertex AI"))
+        XCTAssertTrue(names.contains("Cloud AI Companion"))
+        XCTAssertTrue(names.contains("Gemini API"))
         XCTAssertFalse(names.contains("Google People"))
     }
     
