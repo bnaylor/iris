@@ -16,6 +16,11 @@ struct ChatView: View {
     @Bindable var config = ConfigManager.shared
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
+
+    /// Toggled to true when the composer should grab keyboard focus (e.g. after
+    /// creating a new conversation). ComposerTextView reads this in updateNSView
+    /// and resets it after making itself first responder.
+    @State private var composerShouldFocus = false
     
     var body: some View {
         NavigationSplitView {
@@ -67,7 +72,7 @@ struct ChatView: View {
                 }
                 .listStyle(.sidebar)
                 
-                Button(action: { state.createNewConversation() }) {
+                Button(action: { state.createNewConversation(); composerShouldFocus = true }) {
                     HStack {
                         Image(systemName: "plus.message.fill")
                         Text("New Conversation")
@@ -581,7 +586,7 @@ struct ChatView: View {
                 .help("Attach Files")
                 .padding(.bottom, 8)
 
-                ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onEscape: handleEscape, onHeightChange: { composerHeight = $0 })
+                ComposerTextView(text: $inputText, onSubmit: submit, emoji: emojiModel, slash: slashModel, onEscape: handleEscape, onHeightChange: { composerHeight = $0 }, focusTrigger: $composerShouldFocus)
                     .frame(height: min(max(composerHeight, 24), 120))
                     .onAppear { emojiModel.defaultTone = SkinTone(rawValue: config.defaultEmojiSkinTone) ?? .none }
                     .onChange(of: config.defaultEmojiSkinTone) { _, new in

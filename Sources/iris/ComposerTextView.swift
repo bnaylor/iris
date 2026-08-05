@@ -11,6 +11,7 @@ struct ComposerTextView: NSViewRepresentable {
     var slash: SlashCommandModel
     var onEscape: () -> Void = {}
     var onHeightChange: (CGFloat) -> Void = { _ in }
+    var focusTrigger: Binding<Bool> = .constant(false)
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -53,6 +54,11 @@ struct ComposerTextView: NSViewRepresentable {
         // Only re-measure on a real content/width change. Measuring on every update pass
         // (including the ones our own height write triggers) is an AttributeGraph cycle.
         context.coordinator.measureHeight(tv, force: textChanged)
+
+        if focusTrigger.wrappedValue, let window = tv.window, window.isVisible {
+            window.makeFirstResponder(tv)
+            focusTrigger.wrappedValue = false
+        }
     }
 
     @MainActor
