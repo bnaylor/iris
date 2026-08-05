@@ -4,17 +4,8 @@ import XCTest
 @MainActor
 final class ParallelToolExecutionTests: XCTestCase {
 
-    nonisolated(unsafe) private var savedPrimaryProvider: String = ""
-    nonisolated(unsafe) private var savedAnthropicMediumModel: String = ""
-    nonisolated(unsafe) private var savedAnthropicAPIKey: String = ""
-
     override func setUp() {
         super.setUp()
-        // Save global state we're about to mutate so we can restore it in tearDown.
-        savedPrimaryProvider = ConfigManager.shared.primaryProvider
-        savedAnthropicMediumModel = ConfigManager.shared.anthropicModelMedium
-        savedAnthropicAPIKey = ConfigManager.shared.anthropicAPIKey
-
         URLProtocol.registerClass(MockURLProtocol.self)
         UserDefaults.standard.set("Anthropic", forKey: "PRIMARY_PROVIDER")
         UserDefaults.standard.set("claude-3-5-sonnet", forKey: "ANTHROPIC_MODEL_MEDIUM")
@@ -26,16 +17,21 @@ final class ParallelToolExecutionTests: XCTestCase {
     override func tearDown() {
         URLProtocol.unregisterClass(MockURLProtocol.self)
         MockURLProtocol.handler = nil
-
-        // Restore global state so we don't contaminate other tests.
-        ConfigManager.shared.primaryProvider = savedPrimaryProvider
-        ConfigManager.shared.anthropicModelMedium = savedAnthropicMediumModel
-        ConfigManager.shared.anthropicAPIKey = savedAnthropicAPIKey
-
         super.tearDown()
     }
-    
+
     func testParallelToolExecutionMaintainsOrder() async throws {
+        // Save and restore global state so we don't contaminate other tests.
+        // defer guarantees restore even if the test exits early (assertion failure).
+        let savedPrimaryProvider = ConfigManager.shared.primaryProvider
+        let savedMediumModel = ConfigManager.shared.anthropicModelMedium
+        let savedAPIKey = ConfigManager.shared.anthropicAPIKey
+        defer {
+            ConfigManager.shared.primaryProvider = savedPrimaryProvider
+            ConfigManager.shared.anthropicModelMedium = savedMediumModel
+            ConfigManager.shared.anthropicAPIKey = savedAPIKey
+        }
+
         // We will mock the LLM to return TWO tool calls in its first response.
         // We will then intercept the SECOND request (which contains the tool results)
         // and verify that the tool results are in the exact same order as the tool calls.
@@ -45,6 +41,10 @@ final class ParallelToolExecutionTests: XCTestCase {
         // Stateless handler: inspects the request body to decide which response to return
         // instead of relying on mutable counter state (which is fragile under parallel test
         // execution where MockURLProtocol.handler is a shared global).
+        //
+        // The body-content heuristic relies on the specific request bodies this test generates:
+        // the first request contains only the user prompt; the second contains tool result IDs
+        // (call_1, call_2). This is an implicit contract with the test's own mock responses.
         MockURLProtocol.handler = { request in
             let bodyData = request.bodyData ?? Data()
             let bodyString = String(data: bodyData, encoding: .utf8) ?? ""
@@ -107,7 +107,7 @@ final class ParallelToolExecutionTests: XCTestCase {
                 return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, responseData)
             }
         }
-        
+
         let state = AppState()
         let convId = UUID()
         await MainActor.run {
@@ -116,7 +116,7 @@ final class ParallelToolExecutionTests: XCTestCase {
         SubagentManager.shared.setGlobalState(state)
         let engine = IrisEngine(state: state)
         await engine.processInput("Do the parallel test", source: "User", conversationId: convId)
-        
+
         await fulfillment(of: [expectation], timeout: 5.0)
     }
 }
