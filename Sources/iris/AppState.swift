@@ -56,6 +56,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     var goalContract: GoalContract? = nil
     var lastGoalCompletionReport: JSONValue? = nil
     var lastGoalEvaluation: GoalEvaluation? = nil
+    var subagentResult: SubagentResult? = nil
 
     init(id: UUID = UUID(), title: String, messages: [ChatMessage] = [], workspacePath: String? = nil, history: [Content] = [], tokenUsage: TokenUsage = TokenUsage(), activeGoal: String? = nil, messageCountSinceReflection: Int = 0, goalContract: GoalContract? = nil) {
         self.id = id
@@ -70,7 +71,7 @@ struct Conversation: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport, lastGoalEvaluation
+        case id, title, messages, workspacePath, history, tokenUsage, activeGoal, messageCountSinceReflection, mainAgentSandbox, isSubagent, goalContract, lastGoalCompletionReport, lastGoalEvaluation, subagentResult
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +89,7 @@ struct Conversation: Identifiable, Codable, Hashable {
         goalContract = try container.decodeIfPresent(GoalContract.self, forKey: .goalContract)
         lastGoalCompletionReport = try container.decodeIfPresent(JSONValue.self, forKey: .lastGoalCompletionReport)
         lastGoalEvaluation = try container.decodeIfPresent(GoalEvaluation.self, forKey: .lastGoalEvaluation)
+        subagentResult = try container.decodeIfPresent(SubagentResult.self, forKey: .subagentResult)
         // Migration: a legacy conversation that had a goal (activeGoal) but no contract is
         // upgraded to a locked single-qualitative-criterion contract so in-flight goals survive.
         if goalContract == nil, let legacy = activeGoal {
@@ -140,11 +142,12 @@ class AppState {
     /// so overlapping turns (concurrent sends, subagents, auto-reprompt) can't leave it stuck.
     private(set) var isThinking = false
     var activeSubagents: [ActiveSubagent] = []
+    var subagentWriteLedger: [UUID: [String]] = [:]
     var pendingApprovals: [ToolApprovalRequest] = []
     var availableUpdate: ReleaseInfo?
     var isCheckingForUpdates = false
     var updateCheckStatusMessage: String?
-    var onSubagentComplete: [UUID: @Sendable (String) -> Void] = [:]
+    var onSubagentComplete: [UUID: @Sendable (SubagentTermination) -> Void] = [:]
 
     /// Fired by the `submit_evaluation` handler in the EVALUATOR's own conversation; the closure
     /// (registered by GoalEvaluator) reconciles the verdict and writes it to the ORIGINATING
@@ -253,8 +256,33 @@ class AppState {
 
     func removeSubagent(id: UUID) {
         activeSubagents.removeAll(where: { $0.id == id })
+        subagentWriteLedger[id] = nil
     }
-    
+
+    /// Records a successful write_file path for a subagent conversation (deduped). No-op for the
+    /// main agent so its writes don't accumulate. Drained into SubagentResult.filesWritten at
+    /// termination (spec §5).
+    func recordSubagentWrite(conversationId: UUID, path: String) {
+        guard conversations.first(where: { $0.id == conversationId })?.isSubagent == true else { return }
+        var list = subagentWriteLedger[conversationId] ?? []
+        if !list.contains(path) { list.append(path) }
+        subagentWriteLedger[conversationId] = list
+    }
+
+    /// Returns the recorded writes for a conversation and clears the entry.
+    func drainSubagentWrites(for conversationId: UUID) -> [String] {
+        let list = subagentWriteLedger[conversationId] ?? []
+        subagentWriteLedger[conversationId] = nil
+        return list
+    }
+
+    /// Persists a subagent's structured result on its conversation for the UI and later slices.
+    func setSubagentResult(for conversationId: UUID, _ result: SubagentResult) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        conversations[idx].subagentResult = result
+        saveConversations()
+    }
+
     func updateSubagentStatus(id: UUID, status: String) {
         if let idx = activeSubagents.firstIndex(where: { $0.id == id }) {
             activeSubagents[idx].status = status
