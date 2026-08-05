@@ -82,8 +82,29 @@ actor IrisEngine {
         }
         
         await WatcherManager.shared.startAll()
-        
-        // Removed dangerous watcher on ~/.iris/skills that caused a self-reinforcing prompt injection loop
+
+        // Check whether Ollama is reachable when any auxiliary engine depends on it.
+        // A silent failure here means Vibecop / PromptGuard timeouts with no user-visible cause.
+        let config = ConfigManager.shared
+        let needsOllama = (config.enableVibecop && config.vibecopEngine == "ollama")
+                       || (config.enableAdvancedPromptInjectionProtection && config.promptGuardEngine == "ollama")
+
+        if needsOllama {
+            let reachable = await OllamaEngine.isDaemonReachable()
+            if !reachable {
+                let localState = state
+                let localConversationId = await MainActor.run { localState?.selectedConversationId }
+                if let convId = localConversationId {
+                    var services: [String] = []
+                    if config.enableVibecop, config.vibecopEngine == "ollama" { services.append("Vibecop Guardian") }
+                    if config.enableAdvancedPromptInjectionProtection, config.promptGuardEngine == "ollama" { services.append("Prompt Guard") }
+                    let serviceList = services.joined(separator: " and ")
+                    await pushToUI(role: .system, text: "⚠️ \(serviceList) are configured to use Ollama, but the Ollama daemon is not reachable at http://localhost:11434. Start the Ollama server (`ollama serve`) or switch to a different engine in Settings.", conversationId: convId)
+                } else {
+                    print("[Iris] Ollama daemon unreachable — Vibecop/PromptGuard will silently fail.")
+                }
+            }
+        }
     }
     
     /// Tracks the pending auto-reprompt task per conversation so the goal loop can be cancelled.
