@@ -258,6 +258,8 @@ struct ChatView: View {
 
                     SpectrumLine(active: state.isThinking)
 
+                    ModelLEDBar(isThinking: state.isThinking)
+
                     messageInputBar
                 }
                 .onDrop(of: [.fileURL], isTargeted: $isDraggingOver) { providers in
