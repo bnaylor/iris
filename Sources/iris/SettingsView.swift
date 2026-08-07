@@ -165,7 +165,8 @@ struct SettingsView: View {
                             
                             let isDownloaded = downloader.isModelDownloaded(name: config.vibecopModel)
                             if !isDownloaded {
-                                if downloader.isDownloading {
+                                let isVibecopDownloading = downloader.isDownloading && downloader.currentDownloadName == config.vibecopModel
+                                if isVibecopDownloading {
                                     HStack {
                                         ProgressView(value: downloader.progress)
                                             .progressViewStyle(.linear)
@@ -333,7 +334,8 @@ struct SettingsView: View {
                             let isCoreMLDownloaded = downloader.isModelDownloaded(name: coreMLNameNoZip)
                             
                             if !isCoreMLDownloaded {
-                                if downloader.isDownloading {
+                                let isTier2Downloading = downloader.isDownloading && downloader.currentDownloadName == coreMLFilename
+                                if isTier2Downloading {
                                     HStack {
                                         ProgressView(value: downloader.progress)
                                             .progressViewStyle(.linear)
@@ -400,7 +402,8 @@ struct SettingsView: View {
                             
                             let isDownloaded = downloader.isModelDownloaded(name: config.promptGuardModel)
                             if !isDownloaded {
-                                if downloader.isDownloading {
+                                let isTier3Downloading = downloader.isDownloading && downloader.currentDownloadName == config.promptGuardModel
+                                if isTier3Downloading {
                                     HStack {
                                         ProgressView(value: downloader.progress)
                                             .progressViewStyle(.linear)
