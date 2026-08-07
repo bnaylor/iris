@@ -19,7 +19,7 @@ struct ModelLED: View {
     let state: LEDState
 
     enum LEDState: CaseIterable {
-        case off, configured, ready, active, downloading, error
+        case off, configured, ready, active, downloading
 
         var color: Color {
             switch self {
@@ -28,7 +28,6 @@ struct ModelLED: View {
             case .ready:        Color.green
             case .active:       Color.green
             case .downloading:  Color.orange
-            case .error:        Color.red
             }
         }
         var glowRadius: CGFloat {
@@ -76,7 +75,6 @@ struct ModelLED: View {
         case .ready:        "\(label) — loaded & ready"
         case .active:       "\(label) — active"
         case .downloading:  "\(label) — downloading"
-        case .error:        "\(label) — error"
         }
     }
 }
@@ -107,7 +105,14 @@ struct ModelLEDBar: View {
         )
     }
 
-    // MARK: - State derivation (public for testing)
+    // MARK: - State derivation
+
+    /// All state functions are public so they can be unit-tested (see ModelLEDBarTests).
+    ///
+    /// Note: the `.downloading` branch in vibecopState(), tier2State(), and tier3State()
+    /// checks `ModelDownloader.shared.isDownloading` — a concrete singleton without a
+    /// protocol abstraction, so unit tests cannot exercise the downloading path. Those
+    /// branches are exercised manually and through integration testing.
 
     func primaryState() -> ModelLED.LEDState {
         guard config.isConfigured else { return .off }

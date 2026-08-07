@@ -9,6 +9,8 @@ final class ModelLEDBarTests: XCTestCase {
         // Reset ConfigManager to known defaults so each test starts clean.
         ConfigManager.shared.primaryProvider = "Gemini"
         ConfigManager.shared.geminiAPIKey = "test-key"
+        ConfigManager.shared.anthropicAPIKey = ""
+        ConfigManager.shared.openAIAPIKey = ""
         ConfigManager.shared.enableVibecop = false
         ConfigManager.shared.vibecopEngine = "llama_cpp"
         ConfigManager.shared.vibecopModel = ""
