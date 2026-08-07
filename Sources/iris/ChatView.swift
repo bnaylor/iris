@@ -226,6 +226,7 @@ struct ChatView: View {
 
                     if conv.goalContract?.state == .draft {
                         GoalContractPanel(state: state, conversation: conv)
+                            .id(conv.goalContract?.id)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
